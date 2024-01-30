@@ -412,6 +412,7 @@ u32_t LLVMUtil::getBBPredecessorNum(const BasicBlock* BB)
  */
 bool LLVMUtil::isIRFile(const std::string &filename)
 {
+//    return true;
     llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileOrErr = llvm::MemoryBuffer::getFileOrSTDIN(filename);
     if (FileOrErr.getError())
         return false;
@@ -454,8 +455,11 @@ void LLVMUtil::processArguments(int argc, char **argv, int &arg_num, char **arg_
     }
 }
 
+int funcCt = 0;
+
 std::vector<std::string> LLVMUtil::getFunAnnotations(const Function* fun)
 {
+    funcCt++;
     std::vector<std::string> annotations;
     // Get annotation variable
     GlobalVariable *glob = fun->getParent()->getGlobalVariable("llvm.global.annotations");
@@ -472,7 +476,9 @@ std::vector<std::string> LLVMUtil::getFunAnnotations(const Function* fun)
         if (structAn == nullptr)
             continue;
 
-        ConstantExpr *expr = SVFUtil::dyn_cast<ConstantExpr>(structAn->getOperand(0));
+//        llvm::outs() << (*structAn) << "\n";
+        Constant *pConstant = structAn->getOperand(0);
+        ConstantExpr *expr = SVFUtil::dyn_cast<ConstantExpr>(pConstant);
         if (expr == nullptr || expr->getOpcode() != Instruction::BitCast || expr->getOperand(0) != fun)
             continue;
 

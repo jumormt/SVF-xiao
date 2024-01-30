@@ -114,6 +114,7 @@ add_custom_command(
                         -emit-llvm
                         -fno-discard-value-names
                         -Xclang -disable-O0-optnone
+                        -mllvm -opaque-pointers
                         -o ${CMAKE_CURRENT_BINARY_DIR}/extapi.bc
                         ${CMAKE_CURRENT_LIST_DIR}/lib/extapi.c
   DEPENDS ${CMAKE_CURRENT_LIST_DIR}/lib/extapi.c

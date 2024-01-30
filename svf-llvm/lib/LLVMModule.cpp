@@ -547,6 +547,8 @@ void LLVMModuleSet::loadModules(const std::vector<std::string> &moduleNameVec)
 
     owned_ctx = std::make_unique<LLVMContext>();
 
+    owned_ctx->enableOpaquePointers();
+
     for (const std::string& moduleName : moduleNameVec)
     {
         if (!LLVMUtil::isIRFile(moduleName))
