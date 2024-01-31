@@ -170,15 +170,17 @@ void LLVMModuleSet::createSVFDataStructure()
     // candidateDefs is the vector for all used defined functions
     // candidateDecls is the vector for all used declared functions
     std::vector<const Function*> candidateDefs, candidateDecls;
+    Set<Function*> removedFuncList;
+
     for (Module& mod : modules)
     {
-        std::vector<Function*> removedFuncList;
         /// Function
         for (Function& func : mod.functions())
         {
             if (isCalledExtFunction(&func))
             {
-                removedFuncList.push_back(&func);
+                removedFuncList.insert(&func);
+                candidateDecls.push_back(&func);
             }
             else if (func.isDeclaration())
             {
@@ -189,9 +191,10 @@ void LLVMModuleSet::createSVFDataStructure()
                 candidateDefs.push_back(&func);
             }
         }
-        /// Remove unused functions, annotations and global variables in extapi.bc
-        LLVMUtil::removeUnusedFuncsAndAnnotationsAndGlobalVariables(removedFuncList);
+
     }
+    /// Remove unused functions, annotations and global variables in extapi.bc
+//    LLVMUtil::removeUnusedFuncsAndAnnotationsAndGlobalVariables(removedFuncList);
     for (const Function* func: candidateDefs)
     {
         createSVFFunction(func);

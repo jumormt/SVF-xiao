@@ -455,11 +455,8 @@ void LLVMUtil::processArguments(int argc, char **argv, int &arg_num, char **arg_
     }
 }
 
-int funcCt = 0;
-
 std::vector<std::string> LLVMUtil::getFunAnnotations(const Function* fun)
 {
-    funcCt++;
     std::vector<std::string> annotations;
     // Get annotation variable
     GlobalVariable *glob = fun->getParent()->getGlobalVariable("llvm.global.annotations");
@@ -473,12 +470,10 @@ std::vector<std::string> LLVMUtil::getFunAnnotations(const Function* fun)
     for (unsigned i = 0; i < ca->getNumOperands(); ++i)
     {
         ConstantStruct *structAn = SVFUtil::dyn_cast<ConstantStruct>(ca->getOperand(i));
-        if (structAn == nullptr)
+        if (structAn == nullptr || structAn->getNumOperands() == 0)
             continue;
 
-//        llvm::outs() << (*structAn) << "\n";
-        Constant *pConstant = structAn->getOperand(0);
-        ConstantExpr *expr = SVFUtil::dyn_cast<ConstantExpr>(pConstant);
+        ConstantExpr *expr = SVFUtil::dyn_cast<ConstantExpr>(structAn->getOperand(0));
         if (expr == nullptr || expr->getOpcode() != Instruction::BitCast || expr->getOperand(0) != fun)
             continue;
 
@@ -501,12 +496,12 @@ std::vector<std::string> LLVMUtil::getFunAnnotations(const Function* fun)
     return annotations;
 }
 
-void LLVMUtil::removeFunAnnotations(std::vector<Function*>& removedFuncList)
+void LLVMUtil::removeFunAnnotations(Set<Function*>& removedFuncList)
 {
     if (removedFuncList.empty())
         return; // No functions to remove annotations in extapi.bc module
 
-    Module* module = removedFuncList[0]->getParent();
+    Module* module = (*removedFuncList.begin())->getParent();
     GlobalVariable* glob = module->getGlobalVariable("llvm.global.annotations");
     if (glob == nullptr || !glob->hasInitializer())
         return;
@@ -612,12 +607,12 @@ void LLVMUtil::removeUnusedGlobalVariables(Module* module)
 }
 
 /// Delete unused functions, annotations and global variables in extapi.bc
-void LLVMUtil::removeUnusedFuncsAndAnnotationsAndGlobalVariables(std::vector<Function*> removedFuncList)
+void LLVMUtil::removeUnusedFuncsAndAnnotationsAndGlobalVariables(Set<Function*> removedFuncList)
 {
     if (removedFuncList.empty())
         return;
 
-    Module* mod = removedFuncList[0]->getParent();
+    Module* mod = (*removedFuncList.begin())->getParent();
     if (mod->getName().str() != ExtAPI::getExtAPI()->getExtBcPath())
         return;
 
