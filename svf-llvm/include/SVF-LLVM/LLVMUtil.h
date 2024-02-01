@@ -327,7 +327,6 @@ bool isIntrinsicFun(const Function* func);
 
 /// Get all called funcions in a parent function
 std::vector<const Function *> getCalledFunctions(const Function *F);
-std::vector<std::string> getFunAnnotations(const Function* fun);
 void removeFunAnnotations(Set<Function*>& removedFuncList);
 bool isUnusedGlobalVariable(const GlobalVariable& global);
 void removeUnusedGlobalVariables(Module* module);
