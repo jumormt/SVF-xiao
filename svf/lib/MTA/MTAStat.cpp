@@ -50,8 +50,9 @@ void MTAStat::performThreadCallGraphStat(ThreadCallGraph* tcg)
     for (ThreadCallGraph::CallSiteSet::const_iterator it = tcg->forksitesBegin(), eit = tcg->forksitesEnd(); it != eit; ++it)
     {
         bool indirectfork = false;
-        const FuncObjVar* spawnee = SVFUtil::dyn_cast<FuncObjVar>(tcg->getThreadAPI()->getForkedFun(*it));
-        if(spawnee==nullptr)
+        const ObjVar* objVarOfValVar =
+            SVFUtil::getObjVarOfValVar(tcg->getThreadAPI()->getForkedFun(*it));
+        if(!objVarOfValVar || !SVFUtil::isa<FuncObjVar>(objVarOfValVar))
         {
             numOfIndForksite++;
             indirectfork = true;
