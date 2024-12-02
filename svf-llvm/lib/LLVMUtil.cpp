@@ -646,6 +646,20 @@ bool LLVMUtil::isHeapAllocExtCallViaArg(const Instruction* inst)
     }
 }
 
+bool LLVMUtil::isHeapObj(const Value* val)
+{
+    if (ArgInProgEntryFunction(val))
+    {
+        return !getFirstUseViaCastInst(val);
+    }
+    else if (SVFUtil::isa<Instruction>(val) &&
+             LLVMUtil::isHeapAllocExtCall(SVFUtil::cast<Instruction>(val)))
+    {
+        return true;
+    }
+    return false;
+}
+
 bool LLVMUtil::isNonInstricCallSite(const Instruction* inst)
 {
     bool res = false;

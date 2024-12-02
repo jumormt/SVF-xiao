@@ -565,6 +565,15 @@ private:
         return addFIObjNode(mem);
     }
 
+    inline NodeID addHeapObjNode(const SVFValue* val, NodeID i)
+    {
+        const MemObj* mem = getMemObj(val);
+        assert(mem->getId() == i && "not same object id?");
+        memToFieldsMap[i].set(i);
+        HeapObjVar *node = new HeapObjVar(val, i, mem);
+        return addObjNode(val, node, i);
+    }
+
     NodeID addFunObjNode(const CallGraphNode* callGraphNode, NodeID id);
     /// Add a unique return node for a procedure
     inline NodeID addRetNode(const CallGraphNode* callGraphNode, NodeID i)

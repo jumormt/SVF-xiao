@@ -373,6 +373,16 @@ bool SVFUtil::isHeapAllocExtCall(const ICFGNode* cs)
     return isHeapAllocExtCallViaRet(cast<CallICFGNode>(cs)) || isHeapAllocExtCallViaArg(cast<CallICFGNode>(cs));
 }
 
+bool SVFUtil::isHeapObjVar(const SVF::SVFVar* var)
+{
+    if (SVFUtil::isa<FunObjVar, DummyObjVar>(var))
+        return true;
+    if (const GepObjVar* gepObjVar = SVFUtil::dyn_cast<GepObjVar>(var))
+    {
+        return SVFUtil::isa<DummyObjVar>(SVFIR::getPAG()->getGNode(gepObjVar->getBaseNode()));
+    }
+    return false;
+}
 bool SVFUtil::isHeapAllocExtCallViaRet(const CallICFGNode* cs)
 {
     bool isPtrTy = cs->getType()->isPointerTy();

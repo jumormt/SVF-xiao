@@ -583,6 +583,62 @@ public:
 
     virtual const std::string toString() const;
 };
+class HeapObjVar: public FIObjVar {
+
+    friend class SVFIRWriter;
+    friend class SVFIRReader;
+
+protected:
+    /// Constructor to create heap object var
+    HeapObjVar(NodeID i, PNODEK ty = HeapObjNode) : FIObjVar(i, ty) {}
+
+public:
+    ///  Methods for support type inquiry through isa, cast, and dyn_cast:
+    //@{
+    static inline bool classof(const HeapObjVar*)
+    {
+        return true;
+    }
+    static inline bool classof(const FIObjVar* node)
+    {
+        return node->getNodeKind() == HeapObjNode;
+    }
+    static inline bool classof(const ObjVar* node)
+    {
+        return node->getNodeKind() == HeapObjNode;
+    }
+    static inline bool classof(const SVFVar* node)
+    {
+        return node->getNodeKind() == HeapObjNode;
+    }
+    static inline bool classof(const GenericPAGNodeTy* node)
+    {
+        return node->getNodeKind() == HeapObjNode;
+    }
+    static inline bool classof(const SVFBaseNode* node)
+    {
+        return node->getNodeKind() == HeapObjNode;
+    }
+    //@}
+
+    /// Constructor
+    HeapObjVar(const SVFValue* val, NodeID i, const MemObj* mem,
+             PNODEK ty = HeapObjNode)
+        : FIObjVar(val, i, mem, ty)
+    {
+    }
+
+    /// Return name of a LLVM value
+    inline const std::string getValueName() const
+    {
+        if (value)
+            return value->getName() + " (heap base object)";
+        return " (heap base object)";
+    }
+
+    virtual const std::string toString() const;
+};
+
 
 class CallGraphNode;
 

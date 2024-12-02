@@ -251,10 +251,14 @@ void SVFIRBuilder::initialiseNodes()
         DBOUT(DPAGBuild, outs() << "add obj node " << iter->second << "\n");
         if(iter->second == symTable->blackholeSymID() || iter->second == symTable->constantSymID())
             continue;
-        if (const Function* func = SVFUtil::dyn_cast<Function>(
-                                       llvmModuleSet()->getLLVMValue(iter->first)))
+        const Value* llvmValue = llvmModuleSet()->getLLVMValue(iter->first);
+        if (const Function* func = SVFUtil::dyn_cast<Function>(llvmValue))
         {
             pag->addFunObjNode(llvmModuleSet()->getCallGraphNode(func), iter->second);
+        }
+        else if (LLVMUtil::isHeapObj(llvmValue))
+        {
+            pag->addHeapObjNode(iter->first, iter->second);
         }
         else
         {

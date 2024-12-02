@@ -68,6 +68,7 @@ SVFVar::SVFVar(const SVFValue* val, NodeID i, PNODEK k) :
     case ObjNode:
     case GepObjNode:
     case FIObjNode:
+    case HeapObjNode:
     case DummyObjNode:
     {
         isPtr = true;
@@ -185,6 +186,18 @@ const std::string FIObjVar::toString() const
     return rawstr.str();
 }
 
+const std::string HeapObjVar::toString() const
+{
+    std::string str;
+    std::stringstream rawstr(str);
+    rawstr << "HeapObjVar ID: " << getId();
+    if (Options::ShowSVFIRValue())
+    {
+        rawstr << "\n";
+        rawstr << value->toString();
+    }
+    return rawstr.str();
+}
 const std::string FunValVar::toString() const
 {
     std::string str;
