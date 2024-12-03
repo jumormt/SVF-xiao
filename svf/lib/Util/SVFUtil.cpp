@@ -375,11 +375,11 @@ bool SVFUtil::isHeapAllocExtCall(const ICFGNode* cs)
 
 bool SVFUtil::isHeapObjVar(const SVF::SVFVar* var)
 {
-    if (SVFUtil::isa<FunObjVar, DummyObjVar>(var))
+    if (SVFUtil::isa<HeapObjVar, DummyObjVar>(var))
         return true;
     if (const GepObjVar* gepObjVar = SVFUtil::dyn_cast<GepObjVar>(var))
     {
-        return SVFUtil::isa<DummyObjVar>(SVFIR::getPAG()->getGNode(gepObjVar->getBaseNode()));
+        return SVFUtil::isa<DummyObjVar, HeapObjVar>(SVFIR::getPAG()->getGNode(gepObjVar->getBaseNode()));
     }
     return false;
 }

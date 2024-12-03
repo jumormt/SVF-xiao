@@ -637,9 +637,7 @@ protected:
     //@{
     virtual inline bool isHeapCondMemObj(const CVar& var, const StoreSVFGNode*)
     {
-        const MemObj* mem = _pag->getObject(getPtrNodeID(var));
-        assert(mem && "memory object is null??");
-        return mem->isHeap();
+        return SVFUtil::isHeapObjVar(_pag->getGNode(getPtrNodeID(var)));
     }
 
     inline bool isArrayCondMemObj(const CVar& var) const
