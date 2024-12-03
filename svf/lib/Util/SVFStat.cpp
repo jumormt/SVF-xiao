@@ -144,7 +144,7 @@ void SVFStat::performStat()
                 numOfGlobal++;
             if(mem->isStack())
                 numOfStack++;
-            if(mem->isHeap())
+            if(SVFUtil::isHeapObjVar(obj))
                 numOfHeap++;
             if(mem->isVarArray())
                 numOfHasVarArray++;
