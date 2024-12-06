@@ -69,6 +69,7 @@ SVFVar::SVFVar(const SVFValue* val, NodeID i, PNODEK k) :
     case GepObjNode:
     case FIObjNode:
     case HeapObjNode:
+    case StackObjNode:
     case DummyObjNode:
     {
         isPtr = true;
@@ -194,7 +195,20 @@ const std::string HeapObjVar::toString() const
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
-        rawstr << value->toString();
+        rawstr << valueOnlyToString();
+    }
+    return rawstr.str();
+}
+
+const std::string StackObjVar::toString() const
+{
+    std::string str;
+    std::stringstream rawstr(str);
+    rawstr << "StackObjVar ID: " << getId();
+    if (Options::ShowSVFIRValue())
+    {
+        rawstr << "\n";
+        rawstr << valueOnlyToString();
     }
     return rawstr.str();
 }

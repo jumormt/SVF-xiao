@@ -259,6 +259,13 @@ void SVFIRBuilder::initialiseNodes()
         else if (LLVMUtil::isHeapObj(llvmValue))
         {
             pag->addHeapObjNode(iter->first, iter->second);
+            llvmModuleSet()->setValueAttr(llvmValue,pag->getGNode(iter->second));
+        }
+        else if (SVFUtil::isa<AllocaInst>(llvmValue))
+        {
+            pag->addStackObjNode(iter->first, iter->second);
+            llvmModuleSet()->setValueAttr(llvmValue,
+                                          pag->getGNode(iter->second));
         }
         else
         {

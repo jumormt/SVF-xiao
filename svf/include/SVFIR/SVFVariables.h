@@ -583,6 +583,7 @@ public:
 
     virtual const std::string toString() const;
 };
+
 class HeapObjVar: public FIObjVar {
 
     friend class SVFIRWriter;
@@ -631,14 +632,66 @@ public:
     /// Return name of a LLVM value
     inline const std::string getValueName() const
     {
-        if (value)
-            return value->getName() + " (heap base object)";
         return " (heap base object)";
     }
 
     virtual const std::string toString() const;
 };
 
+
+class StackObjVar: public FIObjVar {
+
+    friend class SVFIRWriter;
+    friend class SVFIRReader;
+
+protected:
+    /// Constructor to create heap object var
+    StackObjVar(NodeID i, PNODEK ty = StackObjNode) : FIObjVar(i, ty) {}
+
+public:
+    ///  Methods for support type inquiry through isa, cast, and dyn_cast:
+    //@{
+    static inline bool classof(const StackObjVar*)
+    {
+        return true;
+    }
+    static inline bool classof(const FIObjVar* node)
+    {
+        return node->getNodeKind() == StackObjNode;
+    }
+    static inline bool classof(const ObjVar* node)
+    {
+        return node->getNodeKind() == StackObjNode;
+    }
+    static inline bool classof(const SVFVar* node)
+    {
+        return node->getNodeKind() == StackObjNode;
+    }
+    static inline bool classof(const GenericPAGNodeTy* node)
+    {
+        return node->getNodeKind() == StackObjNode;
+    }
+    static inline bool classof(const SVFBaseNode* node)
+    {
+        return node->getNodeKind() == StackObjNode;
+    }
+    //@}
+
+    /// Constructor
+    StackObjVar(const SVFValue* val, NodeID i, const MemObj* mem,
+               PNODEK ty = StackObjNode)
+        : FIObjVar(val, i, mem, ty)
+    {
+    }
+
+    /// Return name of a LLVM value
+    inline const std::string getValueName() const
+    {
+        return " (stack base object)";
+    }
+
+    virtual const std::string toString() const;
+};
 
 class CallGraphNode;
 

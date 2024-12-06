@@ -473,7 +473,7 @@ protected:
         NodeID id = getPtrNodeID(var);
         const MemObj* obj = _pag->getObject(id);
         assert(obj && "object not found!!");
-        if(obj->isStack())
+        if(SVFUtil::isStackObjVar(_pag->getGNode(id)))
         {
             if(const SVFFunction* svffun = _pag->getGNode(id)->getFunction())
             {

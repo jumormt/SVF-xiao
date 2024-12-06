@@ -582,7 +582,7 @@ bool MRGenerator::isNonLocalObject(NodeID id, const SVFFunction* curFun) const
         return true;
     /// or if the local variable of its callers
     /// or a local variable is in function recursion cycles
-    else if(obj->isStack())
+    else if(SVFUtil::isStackObjVar(pVar))
     {
         if(const SVFFunction* svffun = pVar->getFunction())
         {
