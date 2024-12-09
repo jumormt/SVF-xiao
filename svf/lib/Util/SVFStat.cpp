@@ -140,7 +140,7 @@ void SVFStat::performStat()
                 continue;
             if(mem->isFunction())
                 numOfFunction++;
-            if(mem->isGlobalObj())
+            if(SVFUtil::isGlobalObjVar(obj))
                 numOfGlobal++;
             if(SVFUtil::isStackObjVar(obj))
                 numOfStack++;

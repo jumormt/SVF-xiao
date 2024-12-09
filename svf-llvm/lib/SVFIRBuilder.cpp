@@ -267,6 +267,11 @@ void SVFIRBuilder::initialiseNodes()
             llvmModuleSet()->setValueAttr(llvmValue,
                                           pag->getGNode(iter->second));
         }
+        else if (SVFUtil::isa<GlobalVariable>(llvmValue)) {
+            pag->addGlobalObjNode(iter->first, iter->second);
+            llvmModuleSet()->setValueAttr(llvmValue,
+                                          pag->getGNode(iter->second));
+        }
         else
         {
             pag->addObjNode(iter->first, iter->second);

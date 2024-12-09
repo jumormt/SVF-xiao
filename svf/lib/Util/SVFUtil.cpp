@@ -394,6 +394,16 @@ bool SVFUtil::isStackObjVar(const SVF::SVFVar* var)
     return false;
 }
 
+bool SVFUtil::isGlobalObjVar(const SVF::SVFVar* var)
+{
+    if(SVFUtil::isa<GlobalObjVar>(var)) return true;
+    if(const GepObjVar* gepObjVar = SVFUtil::dyn_cast<GepObjVar>(var))
+    {
+        return SVFUtil::isa<GlobalObjVar>(SVFIR::getPAG()->getGNode(gepObjVar->getBaseNode()));
+    }
+    return false;
+}
+
 bool SVFUtil::isHeapAllocExtCallViaRet(const CallICFGNode* cs)
 {
     bool isPtrTy = cs->getType()->isPointerTy();

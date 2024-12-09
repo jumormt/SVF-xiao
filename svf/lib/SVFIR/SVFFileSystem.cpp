@@ -228,6 +228,7 @@ cJSON* SVFIRWriter::virtToJson(const SVFVar* var)
         CASE(FunValNode, FunValVar);
         CASE(HeapObjNode, HeapObjVar);
         CASE(StackObjNode, StackObjVar);
+        CASE(GlobalObjNode, GlobalObjVar);
 #undef CASE
     }
 }

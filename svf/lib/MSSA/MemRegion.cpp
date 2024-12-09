@@ -109,7 +109,7 @@ void MRGenerator::collectGlobals()
     {
         if(ObjVar* obj = SVFUtil::dyn_cast<ObjVar>(nIter->second))
         {
-            if (obj->getMemObj()->isGlobalObj())
+            if (SVFUtil::isGlobalObjVar(obj))
             {
                 allGlobals.set(nIter->first);
                 allGlobals |= CollectPtsChain(nIter->first);
@@ -574,11 +574,10 @@ void MRGenerator::getEscapObjviaGlobals(NodeBS& globs, const NodeBS& calleeModRe
  */
 bool MRGenerator::isNonLocalObject(NodeID id, const SVFFunction* curFun) const
 {
-    const MemObj* obj = pta->getPAG()->getObject(id);
-    assert(obj && "object not found!!");
     /// if the object is heap or global
     const SVFVar* pVar = pta->getPAG()->getGNode(id);
-    if(obj->isGlobalObj() || SVFUtil::isHeapObjVar(pVar))
+    assert(isa<ObjVar>(pVar) && "object not found!");
+    if(SVFUtil::isGlobalObjVar(pVar) || SVFUtil::isHeapObjVar(pVar))
         return true;
     /// or if the local variable of its callers
     /// or a local variable is in function recursion cycles

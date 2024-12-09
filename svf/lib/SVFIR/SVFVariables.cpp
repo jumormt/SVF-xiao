@@ -54,6 +54,7 @@ SVFVar::SVFVar(const SVFValue* val, NodeID i, PNODEK k) :
     }
     case RetNode:
     case FunObjNode:
+    case HeapObjNode:
     {
         // to be completed in derived class
         break;
@@ -68,8 +69,8 @@ SVFVar::SVFVar(const SVFValue* val, NodeID i, PNODEK k) :
     case ObjNode:
     case GepObjNode:
     case FIObjNode:
-    case HeapObjNode:
     case StackObjNode:
+    case GlobalObjNode:
     case DummyObjNode:
     {
         isPtr = true;
@@ -212,6 +213,20 @@ const std::string StackObjVar::toString() const
     }
     return rawstr.str();
 }
+
+const std::string GlobalObjVar::toString() const
+{
+    std::string str;
+    std::stringstream rawstr(str);
+    rawstr << "GlobalObjVar ID: " << getId();
+    if (Options::ShowSVFIRValue())
+    {
+        rawstr << "\n";
+        rawstr << valueOnlyToString();
+    }
+    return rawstr.str();
+}
+
 const std::string FunValVar::toString() const
 {
     std::string str;

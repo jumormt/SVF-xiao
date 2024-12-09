@@ -184,6 +184,8 @@ public:
         HeapObjNode,
         // │            ├──StackObjNode: Types of stack object
         StackObjNode,
+        // │            ├──GlobalObjNode: Types of global object
+        GlobalObjNode,
         // │       └── DummyObjNode: Dummy node for uninitialized objects
         DummyObjNode,
         // └────────
@@ -321,7 +323,7 @@ protected:
 
     static inline bool isSVFVarKind(GNodeK n)
     {
-        static_assert(DummyObjNode - ValNode == 12,
+        static_assert(DummyObjNode - ValNode == 13,
                       "The number of SVFVarKinds has changed, make sure the "
                       "range is correct");
 
@@ -338,7 +340,7 @@ protected:
 
     static inline bool isObjVarKinds(GNodeK n)
     {
-        static_assert(DummyObjNode - ObjNode == 6,
+        static_assert(DummyObjNode - ObjNode == 7,
                       "The number of ObjVarKinds has changed, make sure the "
                       "range is correct");
         return n <= DummyObjNode && n >= ObjNode;
@@ -346,10 +348,10 @@ protected:
 
     static inline bool isFIObjVarKinds(GNodeK n)
     {
-        static_assert(StackObjNode - FIObjNode == 3,
+        static_assert(GlobalObjNode - FIObjNode == 4,
                       "The number of FIObjVarKinds has changed, make sure the "
                       "range is correct");
-        return n <= StackObjNode && n >= FIObjNode;
+        return n <= GlobalObjNode && n >= FIObjNode;
     }
 
     static inline bool isVFGNodeKinds(GNodeK n)

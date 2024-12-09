@@ -379,6 +379,7 @@ bool isHeapObjVar(const SVFVar* var);
 
 bool isStackObjVar(const SVFVar* var);
 
+bool isGlobalObjVar(const SVFVar* var);
 //@}
 
 u32_t getHeapAllocHoldingArgPosition(const CallICFGNode* cs);

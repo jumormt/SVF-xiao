@@ -625,8 +625,9 @@ public:
     /// Constructor
     HeapObjVar(const SVFValue* val, NodeID i, const MemObj* mem,
              PNODEK ty = HeapObjNode)
-        : FIObjVar(val, i, mem, ty)
+        : FIObjVar(nullptr, i, mem, ty)
     {
+        isPtr = val->getType()->isPointerTy();
     }
 
     /// Return name of a LLVM value
@@ -645,7 +646,7 @@ class StackObjVar: public FIObjVar {
     friend class SVFIRReader;
 
 protected:
-    /// Constructor to create heap object var
+    /// Constructor to create stack object var
     StackObjVar(NodeID i, PNODEK ty = StackObjNode) : FIObjVar(i, ty) {}
 
 public:
@@ -688,6 +689,60 @@ public:
     inline const std::string getValueName() const
     {
         return " (stack base object)";
+    }
+
+    virtual const std::string toString() const;
+};
+
+class GlobalObjVar: public FIObjVar {
+
+    friend class SVFIRWriter;
+    friend class SVFIRReader;
+
+protected:
+    /// Constructor to create heap object var
+    GlobalObjVar(NodeID i, PNODEK ty = GlobalObjNode) : FIObjVar(i, ty) {}
+
+public:
+    ///  Methods for support type inquiry through isa, cast, and dyn_cast:
+    //@{
+    static inline bool classof(const GlobalObjVar*)
+    {
+        return true;
+    }
+    static inline bool classof(const FIObjVar* node)
+    {
+        return node->getNodeKind() == GlobalObjNode;
+    }
+    static inline bool classof(const ObjVar* node)
+    {
+        return node->getNodeKind() == GlobalObjNode;
+    }
+    static inline bool classof(const SVFVar* node)
+    {
+        return node->getNodeKind() == GlobalObjNode;
+    }
+    static inline bool classof(const GenericPAGNodeTy* node)
+    {
+        return node->getNodeKind() == GlobalObjNode;
+    }
+    static inline bool classof(const SVFBaseNode* node)
+    {
+        return node->getNodeKind() == GlobalObjNode;
+    }
+    //@}
+
+    /// Constructor
+    GlobalObjVar(const SVFValue* val, NodeID i, const MemObj* mem,
+                PNODEK ty = GlobalObjNode)
+        : FIObjVar(val, i, mem, ty)
+    {
+    }
+
+    /// Return name of a LLVM value
+    inline const std::string getValueName() const
+    {
+        return " (global variable base object)";
     }
 
     virtual const std::string toString() const;
