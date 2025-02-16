@@ -47,6 +47,7 @@ using namespace SVF;
 using namespace SVFUtil;
 using namespace LLVMUtil;
 
+lgraph::RpcClient* dbConnection = SVF::GraphDBClient::getInstance().getConnection();
 
 /*!
  * Start building SVFIR here
@@ -95,6 +96,7 @@ SVFIR* SVFIRBuilder::build()
         funset.push_back(llvmModuleSet()->getFunObjVar(llvmFun));
     }
     pag->callGraph = callGraphBuilder.buildSVFIRCallGraph(funset);
+    insertCallGraph2db(pag->callGraph);
 
     CHGraph* chg = new CHGraph();
     CHGBuilder chgbuilder(chg);
@@ -189,6 +191,49 @@ SVFIR* SVFIRBuilder::build()
     SVFStat::timeOfBuildingSVFIR = (endTime - startTime) / TIMEINTERVAL;
 
     return pag;
+}
+
+void SVFIRBuilder::insertCallGraph2db(const CallGraph* callGraph)
+{
+    // add all CallGraph Node & Edge to DB
+    if (nullptr != dbConnection)
+    {
+        // create a new graph name CallGraph in db
+        std::string result;
+        bool ret = dbConnection->CallCypherToLeader(
+            result, "CALL dbms.graph.createGraph('CallGraph')");
+        if (ret)
+        {
+            SVFUtil::outs()
+                << "Create Graph callGraph successfully:" << result << "\n";
+        }
+        else
+        {
+            SVFUtil::outs()
+                << "Failed to create Graph callGraph:" << result << "\n";
+        }
+        // load schema for CallGraph
+        SVF::GraphDBClient::getInstance().loadSchema(
+            dbConnection, "/home/zexin/dev/svf/SVF-1/svf/lib/Graphs/DBSchema/CallGraphEdgeSchema.json",
+            "CallGraph");
+        SVF::GraphDBClient::getInstance().loadSchema(
+            dbConnection, "/home/zexin/dev/svf/SVF-1/svf/lib/Graphs/DBSchema/CallGraphNodeSchema.json",
+            "CallGraph");
+        for (const auto& item : *callGraph)
+        {
+            const CallGraphNode* node = item.second;
+            SVF::GraphDBClient::getInstance().addCallGraphNode2db(
+                dbConnection, node, "CallGraph");
+            for (CallGraphEdge::CallGraphEdgeSet::iterator iter =
+                     node->OutEdgeBegin();
+                 iter != node->OutEdgeEnd(); ++iter)
+            {
+                const CallGraphEdge* edge = *iter;
+                SVF::GraphDBClient::getInstance().addCallGraphEdge2db(
+                    dbConnection, edge, "CallGraph");
+            }
+        }
+    }
 }
 
 void SVFIRBuilder::initialiseFunObjVars()

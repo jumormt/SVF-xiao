@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.23)
+  cmake_minimum_required(VERSION 3.23)
 
 project(SVF
   VERSION 3.1
@@ -133,6 +133,8 @@ set(CMAKE_INSTALL_RPATH ${Z3_INCLUDES})
 link_libraries(${Z3_LIBRARIES})
 include_directories(SYSTEM ${Z3_INCLUDES})
 
+# Add the tugraph rpc library to all targets of SVF
+find_library(LGRAPH_CPP_CLIENT_LIBRARIES lgraph_client_cpp_rpc REQUIRED PATHS /usr/local/lib)
 # Add the actual SVF and SVF-LLVM targets
 add_subdirectory(svf)
 add_subdirectory(svf-llvm)

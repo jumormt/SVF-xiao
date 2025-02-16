@@ -35,6 +35,7 @@
 #include "SVF-LLVM/ICFGBuilder.h"
 #include "SVF-LLVM/LLVMModule.h"
 #include "SVF-LLVM/LLVMUtil.h"
+#include "SVFIR/GraphDBClient.h"
 
 namespace SVF
 {
@@ -205,6 +206,8 @@ public:
 
     /// connect PAG edges based on callgraph
     void updateCallGraph(CallGraph* callgraph);
+
+    void insertCallGraph2db(const CallGraph* callgraph);
 
 protected:
     /// Handle globals including (global variable and functions)
