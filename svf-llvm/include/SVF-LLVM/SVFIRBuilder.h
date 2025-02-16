@@ -208,6 +208,7 @@ public:
     void updateCallGraph(CallGraph* callgraph);
 
     void insertCallGraph2db(const CallGraph* callgraph);
+    void insertICFG2db(const ICFG* icfg);
 
 protected:
     /// Handle globals including (global variable and functions)

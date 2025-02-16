@@ -13,13 +13,13 @@
                 {
                     "name" : "condition_var_id",
                     "type":"INT32",
-                    "optional":false,
+                    "optional":true,
                     "index":false
                 },
                 {
                     "name" : "branch_condition_val",
                     "type":"INT64",
-                    "optional":false,
+                    "optional":true,
                     "index":false
                 }
             ]
@@ -54,8 +54,8 @@
                 },
                 {
                     "name":"ret_pe_id",
-                    "type":"STRING",
-                    "optional":false,
+                    "type":"INT32",
+                    "optional":true,
                     "index":false
                 }
             ]

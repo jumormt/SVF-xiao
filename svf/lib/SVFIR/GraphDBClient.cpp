@@ -12,19 +12,83 @@ bool GraphDBClient::loadSchema(lgraph::RpcClient* connection,
         std::string result;
         bool ret =
             connection->ImportSchemaFromFile(result, filepath, dbname);
-        SVFUtil::outs() << "Schema Loading Results: " << result << "\n";
+        if (ret)
+        {
+            SVFUtil::outs() << dbname<< "schema load successfully:" << result << "\n";
+        }
+        else
+        {
+            SVFUtil::outs() << dbname<< "schema load failed:" << result << "\n";
+        }
         return ret;
+    }
+    return false;
+}
+
+// create a new graph name CallGraph in db
+bool GraphDBClient::createSubGraph(lgraph::RpcClient* connection, const std::string& graphname)
+{
+     ///TODO: graph name should be configurable
+    if (nullptr != connection)
+    {
+        std::string result;
+        bool ret = connection->CallCypherToLeader(
+            result, "CALL dbms.graph.createGraph('"+graphname+"')");
+        if (ret)
+        {
+            SVFUtil::outs()
+                << "Create Graph callGraph successfully:" << result << "\n";
+        }
+        else
+        {
+            SVFUtil::outs()
+                << "Failed to create Graph callGraph:" << result << "\n";
+        }
     }
     return false;
 }
 
 bool GraphDBClient::addICFGEdge2db(lgraph::RpcClient* connection,
                                    const ICFGEdge* edge,
-                                   const int& csid,
                                    const std::string& dbname)
 {
     if (nullptr != connection)
     {
+        std::string queryStatement;
+        if(SVFUtil::isa<IntraCFGEdge>(edge))
+        {
+            queryStatement = getIntraCFGEdgeStmt(SVFUtil::cast<IntraCFGEdge>(edge));
+        }
+        else if (SVFUtil::isa<CallCFGEdge>(edge))
+        {
+            queryStatement = getCallCFGEdgeStmt(SVFUtil::cast<CallCFGEdge>(edge));
+        }
+        else if (SVFUtil::isa<RetCFGEdge>(edge))
+        {
+            queryStatement = getRetCFGEdgeStmt(SVFUtil::cast<RetCFGEdge>(edge));
+        }
+        else 
+        {
+            assert("unknown icfg edge type?");
+            return false;
+        }
+        SVFUtil::outs() << "query:" << queryStatement << "\n";
+        std::string result;
+        if (queryStatement.empty())
+        {
+            return false;
+        }
+        bool ret = connection->CallCypher(result, queryStatement, dbname);
+        if (ret)
+        {
+            SVFUtil::outs() << "ICFG edge added: " << result << "\n";
+        }
+        else
+        {
+            SVFUtil::outs() << "Failed to add ICFG edge to db " << dbname << " "
+                            << result << "\n";
+        }
+        return ret;
 
     }
     return false;
@@ -76,11 +140,11 @@ bool GraphDBClient::addICFGNode2db(lgraph::RpcClient* connection,
         bool ret = connection->CallCypher(result, queryStatement, dbname);
         if (ret)
         {
-            SVFUtil::outs() << result << "\n";
+            SVFUtil::outs()<< "ICFG node added: " << result << "\n";
         }
         else
         {
-            SVFUtil::outs() << "Failed to add node to db " << dbname << " "
+            SVFUtil::outs() << "Failed to add icfg node to db " << dbname << " "
                             << result << "\n";
         }
         return ret;
@@ -103,11 +167,11 @@ bool GraphDBClient::addCallGraphNode2db(lgraph::RpcClient* connection,
         bool ret = connection->CallCypher(result, queryStatement, dbname);
         if (ret)
         {
-            SVFUtil::outs() << result << "\n";
+            SVFUtil::outs()<< "CallGraph node added: " << result << "\n";
         }
         else
         {
-            SVFUtil::outs() << "Failed to add node to db " << dbname << " "
+            SVFUtil::outs() << "Failed to add callGraph node to db " << dbname << " "
                             << result << "\n";
         }
         return ret;
@@ -148,11 +212,11 @@ bool GraphDBClient::addCallGraphEdge2db(lgraph::RpcClient* connection,
         bool ret = connection->CallCypher(result, queryStatement, dbname);
         if (ret)
         {
-            SVFUtil::outs() << result << "\n";
+            SVFUtil::outs() << "CallGraph edge added: " << result << "\n";
         }
         else
         {
-            SVFUtil::outs() << "Failed to add edges to db " << dbname << " "
+            SVFUtil::outs() << "Failed to add callgraph edge to db " << dbname << " "
                             << result << "\n";
         }
         return ret;
@@ -230,5 +294,92 @@ std::string GraphDBClient::getRetICFGNodeInsertStmt(const RetICFGNode* node) {
     ", kind: " + std::to_string(node->getNodeKind()) +
     ", actual_ret_node_id: " + std::to_string(node->getActualRet()->getId()) +
     ", call_block_node_id: " + std::to_string(node->getCallICFGNode()->getId()) + "})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getICFGNodeKindString(const ICFGNode* node)
+{
+    if(SVFUtil::isa<GlobalICFGNode>(node))
+    {
+        return "GlobalICFGNode";
+    }
+    else if (SVFUtil::isa<IntraICFGNode>(node))
+    {
+        return "IntraICFGNode";
+    }
+    else if (SVFUtil::isa<InterICFGNode>(node))
+    {
+        return "InterICFGNode";
+    }
+    else if (SVFUtil::isa<FunEntryICFGNode>(node))
+    {
+        return "FunEntryICFGNode";
+    }
+    else if (SVFUtil::isa<FunExitICFGNode>(node))
+    {
+        return "FunExitICFGNode";
+    }
+    else if (SVFUtil::isa<CallICFGNode>(node))
+    {
+        return "CallICFGNode";
+    }
+    else if (SVFUtil::isa<RetICFGNode>(node))
+    {
+        return "RetICFGNode";
+    }
+    else 
+    {
+        assert("unknown icfg node type?");
+        return "";
+    }
+}
+
+std::string GraphDBClient::getIntraCFGEdgeStmt(const IntraCFGEdge* edge) {
+    std::string srcKind = getICFGNodeKindString(edge->getSrcNode());
+    std::string dstKind = getICFGNodeKindString(edge->getDstNode());
+    std::string condition = "";
+    if (edge->getCondition() != nullptr)
+    {
+        condition = ", condition_var_id:"+ std::to_string(edge->getCondition()->getId()) +
+                    ", branch_cond_val:" + std::to_string(edge->getSuccessorCondValue());
+    }
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"), (m:"+dstKind+") WHERE n.id = " +
+        std::to_string(edge->getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(edge->getDstNode()->getId()) +
+        " CREATE (n)-[r:IntraCFGEdge{kind:" + std::to_string(edge->getEdgeKind()) +
+        condition +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getCallCFGEdgeStmt(const CallCFGEdge* edge) {
+    std::string srcKind = getICFGNodeKindString(edge->getSrcNode());
+    std::string dstKind = getICFGNodeKindString(edge->getDstNode());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"), (m:"+dstKind+") WHERE n.id = " +
+        std::to_string(edge->getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(edge->getDstNode()->getId()) +
+        " CREATE (n)-[r:CallCFGEdge{kind:" + std::to_string(edge->getEdgeKind()) +
+        ", call_pe_ids:'"+ extractEdgesIds(edge->getCallPEs()) +
+        "'}]->(m)";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getRetCFGEdgeStmt(const RetCFGEdge* edge) {
+    std::string srcKind = getICFGNodeKindString(edge->getSrcNode());
+    std::string dstKind = getICFGNodeKindString(edge->getDstNode());
+    std::string ret_pe_id ="";
+    if (edge->getRetPE() != nullptr)
+    {
+        ret_pe_id = ", ret_pe_id:"+ std::to_string(edge->getRetPE()->getEdgeID());
+    }
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"), (m:"+dstKind+") WHERE n.id = " +
+        std::to_string(edge->getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(edge->getDstNode()->getId()) +
+        " CREATE (n)-[r:RetCFGEdge{kind:" + std::to_string(edge->getEdgeKind()) +
+        ret_pe_id+
+        "}]->(m)";
     return queryStatement;
 }

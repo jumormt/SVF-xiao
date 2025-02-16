@@ -51,6 +51,7 @@ public:
 
     bool loadSchema(lgraph::RpcClient* connection, const std::string& filepath,
                     const std::string& dbname);
+    bool createSubGraph(lgraph::RpcClient* connection, const std::string& graphname);
     bool addCallGraphNode2db(lgraph::RpcClient* connection,
                              const CallGraphNode* node,
                              const std::string& dbname);
@@ -59,7 +60,7 @@ public:
     bool addICFGNode2db(lgraph::RpcClient* connection, const ICFGNode* node,
                         const std::string& dbname);
     bool addICFGEdge2db(lgraph::RpcClient* connection, const ICFGEdge* edge,
-                        const int& csid, const std::string& dbname);
+                        const std::string& dbname);
     /// pasre the directcallsIds/indirectcallsIds string to vector
     std::vector<int> stringToIds(const std::string& str);
 
@@ -73,17 +74,36 @@ public:
         std::ostringstream nodesIds;
         auto it = nodes.begin();
 
-        // 先添加第一个元素，避免额外的逗号
         nodesIds << (*it)->getId();
         ++it;
 
-        // 继续添加剩余元素，每个元素前加逗号
         for (; it != nodes.end(); ++it)
         {
             nodesIds << "," << (*it)->getId();
         }
 
         return nodesIds.str();
+    }
+
+    template <typename Container>
+    std::string extractEdgesIds(const Container& edges)
+    {
+        if (edges.empty())
+        {
+            return "";
+        }
+        std::ostringstream edgesIds;
+        auto it = edges.begin();
+
+        edgesIds << (*it)->getEdgeID();
+        ++it;
+
+        for (; it != edges.end(); ++it)
+        {
+            edgesIds << "," << (*it)->getEdgeID();
+        }
+
+        return edgesIds.str();
     }
 
     /// parse and extract the directcallsIds/indirectcallsIds vector
@@ -102,6 +122,14 @@ public:
     std::string getCallICFGNodeInsertStmt(const CallICFGNode* node);
 
     std::string getRetICFGNodeInsertStmt(const RetICFGNode* node);
+
+    std::string getIntraCFGEdgeStmt(const IntraCFGEdge* edge);
+
+    std::string getCallCFGEdgeStmt(const CallCFGEdge* edge);
+
+    std::string getRetCFGEdgeStmt(const RetCFGEdge* edge);
+
+    std::string getICFGNodeKindString(const ICFGNode* node);
 };
 
 } // namespace SVF
