@@ -75,7 +75,10 @@ SVFIR* SVFIRBuilder::build()
     /// build icfg
     ICFGBuilder icfgbuilder;
     pag->icfg = icfgbuilder.build();
-    insertICFG2db(pag->icfg);
+    if (Options::Write2DB())
+    {
+        insertICFG2db(pag->icfg);
+    }
 
     /// initial external library information
     /// initial SVFIR nodes
@@ -97,7 +100,10 @@ SVFIR* SVFIRBuilder::build()
         funset.push_back(llvmModuleSet()->getFunObjVar(llvmFun));
     }
     pag->callGraph = callGraphBuilder.buildSVFIRCallGraph(funset);
-    insertCallGraph2db(pag->callGraph);
+    if (Options::Write2DB())
+    {
+        insertCallGraph2db(pag->callGraph);
+    }
 
     CHGraph* chg = new CHGraph();
     CHGBuilder chgbuilder(chg);
