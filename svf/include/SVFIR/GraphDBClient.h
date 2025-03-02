@@ -130,6 +130,10 @@ public:
     std::string getRetCFGEdgeStmt(const RetCFGEdge* edge);
 
     std::string getICFGNodeKindString(const ICFGNode* node);
+
+    void insertICFG2db(const ICFG* icfg);
+
+    void insertCallGraph2db(const CallGraph* callGraph);
 };
 
 } // namespace SVF

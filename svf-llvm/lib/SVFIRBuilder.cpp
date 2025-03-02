@@ -77,7 +77,7 @@ SVFIR* SVFIRBuilder::build()
     pag->icfg = icfgbuilder.build();
     if (Options::Write2DB())
     {
-        insertICFG2db(pag->icfg);
+        SVF::GraphDBClient::getInstance().insertICFG2db(pag->icfg);
     }
 
     /// initial external library information
@@ -102,7 +102,7 @@ SVFIR* SVFIRBuilder::build()
     pag->callGraph = callGraphBuilder.buildSVFIRCallGraph(funset);
     if (Options::Write2DB())
     {
-        insertCallGraph2db(pag->callGraph);
+        SVF::GraphDBClient::getInstance().insertCallGraph2db(pag->callGraph);
     }
 
     CHGraph* chg = new CHGraph();
@@ -198,67 +198,6 @@ SVFIR* SVFIRBuilder::build()
     SVFStat::timeOfBuildingSVFIR = (endTime - startTime) / TIMEINTERVAL;
 
     return pag;
-}
-
-void SVFIRBuilder::insertCallGraph2db(const CallGraph* callGraph)
-{
-    // add all CallGraph Node & Edge to DB
-    if (nullptr != dbConnection)
-    {
-        // create a new graph name CallGraph in db
-        SVF::GraphDBClient::getInstance().createSubGraph(dbConnection, "CallGraph");
-        // load schema for CallGraph
-        ///TODO: schema path
-        SVF::GraphDBClient::getInstance().loadSchema(
-            dbConnection, "/home/zexin/dev/svf/SVF-1/svf/include/Graphs/DBSchema/CallGraphEdgeSchema.json",
-            "CallGraph");
-        SVF::GraphDBClient::getInstance().loadSchema(
-            dbConnection, "/home/zexin/dev/svf/SVF-1/svf/include/Graphs/DBSchema/CallGraphNodeSchema.json",
-            "CallGraph");
-        for (const auto& item : *callGraph)
-        {
-            const CallGraphNode* node = item.second;
-            SVF::GraphDBClient::getInstance().addCallGraphNode2db(
-                dbConnection, node, "CallGraph");
-            for (CallGraphEdge::CallGraphEdgeSet::iterator iter =
-                     node->OutEdgeBegin();
-                 iter != node->OutEdgeEnd(); ++iter)
-            {
-                const CallGraphEdge* edge = *iter;
-                SVF::GraphDBClient::getInstance().addCallGraphEdge2db(
-                    dbConnection, edge, "CallGraph");
-            }
-        }
-    } else {
-        SVFUtil::outs() << "No DB connection, skip inserting CallGraph to DB\n";
-    }
-}
-
-void SVFIRBuilder::insertICFG2db(const ICFG* icfg)
-{
-    // add all ICFG Node & Edge to DB
-    if (nullptr != dbConnection)
-    {
-        // create a new graph name ICFG in db
-        SVF::GraphDBClient::getInstance().createSubGraph(dbConnection, "ICFG");
-        // load schema for CallGraph
-        ///TODO: schema path
-        SVF::GraphDBClient::getInstance().loadSchema(
-            dbConnection, "/home/zexin/dev/svf/SVF-1/svf/include/Graphs/DBSchema/ICFGNodeSchema.json",
-            "ICFG");
-        SVF::GraphDBClient::getInstance().loadSchema(
-            dbConnection, "/home/zexin/dev/svf/SVF-1/svf/include/Graphs/DBSchema/ICFGEdgeSchema.json",
-            "ICFG");
-        for (auto it = icfg->begin(); it != icfg->end(); ++it) {
-            ICFGNode* node = it->second;
-            SVF::GraphDBClient::getInstance().addICFGNode2db(dbConnection, node, "ICFG");
-            for (auto edgeIter = node->OutEdgeBegin(); edgeIter != node->OutEdgeEnd(); ++edgeIter) {
-                ICFGEdge* edge = *edgeIter;
-                SVF::GraphDBClient::getInstance().addICFGEdge2db(dbConnection, edge, "ICFG");
-            }
-        }
-    }
-
 }
 
 void SVFIRBuilder::initialiseFunObjVars()

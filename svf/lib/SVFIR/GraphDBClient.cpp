@@ -9,6 +9,7 @@ bool GraphDBClient::loadSchema(lgraph::RpcClient* connection,
 {
     if (nullptr != connection)
     {
+        SVFUtil::outs() << "load schema from file:" << filepath << "\n";
         std::string result;
         bool ret =
             connection->ImportSchemaFromFile(result, filepath, dbname);
@@ -108,10 +109,6 @@ bool GraphDBClient::addICFGNode2db(lgraph::RpcClient* connection,
         else if (SVFUtil::isa<IntraICFGNode>(node))
         {
             queryStatement = getIntraICFGNodeInsertStmt(SVFUtil::cast<IntraICFGNode>(node));
-        }
-        else if (SVFUtil::isa<InterICFGNode>(node))
-        {
-            queryStatement = getInterICFGNodeInsertStmt(SVFUtil::cast<InterICFGNode>(node));
         }
         else if (SVFUtil::isa<FunEntryICFGNode>(node))
         {
@@ -260,39 +257,58 @@ std::string GraphDBClient::getInterICFGNodeInsertStmt(const InterICFGNode* node)
 std::string GraphDBClient::getFunEntryICFGNodeInsertStmt(const FunEntryICFGNode* node) {
     const std::string queryStatement ="CREATE (n:FunEntryICFGNode {id: " + std::to_string(node->getId()) +
     ", kind: " + std::to_string(node->getNodeKind()) +
-    ", fun_obj_var_id: " + std::to_string(node->getFun()->getId()) + 
-    ", fp_nodes:" + extractNodesIds(node->getFormalParms()) +"})";
+    ", fun_obj_var_id:" + std::to_string(node->getFun()->getId()) + 
+    ", fp_nodes:'" + extractNodesIds(node->getFormalParms()) +"'})";
     return queryStatement;
 }
 
 std::string GraphDBClient::getFunExitICFGNodeInsertStmt(const FunExitICFGNode* node) {
+    std::string formalRetId = "";
+    if (node->getFormalRet() == nullptr)
+    {
+        formalRetId = "";
+    } else {
+        formalRetId = ",formal_ret_node_id:" + std::to_string(node->getFormalRet()->getId());
+    }
     const std::string queryStatement ="CREATE (n:FunExitICFGNode {id: " + std::to_string(node->getId()) +
     ", kind: " + std::to_string(node->getNodeKind()) +
-    ", fun_obj_var_id: " + std::to_string(node->getFun()->getId()) + 
-    ", formal_ret_node_id:" + std::to_string(node->getFormalRet()->getId()) + "})";
+    ", fun_obj_var_id:" + std::to_string(node->getFun()->getId()) + 
+    formalRetId + "})";
     return queryStatement;
 }
 
 std::string GraphDBClient::getCallICFGNodeInsertStmt(const CallICFGNode* node) {
+    std::string fun_name_of_v_call = "";
+    std::string vtab_ptr_node_id = "";
+    std::string virtual_fun_idx = "0";
+    if (node->isVirtualCall())
+    {
+        fun_name_of_v_call = ", fun_name_of_v_call: '"+node->getFunNameOfVirtualCall()+"'";
+        vtab_ptr_node_id = ", vtab_ptr_node_id:" + std::to_string(node->getVtablePtr()->getId());
+        virtual_fun_idx = ", virtual_fun_idx:" + std::to_string(node->getFunIdxInVtable());
+    }
     const std::string queryStatement ="CREATE (n:CallICFGNode {id: " + std::to_string(node->getId()) +
     ", kind: " + std::to_string(node->getNodeKind()) +
     ", ret_icfg_node_id: " + std::to_string(node->getRetICFGNode()->getId()) +
     ", bb_id: " + std::to_string(node->getBB()->getId()) +
     ", svf_type: " + std::to_string(node->getType()->getKind()) +
-    ", ap_nodes:" + extractNodesIds(node->getActualParms()) +
-    ", called_fun_obj_var_id: " + std::to_string(node->getCalledFunction()->getId()) +
+    ", ap_nodes:'" + extractNodesIds(node->getActualParms()) +
+    "', called_fun_obj_var_id:" + std::to_string(node->getCalledFunction()->getId()) +
     ", is_vararg: " + (node->isVarArg() ? "true" : "false") +
     ", is_vir_call_inst: " + (node->isVirtualCall() ? "true" : "false") +
-    ", vtab_ptr_node_id:" + std::to_string(node->getVtablePtr()->getId()) +
-    ", virtual_fun_idx: " + std::to_string(node->getFunIdxInVtable()) +
-    ", fun_name_of_v_call: '" + node->getFunNameOfVirtualCall() + "'})";
+    vtab_ptr_node_id+virtual_fun_idx+fun_name_of_v_call+"})";
     return queryStatement;
 }
 
 std::string GraphDBClient::getRetICFGNodeInsertStmt(const RetICFGNode* node) {
+    std::string actual_ret_node_id="";
+    if (node->getActualRet() != nullptr)
+    {
+        actual_ret_node_id = ", actual_ret_node_id: " + std::to_string(node->getActualRet()->getId()) ;
+    }
     const std::string queryStatement ="CREATE (n:RetICFGNode {id: " + std::to_string(node->getId()) +
     ", kind: " + std::to_string(node->getNodeKind()) +
-    ", actual_ret_node_id: " + std::to_string(node->getActualRet()->getId()) +
+    actual_ret_node_id+
     ", call_block_node_id: " + std::to_string(node->getCallICFGNode()->getId()) + "})";
     return queryStatement;
 }
@@ -382,4 +398,74 @@ std::string GraphDBClient::getRetCFGEdgeStmt(const RetCFGEdge* edge) {
         ret_pe_id+
         "}]->(m)";
     return queryStatement;
+}
+
+void GraphDBClient::insertICFG2db(const ICFG* icfg)
+{
+    // add all ICFG Node & Edge to DB
+    if (nullptr != connection)
+    {
+        // create a new graph name ICFG in db
+        createSubGraph(connection, "ICFG");
+        // load schema for CallGraph
+        /// TODO: schema path
+        std::string ICFGNodePath =
+            SVF_ROOT "/svf/include/Graphs/DBSchema/ICFGNodeSchema.json";
+        std::string ICFGEdgePath =
+            SVF_ROOT "/svf/include/Graphs/DBSchema/ICFGEdgeSchema.json";
+        loadSchema(connection, ICFGNodePath.c_str(), "ICFG");
+        loadSchema(connection, ICFGEdgePath.c_str(), "ICFG");
+        for (auto it = icfg->begin(); it != icfg->end(); ++it)
+        {
+            ICFGNode* node = it->second;
+            addICFGNode2db(connection, node, "ICFG");
+            for (auto edgeIter = node->OutEdgeBegin();
+                 edgeIter != node->OutEdgeEnd(); ++edgeIter)
+            {
+                ICFGEdge* edge = *edgeIter;
+                addICFGEdge2db(connection, edge, "ICFG");
+            }
+        }
+    }
+}
+
+void GraphDBClient::insertCallGraph2db(const CallGraph* callGraph)
+{
+
+    std::string callGraphNodePath =
+        SVF_ROOT "/svf/include/Graphs/DBSchema/CallGraphNodeSchema.json";
+    std::string callGraphEdgePath =
+        SVF_ROOT "/svf/include/Graphs/DBSchema/CallGraphEdgeSchema.json";
+    // add all CallGraph Node & Edge to DB
+    if (nullptr != connection)
+    {
+        // create a new graph name CallGraph in db
+        createSubGraph(connection, "CallGraph");
+        // load schema for CallGraph
+        /// TODO: schema path
+        SVF::GraphDBClient::getInstance().loadSchema(
+            connection,
+            callGraphEdgePath,
+            "CallGraph");
+        SVF::GraphDBClient::getInstance().loadSchema(
+            connection,
+            callGraphNodePath,
+            "CallGraph");
+        for (const auto& item : *callGraph)
+        {
+            const CallGraphNode* node = item.second;
+            SVF::GraphDBClient::getInstance().addCallGraphNode2db(
+                connection, node, "CallGraph");
+            for (CallGraphEdge::CallGraphEdgeSet::iterator iter =
+                     node->OutEdgeBegin();
+                 iter != node->OutEdgeEnd(); ++iter)
+            {
+                const CallGraphEdge* edge = *iter;
+                SVF::GraphDBClient::getInstance().addCallGraphEdge2db(
+                    connection, edge, "CallGraph");
+            }
+        }
+        } else {
+        SVFUtil::outs() << "No DB connection, skip inserting CallGraph to DB\n";
+        }
 }
