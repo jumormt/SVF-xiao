@@ -282,11 +282,14 @@ std::string GraphDBClient::getCallICFGNodeInsertStmt(const CallICFGNode* node) {
     std::string fun_name_of_v_call = "";
     std::string vtab_ptr_node_id = "";
     std::string virtual_fun_idx = "0";
+    std::string is_vir_call_inst = node->isVirtualCall() ? "true" : "false";
+    std::string virtualFunAppendix = "";
     if (node->isVirtualCall())
     {
         fun_name_of_v_call = ", fun_name_of_v_call: '"+node->getFunNameOfVirtualCall()+"'";
         vtab_ptr_node_id = ", vtab_ptr_node_id:" + std::to_string(node->getVtablePtr()->getId());
         virtual_fun_idx = ", virtual_fun_idx:" + std::to_string(node->getFunIdxInVtable());
+        virtualFunAppendix = vtab_ptr_node_id+virtual_fun_idx+fun_name_of_v_call;
     }
     std::string called_fun_obj_var_id = "";
     if (node->getCalledFunction() != nullptr)
@@ -297,12 +300,12 @@ std::string GraphDBClient::getCallICFGNodeInsertStmt(const CallICFGNode* node) {
     ", kind: " + std::to_string(node->getNodeKind()) +
     ", ret_icfg_node_id: " + std::to_string(node->getRetICFGNode()->getId()) +
     ", bb_id: " + std::to_string(node->getBB()->getId()) +
-    ", svf_type: " + std::to_string(node->getType()->getKind()) +
-    ", ap_nodes:'" + extractNodesIds(node->getActualParms()) +"'"+
+    ", svf_type:'" + node->getType()->toString() +
+    "', ap_nodes:'" + extractNodesIds(node->getActualParms()) +"'"+
     called_fun_obj_var_id +
     ", is_vararg: " + (node->isVarArg() ? "true" : "false") +
     ", is_vir_call_inst: " + (node->isVirtualCall() ? "true" : "false") +
-    vtab_ptr_node_id+virtual_fun_idx+fun_name_of_v_call+"})";
+    virtualFunAppendix+"})";
     return queryStatement;
 }
 
