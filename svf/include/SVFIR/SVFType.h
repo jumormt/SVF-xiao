@@ -360,7 +360,8 @@ public:
         return retTy;
     }
 
-    const std::vector<const SVFType*>& getParamTypes() const {
+    const std::vector<const SVFType*>& getParamTypes() const
+    {
         return params;
     }
 
