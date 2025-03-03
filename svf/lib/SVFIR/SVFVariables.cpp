@@ -169,7 +169,7 @@ const std::string GepValVar::toString() const
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
-        rawstr << valueOnlyToString();
+        rawstr << getBaseNode()->valueOnlyToString();
     }
     return rawstr.str();
 }
@@ -203,7 +203,7 @@ const std::string GepObjVar::toString() const
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
-        rawstr << valueOnlyToString();
+        rawstr << getBaseObj()->valueOnlyToString();
     }
     return rawstr.str();
 }
@@ -289,7 +289,7 @@ const std::string ConstAggValVar::toString() const
 {
     std::string str;
     std::stringstream rawstr(str);
-    rawstr << "ConstAggValNode ID: " << getId();
+    rawstr << "ConstAggValVar ID: " << getId();
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
@@ -301,7 +301,7 @@ const std::string ConstDataValVar::toString() const
 {
     std::string str;
     std::stringstream rawstr(str);
-    rawstr << "ConstDataValNode ID: " << getId();
+    rawstr << "ConstDataValVar ID: " << getId();
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
@@ -327,7 +327,7 @@ const std::string ConstFPValVar::toString() const
 {
     std::string str;
     std::stringstream rawstr(str);
-    rawstr << "ConstFPValNode ID: " << getId();
+    rawstr << "ConstFPValVar ID: " << getId();
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
@@ -340,7 +340,7 @@ const std::string ConstIntValVar::toString() const
 {
     std::string str;
     std::stringstream rawstr(str);
-    rawstr << "ConstIntValNode ID: " << getId();
+    rawstr << "ConstIntValVar ID: " << getId();
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
@@ -366,7 +366,7 @@ const std::string GlobalObjVar::toString() const
 {
     std::string str;
     std::stringstream rawstr(str);
-    rawstr << "GlobalObjNode ID: " << getId();
+    rawstr << "GlobalObjVar ID: " << getId();
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
@@ -445,7 +445,7 @@ FunObjVar::FunObjVar(NodeID i, ObjTypeInfo* ti, const SVFType* svfType, const IC
 
 void FunObjVar::initFunObjVar(bool decl, bool intrinc, bool addr, bool uncalled, bool notret, bool vararg,
                               const SVFFunctionType *ft, SVFLoopAndDomInfo *ld, const FunObjVar *real, BasicBlockGraph *bbg,
-                              const std::vector<const ArgValVar *> &allarg, SVFBasicBlock *exit)
+                              const std::vector<const ArgValVar *> &allarg, const SVFBasicBlock *exit)
 {
     isDecl = decl;
     intrinsic = intrinc;

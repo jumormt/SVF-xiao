@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# type './build.sh'       for release build
-# type './build.sh debug' for debug build
-# if the LLVM_DIR variable is not set, LLVM will be downloaded.
+# type './build.sh'       for release build with dynamic libs, SVF and LLVM RTTI on
+# type './build.sh debug' for debug build with dynamic libs, SVF and LLVM RTTI on
+# type './build.sh dyn_lib' for release build with dynamic libs, SVF and LLVM RTTI on
+# type './build.sh debug dyn_lib' for debug build with dynamic libs, SVF and LLVM RTTI on
+
+# type './build.sh sta_lib' for release build with static libs, SVF and LLVM RTTI on
+# type './build.sh debug sta_lib' for debug build with static libs, SVF and LLVM RTTI on
+# type './build.sh sta_lib nortti' for release build with static libs, SVF and LLVM RTTI off
+# type './build.sh debug sta_lib nortti' for debug build with static libs, SVF and LLVM RTTI off
+
+# If the LLVM_DIR variable is not set, LLVM will be downloaded or built from source.
 #
 # Dependencies include: build-essential libncurses5 libncurses-dev cmake zlib1g-dev
 set -e # exit on first error
@@ -9,7 +17,7 @@ set -e # exit on first error
 jobs=8
 
 #########
-# VARs and Links
+# Variables and Paths
 ########
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 SVFHOME="${SCRIPT_DIR}"
@@ -17,7 +25,9 @@ sysOS=$(uname -s)
 arch=$(uname -m)
 MajorLLVMVer=16
 LLVMVer=${MajorLLVMVer}.0.4
+UbuntuArmLLVM_RTTI="https://github.com/SVF-tools/SVF/releases/download/SVF-3.0/llvm-${MajorLLVMVer}.0.0-ubuntu24-rtti-aarch64.tar.gz"
 UbuntuArmLLVM="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVMVer}/clang+llvm-${LLVMVer}-aarch64-linux-gnu.tar.xz"
+UbuntuLLVM_RTTI="https://github.com/SVF-tools/SVF/releases/download/SVF-3.0/llvm-${MajorLLVMVer}.0.0-ubuntu24-rtti-x86-64.tar.gz"
 UbuntuLLVM="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVMVer}/clang+llvm-${LLVMVer}-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
 SourceLLVM="https://github.com/llvm/llvm-project/archive/refs/tags/llvmorg-${LLVMVer}.zip"
 UbuntuZ3="https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip"
@@ -28,6 +38,31 @@ SourceZ3="https://github.com/Z3Prover/z3/archive/refs/tags/z3-4.8.8.zip"
 # keep the version consistent with LLVM_DIR in setup.sh and llvm_version in Dockerfile
 LLVMHome="llvm-${MajorLLVMVer}.0.0.obj"
 Z3Home="z3.obj"
+
+
+# Parse arguments
+BUILD_TYPE='Release'
+BUILD_DYN_LIB='ON'
+RTTI='ON'
+for arg in "$@"; do
+    if [[ $arg =~ ^[Dd]ebug$ ]]; then
+        BUILD_TYPE='Debug'
+    fi
+    if [[ $arg =~ ^[Ss]ta_lib$ ]]; then
+        BUILD_DYN_LIB='OFF'
+    fi
+    if [[ $arg =~ ^[Dd]yn_lib$ ]]; then
+        BUILD_DYN_LIB='ON'
+    fi
+    if [[ $arg =~ ^[Nn]ortti$ ]]; then
+        RTTI='OFF'
+    fi
+done
+# if static is off (shared lib), rtti is always on, but print a warning if rtti is off
+if [[ "$BUILD_DYN_LIB" == "ON" && "$RTTI" == "OFF" ]]; then
+    echo "Warning: LLVM RTTI is always on when building shared libraries."
+    RTTI='ON'
+fi
 
 
 # Downloads $1 (URL) to $2 (target destination) using wget or curl,
@@ -114,8 +149,14 @@ function build_llvm_from_source {
     echo "Building LLVM..."
     mkdir llvm-build
     cd llvm-build
-    # /*/ is a dirty hack to get llvm-project-llvmorg-version...
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$SVFHOME/$LLVMHome" -DLLVM_ENABLE_PROJECTS=clang ../llvm-source/*/llvm
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX="$SVFHOME/$LLVMHome" \
+          -DLLVM_ENABLE_PROJECTS="clang" \
+          -DLLVM_ENABLE_RTTI=ON \
+          -DLLVM_BUILD_LLVM_DYLIB=ON \
+          -DLLVM_LINK_LLVM_DYLIB=ON \
+          -DBUILD_SHARED_LIBS=ON \
+          ../llvm-source/*/llvm
     cmake --build . -j ${jobs}
     cmake --install .
 
@@ -141,7 +182,6 @@ function check_and_install_brew {
 # OS-specific values.
 urlLLVM=""
 urlZ3=""
-OSDisplayName=""
 
 ########
 # Set OS-specific values, mainly URLs to download binaries from.
@@ -149,20 +189,26 @@ OSDisplayName=""
 #######
 if [[ $sysOS == "Darwin" ]]; then
     check_and_install_brew
-    if [[ "$arch" == "arm64" ]]; then
-        OSDisplayName="macOS arm64"
-    else
-        OSDisplayName="macOS x86"
-    fi
 elif [[ $sysOS == "Linux" ]]; then
     if [[ "$arch" == "aarch64" ]]; then
+      if [[ "$BUILD_DYN_LIB" == "ON" ]]; then
+        urlLLVM="$UbuntuArmLLVM_RTTI"
+      else
         urlLLVM="$UbuntuArmLLVM"
-        urlZ3="$UbuntuZ3Arm"
-        OSDisplayName="Ubuntu arm64"
+      fi
+      urlZ3="$UbuntuZ3Arm"
     else
-        urlLLVM="$UbuntuLLVM"
-        urlZ3="$UbuntuZ3"
-        OSDisplayName="Ubuntu x86"
+      if [[ "$BUILD_DYN_LIB" == "ON" ]]; then
+        urlLLVM="$UbuntuLLVM_RTTI"
+      else
+        # if RTTI is on
+        if [[ "$RTTI" == "ON" ]]; then
+          urlLLVM="$UbuntuLLVM_RTTI"
+        else
+          urlLLVM="$UbuntuLLVM"
+        fi
+      fi
+      urlZ3="$UbuntuZ3"
     fi
 else
     echo "Builds outside Ubuntu and macOS are not supported."
@@ -253,7 +299,7 @@ mkdir "${BUILD_DIR}"
 cmake -D CMAKE_BUILD_TYPE:STRING="${BUILD_TYPE}"   \
     -DSVF_ENABLE_ASSERTIONS:BOOL=true              \
     -DSVF_SANITIZE="${SVF_SANITIZER}"              \
-    -DBUILD_SHARED_LIBS=off                        \
+    -DBUILD_SHARED_LIBS=${BUILD_DYN_LIB}            \
     -S "${SVFHOME}" -B "${BUILD_DIR}"
 cmake --build "${BUILD_DIR}" -j ${jobs}
 
