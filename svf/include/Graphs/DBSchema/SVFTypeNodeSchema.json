@@ -138,6 +138,12 @@
                     "type":"STRING",
                     "optional":false,
                     "index":false
+                }, 
+                {
+                    "name":"params_types_vec",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },

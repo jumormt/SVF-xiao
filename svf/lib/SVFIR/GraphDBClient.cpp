@@ -593,7 +593,8 @@ std::string GraphDBClient::getSVFFunctionTypeNodeInsertStmt(const SVFFunctionTyp
     "', kind:" + std::to_string(node->getKind()) + 
     ", is_single_val_ty:" + is_single_val_ty + 
     ", byte_size:" + std::to_string(node->getByteSize()) +
-    ", ret_ty_node_name:'" + node->getReturnType()->toString() + "'})";
+    ", params_types_vec:'" + extractSVFTypes(node->getParamTypes()) +
+    "', ret_ty_node_name:'" + node->getReturnType()->toString() + "'})";
     return queryStatement;
 }
 
