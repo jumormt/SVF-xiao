@@ -55,6 +55,7 @@ bool GraphDBClient::addICFGEdge2db(lgraph::RpcClient* connection,
 {
     if (nullptr != connection)
     {
+        SVFUtil::outs() << "handling icfgedge: " << edge->getEdgeKind() << "\n";
         std::string queryStatement;
         if(SVFUtil::isa<IntraCFGEdge>(edge))
         {
@@ -132,7 +133,7 @@ bool GraphDBClient::addICFGNode2db(lgraph::RpcClient* connection,
             return false;
         }
 
-        SVFUtil::outs()<<"query:"<<queryStatement<<"\n";
+        SVFUtil::outs()<<"ICFGNode Insert Query:"<<queryStatement<<"\n";
         std::string result;
         bool ret = connection->CallCypher(result, queryStatement, dbname);
         if (ret)
@@ -287,13 +288,18 @@ std::string GraphDBClient::getCallICFGNodeInsertStmt(const CallICFGNode* node) {
         vtab_ptr_node_id = ", vtab_ptr_node_id:" + std::to_string(node->getVtablePtr()->getId());
         virtual_fun_idx = ", virtual_fun_idx:" + std::to_string(node->getFunIdxInVtable());
     }
+    std::string called_fun_obj_var_id = "";
+    if (node->getCalledFunction() != nullptr)
+    {
+        called_fun_obj_var_id = ", called_fun_obj_var_id:" + std::to_string(node->getCalledFunction()->getId());
+    }
     const std::string queryStatement ="CREATE (n:CallICFGNode {id: " + std::to_string(node->getId()) +
     ", kind: " + std::to_string(node->getNodeKind()) +
     ", ret_icfg_node_id: " + std::to_string(node->getRetICFGNode()->getId()) +
     ", bb_id: " + std::to_string(node->getBB()->getId()) +
     ", svf_type: " + std::to_string(node->getType()->getKind()) +
-    ", ap_nodes:'" + extractNodesIds(node->getActualParms()) +
-    "', called_fun_obj_var_id:" + std::to_string(node->getCalledFunction()->getId()) +
+    ", ap_nodes:'" + extractNodesIds(node->getActualParms()) +"'"+
+    called_fun_obj_var_id +
     ", is_vararg: " + (node->isVarArg() ? "true" : "false") +
     ", is_vir_call_inst: " + (node->isVirtualCall() ? "true" : "false") +
     vtab_ptr_node_id+virtual_fun_idx+fun_name_of_v_call+"})";
@@ -468,4 +474,163 @@ void GraphDBClient::insertCallGraph2db(const CallGraph* callGraph)
         } else {
         SVFUtil::outs() << "No DB connection, skip inserting CallGraph to DB\n";
         }
+}
+
+void GraphDBClient::insertSVFTypeNodeSet2db(const Set<const SVFType*>* types, const Set<const StInfo*>* stInfos, std::string& dbname)
+{
+    if (nullptr != connection)
+    {
+        // create a new graph name SVFType in db
+        createSubGraph(connection, "SVFType");
+        // load schema for SVFType
+        loadSchema(connection, SVF_ROOT "/svf/include/Graphs/DBSchema/SVFTypeNodeSchema.json", "SVFType");
+        // load & insert each svftype node to db
+        for (const auto& ty : *types)
+        {
+            std::string queryStatement;
+            if (SVFUtil::isa<SVFPointerType>(ty))
+            {
+                queryStatement = getSVFPointerTypeNodeInsertStmt(SVFUtil::cast<SVFPointerType>(ty));
+            } 
+            else if (SVFUtil::isa<SVFIntegerType>(ty))
+            {
+                queryStatement = getSVFIntegerTypeNodeInsertStmt(SVFUtil::cast<SVFIntegerType>(ty));
+            }
+            else if (SVFUtil::isa<SVFFunctionType>(ty))
+            {
+                queryStatement = getSVFFunctionTypeNodeInsertStmt(SVFUtil::cast<SVFFunctionType>(ty));
+            }
+            else if (SVFUtil::isa<SVFStructType>(ty))
+            {
+                queryStatement = getSVFSturctTypeNodeInsertStmt(SVFUtil::cast<SVFStructType>(ty));  
+            }
+            else if (SVFUtil::isa<SVFArrayType>(ty))
+            {
+                queryStatement = getSVFArrayTypeNodeInsertStmt(SVFUtil::cast<SVFArrayType>(ty));
+            }
+            else if (SVFUtil::isa<SVFOtherType>(ty))
+            {
+                queryStatement = getSVFOtherTypeNodeInsertStmt(SVFUtil::cast<SVFOtherType>(ty));   
+            }
+            else 
+            {
+                assert("unknown SVF type?");
+                return ;
+            }
+    
+            SVFUtil::outs()<<"SVFType Insert Query:"<<queryStatement<<"\n";
+            std::string result;
+            bool ret = connection->CallCypher(result, queryStatement, dbname);
+            if (ret)
+            {
+                SVFUtil::outs()<< "SVFType node added: " << result << "\n";
+            }
+            else
+            {
+                SVFUtil::outs() << "Failed to add SVFType node to db " << dbname << " "
+                                << result << "\n";
+            }
+        
+        }
+
+        // // load & insert each stinfo node to db
+        // for(const auto& stInfo : *stInfos)
+        // {
+        //     // insert stinfo node to db
+        // }
+    }
+
+}
+
+std::string GraphDBClient::getSVFPointerTypeNodeInsertStmt(const SVFPointerType* node)
+{
+    std::string is_single_val_ty = node->isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFPointerTypeNode {type_name:'" + node->toString() +
+    "', svf_i8_type_name:'" + node->getSVFInt8Type()->toString() +
+    "', svf_ptr_type_name:'" + node->getSVFPtrType()->toString() + 
+    "', kind:" + std::to_string(node->getKind()) + 
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(node->getByteSize()) + "})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getSVFIntegerTypeNodeInsertStmt(const SVFIntegerType* node)
+{
+    std::string is_single_val_ty = node->isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFIntegerTypeNode {type_name:'" + node->toString() +
+    "', svf_i8_type_name:'" + node->getSVFInt8Type()->toString() +
+    "', svf_ptr_type_name:'" + node->getSVFPtrType()->toString() + 
+    "', kind:" + std::to_string(node->getKind()) + 
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(node->getByteSize()) +
+    ", single_and_width:" + std::to_string(node->getSignAndWidth()) + "})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getSVFFunctionTypeNodeInsertStmt(const SVFFunctionType* node)
+{
+    std::string is_single_val_ty = node->isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFFunctionTypeNode {type_name:'" + node->toString() +
+    "', svf_i8_type_name:'" + node->getSVFInt8Type()->toString() +
+    "', svf_ptr_type_name:'" + node->getSVFPtrType()->toString() + 
+    "', kind:" + std::to_string(node->getKind()) + 
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(node->getByteSize()) +
+    ", ret_ty_node_name:'" + node->getReturnType()->toString() + "'})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getSVFSturctTypeNodeInsertStmt(const SVFStructType* node)
+{
+    std::string is_single_val_ty = node->isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFStructTypeNode {type_name:'" + node->toString() +
+    "', svf_i8_type_name:'" + node->getSVFInt8Type()->toString() +
+    "', svf_ptr_type_name:'" + node->getSVFPtrType()->toString() + 
+    "', kind:" + std::to_string(node->getKind()) + 
+    ", stinfo_node_id:" + std::to_string(node->getTypeInfo()->getStinfoId()) +
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(node->getByteSize()) +
+    ", struct_name:'" + node->getName() + "'})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getSVFArrayTypeNodeInsertStmt(const SVFArrayType* node)
+{
+    std::string is_single_val_ty = node->isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFArrayTypeNode {type_name:'" + node->toString() +
+    "', svf_i8_type_name:'" + node->getSVFInt8Type()->toString() +
+    "', svf_ptr_type_name:'" + node->getSVFPtrType()->toString() + 
+    "', kind:" + std::to_string(node->getKind()) + 
+    ", stinfo_node_id:" + std::to_string(node->getTypeInfo()->getStinfoId()) +
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(node->getByteSize()) +
+    ", num_of_element:" + std::to_string(node->getNumOfElement()) + 
+    ", type_of_element_node_type_name:'" + node->getTypeOfElement()->toString() + "'})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getSVFOtherTypeNodeInsertStmt(const SVFOtherType* node)
+{
+    std::string is_single_val_ty = node->isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFOtherTypeNode {type_name:'" + node->toString() +
+    "', svf_i8_type_name:'" + node->getSVFInt8Type()->toString() +
+    "', svf_ptr_type_name:'" + node->getSVFPtrType()->toString() + 
+    "', kind:" + std::to_string(node->getKind()) + 
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(node->getByteSize()) +
+    ", repr:'" + node->getRepr() + "'})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getStInfoNodeInsertStmt(const StInfo* node)
+{
+    const std::string queryStatement ="CREATE (n:SVFOtherTypeNode {id:" + std::to_string(node->getStinfoId()) +
+    ", fld_idx_vec:'" + extractIdxs(node->getFlattenedFieldIdxVec()) +
+    "', elem_idx_vec:'" + extractIdxs(node->getFlattenedElemIdxVec()) + 
+    "', finfo_types:'" + extractSVFTypes(node->getFlattenFieldTypes()) + 
+    "', flatten_element_types:'" + extractSVFTypes(node->getFlattenElementTypes()) + 
+    "', stride:" + std::to_string(node->getStride()) +
+    ", num_of_flatten_elements:" + std::to_string(node->getNumOfFlattenElements()) +
+    ", num_of_flatten_fields:" + std::to_string(node->getNumOfFlattenFields()) + "})";
+    return queryStatement;
 }

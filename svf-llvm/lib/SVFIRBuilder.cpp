@@ -170,6 +170,9 @@ SVFIR* SVFIRBuilder::build()
 
     pag->setNodeNumAfterPAGBuild(pag->getTotalNodeNum());
 
+    std::string dbname = "SVFType";
+    GraphDBClient::getInstance().insertSVFTypeNodeSet2db(&pag->getSVFTypes(), &pag->getStInfos(), dbname);
+
     // dump SVFIR
     if (Options::PAGDotGraph())
         pag->dump("svfir_initial");

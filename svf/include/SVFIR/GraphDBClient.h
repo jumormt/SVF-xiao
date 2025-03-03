@@ -3,6 +3,8 @@
 #include "Graphs/CallGraph.h"
 #include "Graphs/ICFGEdge.h"
 #include "Graphs/ICFGNode.h"
+#include "SVFIR/SVFType.h"
+#include "SVFIR/SVFIR.h"
 #include "Util/SVFUtil.h"
 #include "lgraph/lgraph_rpc_client.h"
 #include <errno.h>
@@ -15,6 +17,9 @@ class ICFGEdge;
 class ICFGNode;
 class CallGraphEdge;
 class CallGraphNode;
+class SVFType;
+class StInfo;
+class SVFIR;
 class GraphDBClient
 {
 private:
@@ -106,6 +111,48 @@ public:
         return edgesIds.str();
     }
 
+    template <typename Container>
+    std::string extractIdxs(const Container& idxVec)
+    {
+        if (idxVec.empty())
+        {
+            return "";
+        }
+        std::ostringstream idxVecStr;
+        auto it = idxVec.begin();
+    
+        idxVecStr << *it;
+        ++it;
+    
+        for (; it != idxVec.end(); ++it)
+        {
+            idxVecStr << "," << *it;
+        }
+    
+        return idxVecStr.str();
+    }
+
+    template <typename Container>
+    std::string extractSVFTypes(const Container& types)
+    {
+        if (types.empty())
+        {
+            return "";
+        }
+        std::ostringstream typesStr;
+        auto it = types.begin();
+
+        typesStr << (*it)->toString();
+        ++it;
+
+        for (; it != types.end(); ++it)
+        {
+            typesStr << "," << (*it)->toString();
+        }
+
+        return typesStr.str();
+    }
+
     /// parse and extract the directcallsIds/indirectcallsIds vector
 
     /// parse ICFGNodes & generate the insert statement for ICFGNodes
@@ -134,6 +181,22 @@ public:
     void insertICFG2db(const ICFG* icfg);
 
     void insertCallGraph2db(const CallGraph* callGraph);
+
+    void insertSVFTypeNodeSet2db(const Set<const SVFType*>* types,const Set<const StInfo*>* stInfos, std::string& dbname);
+
+    std::string getSVFPointerTypeNodeInsertStmt(const SVFPointerType* node);
+
+    std::string getSVFIntegerTypeNodeInsertStmt(const SVFIntegerType* node);
+
+    std::string getSVFFunctionTypeNodeInsertStmt(const SVFFunctionType* node);
+
+    std::string getSVFSturctTypeNodeInsertStmt(const SVFStructType* node);
+
+    std::string getSVFArrayTypeNodeInsertStmt(const SVFArrayType* node);
+
+    std::string getSVFOtherTypeNodeInsertStmt(const SVFOtherType* node);
+
+    std::string getStInfoNodeInsertStmt(const StInfo* node);
 };
 
 } // namespace SVF
