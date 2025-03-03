@@ -153,6 +153,27 @@ public:
         return typesStr.str();
     }
 
+    template <typename MapType>
+    std::string extractFldIdx2TypeMap(const MapType& fldIdx2TypeMap)
+    {
+        if (fldIdx2TypeMap.empty())
+        {
+            return "";
+        }
+        std::ostringstream mapStr;
+        auto it = fldIdx2TypeMap.begin();
+
+        mapStr << it->first << ":" << it->second->toString();
+        ++it;
+
+        for (; it != fldIdx2TypeMap.end(); ++it)
+        {
+            mapStr << "," << it->first << ":" << it->second->toString();
+        }
+
+        return mapStr.str();
+    }
+
     /// parse and extract the directcallsIds/indirectcallsIds vector
 
     /// parse ICFGNodes & generate the insert statement for ICFGNodes

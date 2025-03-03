@@ -484,6 +484,7 @@ void GraphDBClient::insertSVFTypeNodeSet2db(const Set<const SVFType*>* types, co
         createSubGraph(connection, "SVFType");
         // load schema for SVFType
         loadSchema(connection, SVF_ROOT "/svf/include/Graphs/DBSchema/SVFTypeNodeSchema.json", "SVFType");
+        
         // load & insert each svftype node to db
         for (const auto& ty : *types)
         {
@@ -533,11 +534,24 @@ void GraphDBClient::insertSVFTypeNodeSet2db(const Set<const SVFType*>* types, co
         
         }
 
-        // // load & insert each stinfo node to db
-        // for(const auto& stInfo : *stInfos)
-        // {
-        //     // insert stinfo node to db
-        // }
+        // load & insert each stinfo node to db
+        for(const auto& stInfo : *stInfos)
+        {
+            // insert stinfo node to db
+            std::string queryStatement = getStInfoNodeInsertStmt(stInfo);
+            SVFUtil::outs()<<"StInfo Insert Query:"<<queryStatement<<"\n";
+            std::string result;
+            bool ret = connection->CallCypher(result, queryStatement, dbname);
+            if (ret)
+            {
+                SVFUtil::outs()<< "StInfo node added: " << result << "\n";
+            }
+            else
+            {
+                SVFUtil::outs() << "Failed to add StInfo node to db " << dbname << " "
+                                << result << "\n";
+            }
+        }
     }
 
 }
@@ -624,11 +638,12 @@ std::string GraphDBClient::getSVFOtherTypeNodeInsertStmt(const SVFOtherType* nod
 
 std::string GraphDBClient::getStInfoNodeInsertStmt(const StInfo* node)
 {
-    const std::string queryStatement ="CREATE (n:SVFOtherTypeNode {id:" + std::to_string(node->getStinfoId()) +
+    const std::string queryStatement ="CREATE (n:StInfoNode {id:" + std::to_string(node->getStinfoId()) +
     ", fld_idx_vec:'" + extractIdxs(node->getFlattenedFieldIdxVec()) +
     "', elem_idx_vec:'" + extractIdxs(node->getFlattenedElemIdxVec()) + 
     "', finfo_types:'" + extractSVFTypes(node->getFlattenFieldTypes()) + 
     "', flatten_element_types:'" + extractSVFTypes(node->getFlattenElementTypes()) + 
+    "', fld_idx_2_type_map:'" + extractFldIdx2TypeMap(node->getFldIdx2TypeMap()) +
     "', stride:" + std::to_string(node->getStride()) +
     ", num_of_flatten_elements:" + std::to_string(node->getNumOfFlattenElements()) +
     ", num_of_flatten_fields:" + std::to_string(node->getNumOfFlattenFields()) + "})";

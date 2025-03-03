@@ -128,6 +128,11 @@ public:
     {
         return StInfoId;
     }
+
+    inline const Map<u32_t, const SVFType*>& getFldIdx2TypeMap() const
+    {
+        return fldIdx2TypeMap;
+    }
     //@}
 
     /// Add field index and element index and their corresponding type
