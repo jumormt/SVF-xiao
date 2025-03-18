@@ -3,14 +3,7 @@
         {
             "label":"BasicBlockEdge",
             "type":"EDGE",
-            "properties" : [
-                {
-                    "name":"kind",
-                    "type":"INT32",
-                    "optional":false,
-                    "index":false
-                }
-            ]
+            "properties" : []
         }
     ]
 }

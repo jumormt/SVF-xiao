@@ -1,13 +1,13 @@
 {
     "schema": [
         {
-            "label" : "BasicBlockNode",
+            "label" : "SVFBasicBlock",
             "type" : "VERTEX",
             "primary" : "id",
             "properties" : [
                 {
                     "name" : "id", 
-                    "type":"INT32",
+                    "type":"STRING",
                     "optional":false,
                     "index":true
                 },
@@ -24,7 +24,7 @@
                     "index":false
                 },
                 {
-                    "name":"pre_bb_ids",
+                    "name":"pred_bb_ids",
                     "type":"STRING",
                     "optional":false,
                     "index":false

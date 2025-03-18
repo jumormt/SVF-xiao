@@ -633,12 +633,6 @@
                     "index":false
                 },
                 {
-                    "name":"bb_graph_id",
-                    "type":"INT32",
-                    "optional":false,
-                    "index":false
-                },
-                {
                     "name":"exit_bb_id",
                     "type":"INT32",
                     "optional":true,

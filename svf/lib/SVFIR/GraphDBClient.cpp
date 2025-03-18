@@ -664,6 +664,94 @@ std::string GraphDBClient::getStInfoNodeInsertStmt(const StInfo* node)
     return queryStatement;
 }
 
+void GraphDBClient::insertBasicBlockGraph2db(const BasicBlockGraph* bbGraph)
+{
+    if (nullptr != connection)
+    {
+        std::vector<const BasicBlockEdge*> edges;
+        for (auto& bb: *bbGraph)
+        {
+            SVFBasicBlock* node = bb.second;
+            insertBBNode2db(connection, node, "BasicBlockGraph");
+            for (auto iter = node->OutEdgeBegin(); iter != node->OutEdgeEnd(); ++iter)
+            {
+                edges.push_back(*iter);
+            }
+        }
+        for (const BasicBlockEdge* edge : edges)
+        {
+            insertBBEdge2db(connection, edge, "BasicBlockGraph");
+        }
+    }
+}
+
+void GraphDBClient::insertBBEdge2db(lgraph::RpcClient* connection, const BasicBlockEdge* edge, const std::string& dbname)
+{
+    if (nullptr != connection)
+    {
+        std::string queryStatement = getBBEdgeInsertStmt(edge);
+        // SVFUtil::outs()<<"BBEdge Insert Query:"<<queryStatement<<"\n";
+        std::string result;
+        if (!queryStatement.empty())
+        {
+            bool ret = connection->CallCypher(result, queryStatement, dbname);
+            if (ret)
+            {
+                SVFUtil::outs() << "BB edge added: " << result << "\n";
+            }
+            else
+            {
+                SVFUtil::outs() << "Failed to add BB edge to db " << dbname
+                                << " " << result << "\n";
+            }
+        }
+    }
+}
+
+void GraphDBClient::insertBBNode2db(lgraph::RpcClient* connection, const SVFBasicBlock* node, const std::string& dbname)
+{
+    if (nullptr != connection)
+    {
+        std::string queryStatement = getBBNodeInsertStmt(node);
+        // SVFUtil::outs()<<"BBNode Insert Query:"<<queryStatement<<"\n";
+        std::string result;
+        if (!queryStatement.empty())
+        {
+            bool ret = connection->CallCypher(result, queryStatement, dbname);
+            if (ret)
+            {
+                SVFUtil::outs() << "BB node added: " << result << "\n";
+            }
+            else
+            {
+                SVFUtil::outs() << "Failed to add BB node to db " << dbname
+                                << " " << result << "\n";
+            }
+        }
+    }
+}
+
+std::string GraphDBClient::getBBNodeInsertStmt(const SVFBasicBlock* node)
+{
+    const std::string queryStatement ="CREATE (n:SVFBasicBlock {id:'" + std::to_string(node->getId())+":" + std::to_string(node->getFunction()->getId()) + "'" +
+    ", fun_obj_var_id: " + std::to_string(node->getFunction()->getId()) +
+    ", sscc_bb_ids:'" + extractNodesIds(node->getSuccBBs()) + "'" +
+    ", pred_bb_ids:'" + extractNodesIds(node->getPredBBs()) + "'" +
+    ", all_icfg_nodes_ids:'" + extractNodesIds(node->getICFGNodeList()) + "'" +
+    + "})";
+    return queryStatement;
+}
+
+std::string GraphDBClient::getBBEdgeInsertStmt(const BasicBlockEdge* edge)
+{
+    const std::string queryStatement =
+    "MATCH (n:SVFBasicBlock {id:'"+std::to_string(edge->getSrcID())+":"+std::to_string(edge->getSrcNode()->getFunction()->getId())+"'}), (m:SVFBasicBlock{id:'"+std::to_string(edge->getDstID())+":"+std::to_string(edge->getDstNode()->getFunction()->getId())+
+    "'}) WHERE n.id = '" +std::to_string(edge->getSrcID())+":" + std::to_string(edge->getSrcNode()->getFunction()->getId())+ "'"+
+    " AND m.id = '" +std::to_string(edge->getDstID())+":" + std::to_string(edge->getDstNode()->getFunction()->getId())+ "'"+
+    " CREATE (n)-[r:BasicBlockEdge{}]->(m)";
+    return queryStatement;
+}
+
 void GraphDBClient::insertPAG2db(const PAG* pag)
 {
     std::string pagNodePath =
@@ -933,7 +1021,12 @@ std::string GraphDBClient::getPAGNodeInsertStmt(const SVFVar* node)
     }
     else if(SVFUtil::isa<FunObjVar>(node))
     {
-        queryStatement = getFunObjVarNodeInsertStmt(SVFUtil::cast<FunObjVar>(node));
+        const FunObjVar* funObjVar = SVFUtil::cast<FunObjVar>(node);
+        queryStatement = getFunObjVarNodeInsertStmt(funObjVar);
+        if ( nullptr != funObjVar->getBasicBlockGraph())
+        {
+            insertBasicBlockGraph2db(funObjVar->getBasicBlockGraph());
+        }
     }
     else if(SVFUtil::isa<StackObjVar>(node))
     {
@@ -1302,7 +1395,7 @@ std::string GraphDBClient::getFunObjVarNodeInsertStmt(const FunObjVar* node)
     + ", sup_var_arg:" + (node->isVarArg()? "true" : "false")
     + ", fun_type_name:'" + node->getFunctionType()->toString() + "'"
     + ", real_def_fun_node_id:" + std::to_string(node->getDefFunForMultipleModule()->getId())
-    + ", bb_graph_id:" + std::to_string(node->getBasicBlockGraph()->getFunObjVarId())
+    // + ", bb_graph_id:" + std::to_string(node->getBasicBlockGraph()->getFunObjVarId())
     + exitBBStr.str()
     + ", all_args_node_ids:'" + extractNodesIds(node->getArgs()) + "'"
     + ", reachable_bbs:'" + extractNodesIds(node->getReachableBBs()) + "'"

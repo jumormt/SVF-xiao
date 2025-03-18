@@ -363,7 +363,7 @@ void SVFIRBuilder::createFunObjVars()
                                  SVFUtil::cast<SVFFunctionType>(llvmModuleSet()->getSVFType(fun->getFunctionType())),
                                  new SVFLoopAndDomInfo, nullptr, nullptr,
                                  {}, nullptr);
-        BasicBlockGraph* bbGraph = new BasicBlockGraph(funObjVar->getId());
+        BasicBlockGraph* bbGraph = new BasicBlockGraph();
         funObjVar->setBasicBlockGraph(bbGraph);
 
 

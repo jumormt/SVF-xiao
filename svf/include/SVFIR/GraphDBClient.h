@@ -23,6 +23,9 @@ class StInfo;
 class SVFIR;
 class SVFVar;
 class SVFStmt;
+class SVFBasicBlock;
+class BasicBlockEdge;
+class BasicBlockGraph;
 class GraphDBClient
 {
 private:
@@ -360,6 +363,8 @@ public:
 
     void insertPAG2db(const SVFIR* pag);
 
+    void insertBasicBlockGraph2db(const BasicBlockGraph* bbGraph);
+
     void insertSVFTypeNodeSet2db(const Set<const SVFType*>* types,const Set<const StInfo*>* stInfos, std::string& dbname);
 
     std::string getSVFPointerTypeNodeInsertStmt(const SVFPointerType* node);
@@ -449,6 +454,10 @@ public:
     std::string getPAGNodeInsertStmt(const SVFVar* node);
     void insertPAGNode2db(lgraph::RpcClient* connection, const SVFVar* node, const std::string& dbname);
     void insertPAGEdge2db(lgraph::RpcClient* connection, const SVFStmt* node, const std::string& dbname);
+    void insertBBNode2db(lgraph::RpcClient* connection, const SVFBasicBlock* node, const std::string& dbname);
+    void insertBBEdge2db(lgraph::RpcClient* connection, const BasicBlockEdge* node, const std::string& dbname);
+    std::string getBBNodeInsertStmt (const SVFBasicBlock* node);
+    std::string getBBEdgeInsertStmt(const BasicBlockEdge* edge);
     std::string getPAGEdgeInsertStmt(const SVFStmt* edge);
     std::string getPAGNodeKindString(const SVFVar* node);
 };
