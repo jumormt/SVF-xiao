@@ -296,12 +296,14 @@ class BasicBlockGraph: public GenericBasicBlockGraphTy
 {
 private:
     NodeID id{0};
+    NodeID funObjVarId;
 public:
     /// Constructor
-    BasicBlockGraph()
+    BasicBlockGraph(NodeID fid): GenericBasicBlockGraphTy(), funObjVarId(fid)
     {
 
     }
+
 
     SVFBasicBlock* addBasicBlock(const std::string& bbname)
     {
@@ -310,6 +312,11 @@ public:
         addGNode(id, bb);
         bb->setName(bbname);
         return bb;
+    }
+
+    NodeID getFunObjVarId() const
+    {
+        return funObjVarId;
     }
 
 };

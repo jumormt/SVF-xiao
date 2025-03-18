@@ -168,6 +168,7 @@ SVFIR* SVFIRBuilder::build()
 
     std::string dbname = "SVFType";
     GraphDBClient::getInstance().insertSVFTypeNodeSet2db(&pag->getSVFTypes(), &pag->getStInfos(), dbname);
+    GraphDBClient::getInstance().insertPAG2db(pag);
 
     // dump SVFIR
     if (Options::PAGDotGraph())
@@ -362,7 +363,7 @@ void SVFIRBuilder::createFunObjVars()
                                  SVFUtil::cast<SVFFunctionType>(llvmModuleSet()->getSVFType(fun->getFunctionType())),
                                  new SVFLoopAndDomInfo, nullptr, nullptr,
                                  {}, nullptr);
-        BasicBlockGraph* bbGraph = new BasicBlockGraph();
+        BasicBlockGraph* bbGraph = new BasicBlockGraph(funObjVar->getId());
         funObjVar->setBasicBlockGraph(bbGraph);
 
 
