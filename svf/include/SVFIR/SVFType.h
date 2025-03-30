@@ -80,6 +80,14 @@ public:
         : stride(s), numOfFlattenElements(s), numOfFlattenFields(s)
     {
     }
+
+    StInfo (u32_t id, std::vector<u32_t> fldIdxVec, std::vector<u32_t> elemIdxVec, Map<u32_t, const SVFType*> fldIdx2TypeMap,
+        std::vector<const SVFType*> finfo,u32_t stride,u32_t numOfFlattenElements,u32_t numOfFlattenFields, std::vector<const SVFType*> flattenElementTypes )
+        :StInfoId(id), fldIdxVec(fldIdxVec), elemIdxVec(elemIdxVec), fldIdx2TypeMap(fldIdx2TypeMap), finfo(finfo), stride(stride), 
+        numOfFlattenElements(numOfFlattenElements), numOfFlattenFields(numOfFlattenFields), flattenElementTypes(flattenElementTypes)
+    {
+
+    }
     /// Destructor
     ~StInfo() = default;
 
@@ -196,10 +204,20 @@ public:
         return svfPtrTy;
     }
 
+    inline static void setSVFPtrType(SVFType* ptrTy)
+    {
+        svfPtrTy = ptrTy;
+    }
+
     inline static SVFType* getSVFInt8Type()
     {
         assert(svfI8Ty && "int8 type not set?");
         return svfI8Ty;
+    }
+
+    inline static void setSVFInt8Type(SVFType* i8Ty)
+    {
+        svfI8Ty = i8Ty;
     }
 
 private:
@@ -295,6 +313,12 @@ public:
     {
     }
 
+    SVFPointerType(u32_t byteSize, bool isSingleValTy)
+        : SVFType(isSingleValTy, SVFPointerTy, byteSize)
+    {
+        
+    }
+
     static inline bool classof(const SVFType* node)
     {
         return node->getKind() == SVFPointerTy;
@@ -313,6 +337,11 @@ private:
 
 public:
     SVFIntegerType(u32_t byteSize = 1) : SVFType(true, SVFIntegerTy, byteSize) {}
+    SVFIntegerType(u32_t byteSize, bool isSingleValTy,short signAndWidth)
+        : SVFType(isSingleValTy, SVFIntegerTy, byteSize)
+    {
+        this->signAndWidth = signAndWidth;
+    }
     static inline bool classof(const SVFType* node)
     {
         return node->getKind() == SVFIntegerTy;
@@ -351,6 +380,11 @@ public:
     {
     }
 
+    SVFFunctionType(bool svt, u32_t byteSize)
+        : SVFType(svt, SVFFunctionTy, byteSize)
+    {
+    }
+
     static inline bool classof(const SVFType* node)
     {
         return node->getKind() == SVFFunctionTy;
@@ -360,9 +394,19 @@ public:
         return retTy;
     }
 
+    const void setReturnType(const SVFType* rt)
+    {
+        retTy = rt;
+    }
+
     const std::vector<const SVFType*>& getParamTypes() const
     {
         return params;
+    }
+
+    void addParamType(const SVFType* type) 
+    {
+        params.push_back(type);
     }
 
     void print(std::ostream& os) const override;
@@ -379,6 +423,7 @@ private:
 
 public:
     SVFStructType(u32_t byteSize = 1) : SVFType(false, SVFStructTy, byteSize) {}
+    SVFStructType(bool svt, u32_t byteSize, std::string name) : SVFType(svt, SVFStructTy, byteSize),name(name) {}
 
     static inline bool classof(const SVFType* node)
     {
@@ -421,6 +466,11 @@ public:
         : SVFType(false, SVFArrayTy, byteSize), numOfElement(0), typeOfElement(nullptr)
     {
     }
+    SVFArrayType(bool svt, u32_t byteSize, unsigned elemNum)
+        : SVFType(svt, SVFArrayTy, byteSize), numOfElement(elemNum), typeOfElement(nullptr)
+    {
+        
+    }
 
     static inline bool classof(const SVFType* node)
     {
@@ -462,6 +512,7 @@ private:
 
 public:
     SVFOtherType(bool isSingleValueTy, u32_t byteSize = 1) : SVFType(isSingleValueTy, SVFOtherTy, byteSize) {}
+    SVFOtherType(bool isSingleValueTy, u32_t byteSize, std::string repr) : SVFType(isSingleValueTy, SVFOtherTy, byteSize),repr(repr) {}
 
     static inline bool classof(const SVFType* node)
     {

@@ -120,7 +120,7 @@
                 {
                     "name":"formal_ret_node_id",
                     "type":"INT32",
-                    "optional":true,
+                    "optional":false,
                     "index":false
                 },
                 {
@@ -175,7 +175,7 @@
                 {
                     "name":"called_fun_obj_var_id",
                     "type":"INT32",
-                    "optional":true,
+                    "optional":false,
                     "index":false
                 },
                 {
@@ -193,13 +193,13 @@
                 {
                     "name":"vtab_ptr_node_id", 
                     "type":"INT32",
-                    "optional":true,
+                    "optional":false,
                     "index":false
                 },
                 {
                     "name":"virtual_fun_idx",
                     "type":"INT32",
-                    "optional":true,
+                    "optional":false,
                     "index":false
                 },
                 {
@@ -230,7 +230,7 @@
                 {
                     "name":"actual_ret_node_id",
                     "type":"INT32",
-                    "optional":true,
+                    "optional":false,
                     "index":false
                 },
                 {

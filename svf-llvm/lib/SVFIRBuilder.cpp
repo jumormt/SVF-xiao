@@ -63,6 +63,12 @@ SVFIR* SVFIRBuilder::build()
         return fileBuilder.build();
     }
 
+    // Restore All SVFTypes and StInfos from DB
+    if (Options::ReadFromDB())
+    {
+        GraphDBClient::getInstance().readSVFTypesFromDB(dbConnection, "SVFType", pag);
+    }
+
     // If the SVFIR has been built before, then we return the unique SVFIR of the program
     if(pag->getNodeNumAfterPAGBuild() > 1)
         return pag;
@@ -166,9 +172,11 @@ SVFIR* SVFIRBuilder::build()
 
     pag->setNodeNumAfterPAGBuild(pag->getTotalNodeNum());
 
-    std::string dbname = "SVFType";
-    GraphDBClient::getInstance().insertSVFTypeNodeSet2db(&pag->getSVFTypes(), &pag->getStInfos(), dbname);
-    GraphDBClient::getInstance().insertPAG2db(pag);
+    if (Options::Write2DB()) {
+        std::string dbname = "SVFType";
+        GraphDBClient::getInstance().insertSVFTypeNodeSet2db(&pag->getSVFTypes(), &pag->getStInfos(), dbname);
+        GraphDBClient::getInstance().insertPAG2db(pag);   
+    }
 
     // dump SVFIR
     if (Options::PAGDotGraph())
