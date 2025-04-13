@@ -223,9 +223,12 @@ public:
     ICFGEdge* parseCallCFGEdgeFromDBResult(const cJSON* edge, SVFIR* pag, ICFG* icfg);
     ICFGEdge* parseRetCFGEdgeFromDBResult(const cJSON* edge, SVFIR* pag, ICFG* icfg);
 
-    //// read CallGraph Nodes & CallGraphEdge from DB
-    // void readCallGraphNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
-    // void readCallGraphEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    // read CallGraph Nodes & CallGraphEdge from DB
+    CallGraph* buildCallGraphFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    CallGraphNode* parseCallGraphNodeFromDB(const cJSON* node);
+    CallGraphEdge* parseCallGraphEdgeFromDB(const cJSON* edge, SVFIR* pag, CallGraph* callGraph);
+    void readCallGraphNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, CallGraph* callGraph);
+    void readCallGraphEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag, CallGraph* callGraph);
 
     /// read PAGNodes from DB
     void readPAGNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string nodeType, SVFIR* pag);
@@ -309,16 +312,25 @@ public:
             if constexpr (std::is_same<typename Container::value_type,
                                        int>::value)
             {
-                idxVec.push_back(std::stoi(token));
+                if constexpr (std::is_same<Container, std::vector<int>>::value)
+                    idxVec.push_back(std::stoi(token));
+                else
+                    idxVec.insert(std::stoi(token));
             }
             else if constexpr (std::is_same<typename Container::value_type,
                                             uint32_t>::value)
             {
-                idxVec.push_back(static_cast<uint32_t>(std::stoul(token)));
+                if constexpr (std::is_same<Container, std::vector<uint32_t>>::value)
+                    idxVec.push_back(static_cast<uint32_t>(std::stoul(token)));
+                else
+                    idxVec.insert(static_cast<uint32_t>(std::stoul(token)));
             }
             else
             {
-                idxVec.push_back(token);
+                if constexpr (std::is_same<Container, std::vector<float>>::value)
+                    idxVec.push_back(std::stof(token));
+                 else
+                    idxVec.insert(std::stof(token));
             }
         }
 

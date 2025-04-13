@@ -162,10 +162,8 @@ bool GraphDBClient::addCallGraphNode2db(lgraph::RpcClient* connection,
 {
     if (nullptr != connection)
     {
-        std::string is_reachable_str = node->isReachableFromProgEntry() ? "true" : "false";
         const std::string queryStatement ="CREATE (n:CallGraphNode {id: " + std::to_string(node->getId()) +
-                                 ", fun_obj_var_id: " + std::to_string(node->getFunction()->getId()) +
-                                 ", is_reachable_from_prog_entry: " + is_reachable_str + "})";
+                                 ", fun_obj_var_id: " + std::to_string(node->getFunction()->getId()) +"})";
         // SVFUtil::outs()<<"CallGraph Node Insert Query:"<<queryStatement<<"\n";
         std::string result;
         bool ret = connection->CallCypher(result, queryStatement, dbname);
@@ -3335,4 +3333,158 @@ ICFGEdge* GraphDBClient::parseRetCFGEdgeFromDBResult(const cJSON* edge, SVFIR* p
     icfgEdge = new RetCFGEdge(src, dst);
 
     return icfgEdge;
+}
+
+CallGraph* GraphDBClient::buildCallGraphFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag)
+{
+    SVFUtil::outs()<< "Build CallGraph from DB....\n";
+    DBOUT(DGENERAL, outs() << pasMsg("\t Building CallGraph From DB ...\n"));
+    CallGraph* callGraph = new CallGraph();
+    readCallGraphNodesFromDB(connection, dbname, callGraph);
+    readCallGraphEdgesFromDB(connection, dbname, pag, callGraph);
+    
+    return callGraph;
+}
+
+void GraphDBClient::readCallGraphNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, CallGraph* callGraph)
+{
+    std::string queryStatement = " MATCH (node:CallGraphNode) RETURN node";
+    cJSON* root = queryFromDB(connection, dbname, queryStatement);
+    if (nullptr != root)
+    {
+        cJSON* node;
+        cJSON_ArrayForEach(node, root)
+        {
+            CallGraphNode* cgNode = nullptr;
+            cgNode = parseCallGraphNodeFromDB(node);
+            if (nullptr != cgNode)
+            {
+                callGraph->addCallGraphNodeFromDB(cgNode);
+            }
+        }
+        cJSON_Delete(root);
+    }
+}
+
+void GraphDBClient::readCallGraphEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag, CallGraph* callGraph)
+{
+    std::string queryStatement = "MATCH ()-[edge]->() RETURN edge";
+    cJSON* root = queryFromDB(connection, dbname, queryStatement);
+    if (nullptr != root)
+    {
+        cJSON* edge;
+        cJSON_ArrayForEach(edge, root)
+        {
+            CallGraphEdge* cgEdge = nullptr;
+            cgEdge = parseCallGraphEdgeFromDB(edge, pag, callGraph);
+            if (nullptr != cgEdge)
+            {
+                if (cgEdge->isDirectCallEdge())
+                {
+                    callGraph->addDirectCallGraphEdge(cgEdge);
+                }
+                if (cgEdge->isIndirectCallEdge())
+                {
+                    callGraph->addIndirectCallGraphEdge(cgEdge);
+                }
+            }
+        }
+    }
+}
+
+CallGraphNode* GraphDBClient::parseCallGraphNodeFromDB(const cJSON* node)
+{
+    cJSON* data = cJSON_GetObjectItem(node, "node");
+    if (!data)
+        return nullptr;
+
+    cJSON* properties = cJSON_GetObjectItem(data, "properties");
+    if (!properties)
+        return nullptr;
+    
+    int id = cJSON_GetObjectItem(properties,"id")->valueint;
+
+    // parse funObjVar 
+    int fun_obj_var_id = cJSON_GetObjectItem(properties, "fun_obj_var_id")->valueint;
+    FunObjVar* funObjVar = nullptr;
+    auto funObjVarIt = id2funObjVarsMap.find(fun_obj_var_id);
+    if (funObjVarIt != id2funObjVarsMap.end())
+    {
+        funObjVar = funObjVarIt->second;
+    }
+    else
+    {
+        SVFUtil::outs() << "Warning: [parseCallGraphNodeFromDB] No matching FunObjVar found for id: " << fun_obj_var_id << "\n";
+        return nullptr;
+    }
+    CallGraphNode* cgNode;
+
+    // create callGraph node instance 
+    cgNode = new CallGraphNode(id, funObjVar);
+
+    return cgNode;
+}
+
+CallGraphEdge* GraphDBClient::parseCallGraphEdgeFromDB(const cJSON* edge, SVFIR* pag, CallGraph* callGraph)
+{
+    CallGraphEdge* cgEdge = nullptr;
+    cJSON* data = cJSON_GetObjectItem(edge, "edge");
+    if (!data)
+        return nullptr;
+
+    cJSON* properties = cJSON_GetObjectItem(data, "properties");
+    if (!properties)
+        return nullptr;
+
+    int src_id = cJSON_GetObjectItem(data,"src")->valueint;
+    int dst_id = cJSON_GetObjectItem(data,"dst")->valueint;
+    int csid = cJSON_GetObjectItem(properties,"csid")->valueint;
+    std::string direct_call_set = cJSON_GetObjectItem(properties,"direct_call_set")->valuestring;
+    std::string indirect_call_set = cJSON_GetObjectItem(properties, "indirect_call_set")->valuestring;
+
+    int kind = cJSON_GetObjectItem(properties, "kind")->valueint;
+
+    CallGraphNode* srcNode = callGraph->getGNode(src_id);
+    CallGraphNode* dstNode = callGraph->getGNode(dst_id);
+    if (srcNode == nullptr)
+    {
+        SVFUtil::outs() << "Warning: [parseCallGraphEdgeFromDB] No matching src CallGraphNode found for id: " << src_id << "\n";
+        return nullptr;
+    }
+    if (dstNode == nullptr)
+    {
+        SVFUtil::outs() << "Warning: [parseCallGraphEdgeFromDB] No matching dst CallGraphNode found for id: " << dst_id << "\n";
+        return nullptr;
+    }
+
+    // create CallGraphEdge Instance 
+    cgEdge = new CallGraphEdge(srcNode, dstNode, static_cast<CallGraphEdge::CEDGEK>(kind), csid);
+    Set<int> direct_call_set_ids;
+    if (!direct_call_set.empty())
+    {
+        direct_call_set_ids = parseElements2Container<Set<int>>(direct_call_set);
+        for (int directCallId : direct_call_set_ids)
+        {
+            CallICFGNode* node = SVFUtil::dyn_cast<CallICFGNode>(pag->getICFG()->getGNode(directCallId));
+            callGraph->addCallSite(node, node->getFun(), cgEdge->getCallSiteID());
+            cgEdge->addDirectCallSite(node);
+            callGraph->callinstToCallGraphEdgesMap[node].insert(cgEdge);
+        }
+    }
+
+    Set<int> indirect_call_set_ids;
+    if (!indirect_call_set.empty())
+    {
+        indirect_call_set_ids = parseElements2Container<Set<int>>(indirect_call_set);
+        for (int indirectCallId : indirect_call_set_ids)
+        {
+            CallICFGNode* node = SVFUtil::dyn_cast<CallICFGNode>(pag->getICFG()->getGNode(indirectCallId));
+            callGraph->numOfResolvedIndCallEdge++;
+            callGraph->addCallSite(node, node->getFun(), cgEdge->getCallSiteID());
+            cgEdge->addInDirectCallSite(node);
+            callGraph->callinstToCallGraphEdgesMap[node].insert(cgEdge);
+        }
+    }
+
+    return cgEdge;
 }
