@@ -36,7 +36,17 @@ void SVFIntegerType::print(std::ostream& os) const
 
 void SVFFunctionType::print(std::ostream& os) const
 {
-    os << *getReturnType() << "()";
+    os << *getReturnType();
+    os << " (";
+    for (auto it = params.begin(); it != params.end(); ++it)
+    {
+        if (it != params.begin())
+        {
+            os << ", ";
+        }
+        os << (*it)->toString();
+    }
+    os << ")";
 }
 
 void SVFStructType::print(std::ostream& os) const

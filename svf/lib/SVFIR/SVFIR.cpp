@@ -460,6 +460,17 @@ NodeID SVFIR::getGepObjVar(const BaseObjVar* baseObj, const APOffset& apOffset)
 
 }
 
+void SVFIR::addGepObjNode(GepObjVar* gepObj)
+{
+    NodeID base = gepObj->getBaseNode();
+    APOffset apOffset = gepObj->getConstantFieldIdx();
+    assert(0==GepObjVarMap.count(std::make_pair(base, apOffset))
+           && "this node should not be created before");
+    GepObjVarMap[std::make_pair(base, apOffset)] = gepObj->getId();
+    memToFieldsMap[base].set(gepObj->getId());
+    addObjNode(gepObj);
+}
+
 /*!
  * Add a field obj node, this method can only invoked by getGepObjVar
  */

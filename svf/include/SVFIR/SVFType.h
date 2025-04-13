@@ -49,6 +49,7 @@ class StInfo
     friend class SVFIRReader;
 
 private:
+    u32_t StInfoId;
     /// flattened field indices of a struct (ignoring arrays)
     std::vector<u32_t> fldIdxVec;
     /// flattened element indices including structs and arrays by considering
@@ -78,6 +79,14 @@ public:
     explicit StInfo(u32_t s)
         : stride(s), numOfFlattenElements(s), numOfFlattenFields(s)
     {
+    }
+
+    StInfo (u32_t id, std::vector<u32_t> fldIdxVec, std::vector<u32_t> elemIdxVec, Map<u32_t, const SVFType*> fldIdx2TypeMap,
+        std::vector<const SVFType*> finfo,u32_t stride,u32_t numOfFlattenElements,u32_t numOfFlattenFields, std::vector<const SVFType*> flattenElementTypes )
+        :StInfoId(id), fldIdxVec(fldIdxVec), elemIdxVec(elemIdxVec), fldIdx2TypeMap(fldIdx2TypeMap), finfo(finfo), stride(stride), 
+        numOfFlattenElements(numOfFlattenElements), numOfFlattenFields(numOfFlattenFields), flattenElementTypes(flattenElementTypes)
+    {
+
     }
     /// Destructor
     ~StInfo() = default;
@@ -123,6 +132,15 @@ public:
     {
         return finfo;
     }
+    inline const u32_t getStinfoId() const
+    {
+        return StInfoId;
+    }
+
+    inline const Map<u32_t, const SVFType*>& getFldIdx2TypeMap() const
+    {
+        return fldIdx2TypeMap;
+    }
     //@}
 
     /// Add field index and element index and their corresponding type
@@ -133,6 +151,11 @@ public:
     {
         numOfFlattenFields = nf;
         numOfFlattenElements = ne;
+    }
+
+    inline void setStinfoId(u32_t id)
+    {
+        StInfoId = id;
     }
 
     /// Return number of elements after flattening (including array elements)
@@ -181,10 +204,20 @@ public:
         return svfPtrTy;
     }
 
+    inline static void setSVFPtrType(SVFType* ptrTy)
+    {
+        svfPtrTy = ptrTy;
+    }
+
     inline static SVFType* getSVFInt8Type()
     {
         assert(svfI8Ty && "int8 type not set?");
         return svfI8Ty;
+    }
+
+    inline static void setSVFInt8Type(SVFType* i8Ty)
+    {
+        svfI8Ty = i8Ty;
     }
 
 private:
@@ -280,6 +313,12 @@ public:
     {
     }
 
+    SVFPointerType(u32_t byteSize, bool isSingleValTy)
+        : SVFType(isSingleValTy, SVFPointerTy, byteSize)
+    {
+        
+    }
+
     static inline bool classof(const SVFType* node)
     {
         return node->getKind() == SVFPointerTy;
@@ -298,6 +337,11 @@ private:
 
 public:
     SVFIntegerType(u32_t byteSize = 1) : SVFType(true, SVFIntegerTy, byteSize) {}
+    SVFIntegerType(u32_t byteSize, bool isSingleValTy,short signAndWidth)
+        : SVFType(isSingleValTy, SVFIntegerTy, byteSize)
+    {
+        this->signAndWidth = signAndWidth;
+    }
     static inline bool classof(const SVFType* node)
     {
         return node->getKind() == SVFIntegerTy;
@@ -308,6 +352,11 @@ public:
     void setSignAndWidth(short sw)
     {
         signAndWidth = sw;
+    }
+
+    short getSignAndWidth() const
+    {
+        return signAndWidth;
     }
 
     bool isSigned() const
@@ -332,6 +381,11 @@ public:
     {
     }
 
+    SVFFunctionType(bool svt, u32_t byteSize)
+        : SVFType(svt, SVFFunctionTy, byteSize)
+    {
+    }
+
     static inline bool classof(const SVFType* node)
     {
         return node->getKind() == SVFFunctionTy;
@@ -341,15 +395,24 @@ public:
         return retTy;
     }
 
+    const void setReturnType(const SVFType* rt)
+    {
+        retTy = rt;
+    }
+
     const std::vector<const SVFType*>& getParamTypes() const
     {
         return params;
     }
 
-
     bool isVarArg() const
     {
         return varArg;
+    }
+
+    void addParamType(const SVFType* type) 
+    {
+        params.push_back(type);
     }
 
     void print(std::ostream& os) const override;
@@ -366,6 +429,7 @@ private:
 
 public:
     SVFStructType(u32_t byteSize = 1) : SVFType(false, SVFStructTy, byteSize) {}
+    SVFStructType(bool svt, u32_t byteSize, std::string name) : SVFType(svt, SVFStructTy, byteSize),name(name) {}
 
     static inline bool classof(const SVFType* node)
     {
@@ -378,6 +442,12 @@ public:
     {
         return name;
     }
+
+    const std::string& getName() const
+    {
+        return name;
+    }
+
     void setName(const std::string& structName)
     {
         name = structName;
@@ -402,6 +472,11 @@ public:
         : SVFType(false, SVFArrayTy, byteSize), numOfElement(0), typeOfElement(nullptr)
     {
     }
+    SVFArrayType(bool svt, u32_t byteSize, unsigned elemNum)
+        : SVFType(svt, SVFArrayTy, byteSize), numOfElement(elemNum), typeOfElement(nullptr)
+    {
+        
+    }
 
     static inline bool classof(const SVFType* node)
     {
@@ -425,6 +500,11 @@ public:
         numOfElement = elemNum;
     }
 
+    const unsigned getNumOfElement() const
+    {
+        return numOfElement;
+    }
+
 
 };
 
@@ -438,6 +518,7 @@ private:
 
 public:
     SVFOtherType(bool isSingleValueTy, u32_t byteSize = 1) : SVFType(isSingleValueTy, SVFOtherTy, byteSize) {}
+    SVFOtherType(bool isSingleValueTy, u32_t byteSize, std::string repr) : SVFType(isSingleValueTy, SVFOtherTy, byteSize),repr(repr) {}
 
     static inline bool classof(const SVFType* node)
     {
@@ -445,6 +526,10 @@ public:
     }
 
     const std::string& getRepr()
+    {
+        return repr;
+    }
+    const std::string& getRepr() const
     {
         return repr;
     }

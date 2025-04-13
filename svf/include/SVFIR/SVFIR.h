@@ -48,6 +48,7 @@ class SVFIR : public IRGraph
     friend class SVFIRWriter;
     friend class SVFIRReader;
     friend class BVDataPTAImpl;
+    friend class GraphDBClient;
 
 public:
     typedef Set<const CallICFGNode*> CallSiteSet;
@@ -505,6 +506,59 @@ public:
 
     /// Print SVFIR
     void print();
+
+protected:
+    /// Add a value (pointer) node
+    inline NodeID addValNodeFromDB(ValVar* node)
+    {
+        assert(node && "node cannot be nullptr.");
+        if (hasGNode(node->getId()))
+        {
+            ValVar* valvar = SVFUtil::cast<ValVar>(getGNode(node->getId()));
+            valvar->updateSVFValVar(node->getType(), node->getICFGNode());
+            return valvar->getId();
+        }
+        return addNode(node);
+    }
+    /// Add a memory obj node
+    inline NodeID addObjNodeFromDB(ObjVar* node)
+    {
+        assert(node && "node cannot be nullptr.");
+        if (hasGNode(node->getId()))
+        {
+            ObjVar* objVar = SVFUtil::cast<ObjVar>(getGNode(node->getId()));
+            objVar->updateObjVar(node->getType());
+            return objVar->getId();
+        }
+        return addNode(node);
+    }
+
+    inline NodeID addInitValNode(ValVar* node)
+    {
+        return addValNode(node);
+    }
+
+    inline NodeID addBaseObjNode(BaseObjVar* node)
+    {
+        memToFieldsMap[node->getId()].set(node->getId());
+        return addObjNode(node);
+    }
+
+    inline NodeID addDummyObjNode(DummyObjVar* node)
+    {
+        if (idToObjTypeInfoMap().find(node->getId()) == idToObjTypeInfoMap().end())
+        {
+            ObjTypeInfo* ti = node->getTypeInfo();
+            idToObjTypeInfoMap()[node->getId()] = ti;
+            return addObjNode(node);
+        }
+        else
+        {
+            return addObjNode(node);
+        }
+    }
+
+    void addGepObjNode(GepObjVar* gepObj);
 
 private:
 
