@@ -47,6 +47,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"fun_obj_var_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -97,6 +103,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"bb_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -128,6 +140,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"bb_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -156,6 +174,12 @@
                 },
                 {
                     "name":"bb_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"fun_obj_var_id",
                     "type":"INT32",
                     "optional":false,
                     "index":false
@@ -235,6 +259,24 @@
                 },
                 {
                     "name":"call_block_node_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"svf_type",
+                    "type":"STRING",
+                    "index":false,
+                    "optional":false
+                },
+                {
+                    "name":"bb_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"fun_obj_var_id",
                     "type":"INT32",
                     "optional":false,
                     "index":false

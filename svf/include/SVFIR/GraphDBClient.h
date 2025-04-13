@@ -194,35 +194,43 @@ public:
     std::string getBBNodeInsertStmt(const SVFBasicBlock* node);
     std::string getBBEdgeInsertStmt(const BasicBlockEdge* edge);
 
+
+    cJSON* queryFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string queryStatement);
     /// read SVFType from DB
     void readSVFTypesFromDB(lgraph::RpcClient* connection,
                             const std::string& dbname, SVFIR* pag);
     void addSVFTypeNodeFromDB(lgraph::RpcClient* connection,
                                const std::string& dbname, SVFIR* pag);
-    void addFunctionTypeNodeFromDB(lgraph::RpcClient* connection,
-                                   const std::string& dbname, SVFIR* pag);
-    void addStructTypeNodeFromDB(lgraph::RpcClient* connection,
-                                 const std::string& dbname, SVFIR* pag);
-    void addArrayTypeNodeFromDB(lgraph::RpcClient* connection,
-                                const std::string& dbname, SVFIR* pag);
-    void addOtherTypeNodeFromDB(lgraph::RpcClient* connection,
-                                const std::string& dbname, SVFIR* pag);
-    StInfo getStInfoNodeFromDB(lgraph::RpcClient* connection,
-                               const std::string& dbname, SVFIR* pag);
+
+    /// read BasicBlockGraph from DB
+    void readBasicBlockGraphFromDB(lgraph::RpcClient* connection, const std::string& dbname);
+    void readBasicBlockNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, FunObjVar* funObjVar);
+    void readBasicBlockEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, FunObjVar* funObjVar);
+
+    /// read ICFGNodes & ICFGEdge from DB
+    ICFG* buildICFGFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    /// ICFGNodes
+    void readICFGNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string nodeType, ICFG* icfg, SVFIR* pag);
+    ICFGNode* parseGlobalICFGNodeFromDBResult(const cJSON* node);
+    ICFGNode* parseFunEntryICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
+    ICFGNode* parseFunExitICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
+    ICFGNode* parseRetICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
+    ICFGNode* parseIntraICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
+    ICFGNode* parseCallICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
+    /// ICFGEdges
+    void readICFGEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string edgeType, ICFG* icfg, SVFIR* pag);
+    ICFGEdge* parseIntraCFGEdgeFromDBResult(const cJSON* edge, SVFIR* pag, ICFG* icfg);
+    ICFGEdge* parseCallCFGEdgeFromDBResult(const cJSON* edge, SVFIR* pag, ICFG* icfg);
+    ICFGEdge* parseRetCFGEdgeFromDBResult(const cJSON* edge, SVFIR* pag, ICFG* icfg);
+
+    //// read CallGraph Nodes & CallGraphEdge from DB
+    // void readCallGraphNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    // void readCallGraphEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
 
     /// read PAGNodes from DB
-    void readPAGNodesFromDB(lgraph::RpcClient* connection,
-                            const std::string& dbname, std::string nodeType);
-    bool addConstNullPtrValVarNode(lgraph::RpcClient* connection,
-                                   const cJSON* node);
-    bool addConstIntValVarNode(lgraph::RpcClient* connection,
-                               const cJSON* node);
-    bool addConstFPValVarNode(lgraph::RpcClient* connection, const cJSON* node);
-    bool addConstDataValVarNode(lgraph::RpcClient* connection,
-                                const cJSON* node);
-    bool addBlackHoleValVarNode(lgraph::RpcClient* connection,
-                                const cJSON* node);
-    bool addDummyValVarNode(lgraph::RpcClient* connection, const cJSON* node);
+    void readPAGNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string nodeType, SVFIR* pag);
+    void initialSVFPAGNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    ObjTypeInfo* parseObjTypeInfoFromDB(cJSON* properties, SVFIR* pag);
 
     template <typename Container>
     std::string extractNodesIds(const Container& nodes)
@@ -624,6 +632,12 @@ public:
         }
 
         return oss.str();
+    }
+
+    int parseBBId(const std::string& str) {
+        size_t pos = str.find(':');
+        int number = std::stoi(str.substr(0, pos));
+        return number;
     }
 };
 

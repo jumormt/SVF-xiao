@@ -18,6 +18,12 @@
                     "index":false
                 },
                 {
+                    "name" : "bb_name", 
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
+                },
+                {
                     "name":"sscc_bb_ids",
                     "type":"STRING",
                     "optional":false,
