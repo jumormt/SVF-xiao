@@ -791,12 +791,33 @@ const Option<u32_t> Options::LoopBound(
 
 const Option<u32_t> Options::WidenDelay(
     "widen-delay", "Loop Widen Delay", 3);
+const OptionMap<AbstractInterpretation::HandleRecur> Options::HandleRecur(
+    "handle-recur",
+    "Recursion handling mode in abstract execution (Default -widen-narrow)",
+    AbstractInterpretation::HandleRecur::WIDEN_NARROW,
+{
+    {
+        AbstractInterpretation::HandleRecur::TOP, "top",
+        "The return value, and any stored object pointed by q at *q = p in recursive functions will be set to the top value."
+    },
+    {
+        AbstractInterpretation::HandleRecur::WIDEN_ONLY, "widen-only",
+        "Only apply widening at the cycle head of recursive functions."
+    },
+    {
+        AbstractInterpretation::HandleRecur::WIDEN_NARROW, "widen-narrow",
+        "Apply both widening and narrowing at the cycle head of recursive functions."
+    }
+}
+);
 const Option<u32_t> Options::Timeout(
     "timeout", "time out (seconds), set -1 (no timeout), default 14400s",14400);
 const Option<std::string> Options::OutputName(
     "output","output db file","output.db");
 const Option<bool> Options::BufferOverflowCheck(
     "overflow","Buffer Overflow Detection",false);
+const Option<bool> Options::NullDerefCheck(
+    "null-deref","Null Pointer Dereference Detection",false);
 const Option<bool> Options::MemoryLeakCheck(
     "leak", "Memory Leak Detection",false);
 const Option<bool> Options::FileCheck(

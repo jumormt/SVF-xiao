@@ -33,7 +33,8 @@
 #include "AE/Svfexe/AEDetector.h"
 #include "AE/Svfexe/AbsExtAPI.h"
 #include "Util/SVFBugReport.h"
-#include "WPA/Andersen.h"
+#include "Util/SVFStat.h"
+#include "Graphs/SCC.h"
 
 namespace SVF
 {
@@ -104,9 +105,33 @@ class AbstractInterpretation
     friend class AEStat;
     friend class AEAPI;
     friend class BufOverflowDetector;
+    friend class NullptrDerefDetector;
 
 public:
     typedef SCCDetection<CallGraph*> CallGraphSCC;
+
+    /*
+     * For recursive test case
+     * int demo(int a) {
+        if (a >= 10000)
+            return a;
+            demo(a+1);
+        }
+
+        int main() {
+            int result = demo(0);
+        }
+     * if set TOP, result = [-oo, +oo] since the return value, and any stored object pointed by q at *q = p in recursive functions will be set to the top value.
+     * if set WIDEN_ONLY, result = [10000, +oo] since only widening is applied at the cycle head of recursive functions without narrowing.
+     * if set WIDEN_NARROW, result = [10000, 10000] since both widening and narrowing are applied at the cycle head of recursive functions.
+     * */
+    enum HandleRecur
+    {
+        TOP,
+        WIDEN_ONLY,
+        WIDEN_NARROW
+    };
+
     /// Constructor
     AbstractInterpretation();
 
@@ -131,11 +156,30 @@ public:
 
     Set<const CallICFGNode*> checkpoints; // for CI check
 
+    /**
+     * @brief Retrieves the abstract state from the trace for a given ICFG node.
+     * @param node Pointer to the ICFG node.
+     * @return Reference to the abstract state.
+     * @throws Assertion if no trace exists for the node.
+     */
+    AbstractState& getAbsStateFromTrace(const ICFGNode* node)
+    {
+        const ICFGNode* repNode = icfg->getRepNode(node);
+        if (abstractTrace.count(repNode) == 0)
+        {
+            assert(false && "No preAbsTrace for this node");
+        }
+        else
+        {
+            return abstractTrace[repNode];
+        }
+    }
+
 private:
     /// Global ICFGNode is handled at the entry of the program,
     virtual void handleGlobalNode();
 
-    /// Mark recursive functions in the call graph
+    /// Compute IWTO for each function partition entry
     void initWTO();
 
     /**
@@ -251,22 +295,10 @@ private:
     AEStat* stat;
 
     std::vector<const CallICFGNode*> callSiteStack;
-    Map<const FunObjVar*, ICFGWTO*> funcToWTO;
+    Map<const FunObjVar*, const ICFGWTO*> funcToWTO;
+    Set<std::pair<const CallICFGNode*, NodeID>> nonRecursiveCallSites;
     Set<const FunObjVar*> recursiveFuns;
 
-
-    AbstractState& getAbsStateFromTrace(const ICFGNode* node)
-    {
-        const ICFGNode* repNode = icfg->getRepNode(node);
-        if (abstractTrace.count(repNode) == 0)
-        {
-            assert(0 && "No preAbsTrace for this node");
-        }
-        else
-        {
-            return abstractTrace[repNode];
-        }
-    }
 
     bool hasAbsStateFromTrace(const ICFGNode* node)
     {
@@ -282,8 +314,10 @@ private:
     // helper functions in handleCallSite
     virtual bool isExtCall(const CallICFGNode* callNode);
     virtual void extCallPass(const CallICFGNode* callNode);
+    virtual bool isRecursiveFun(const FunObjVar* fun);
     virtual bool isRecursiveCall(const CallICFGNode* callNode);
-    virtual void recursiveCallPass(const CallICFGNode* callNode);
+    virtual void recursiveCallPass(const CallICFGNode *callNode);
+    virtual bool isRecursiveCallSite(const CallICFGNode* callNode, const FunObjVar *);
     virtual bool isDirectCall(const CallICFGNode* callNode);
     virtual void directCallFunPass(const CallICFGNode* callNode);
     virtual bool isIndirectCall(const CallICFGNode* callNode);

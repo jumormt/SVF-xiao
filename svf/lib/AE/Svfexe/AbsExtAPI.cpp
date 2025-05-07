@@ -26,6 +26,8 @@
 //
 #include "AE/Svfexe/AbsExtAPI.h"
 #include "AE/Svfexe/AbstractInterpretation.h"
+#include "WPA/Andersen.h"
+#include "Util/Options.h"
 
 using namespace SVF;
 AbsExtAPI::AbsExtAPI(Map<const ICFGNode*, AbstractState>& traces): abstractTrace(traces)
@@ -160,7 +162,7 @@ void AbsExtAPI::initExtFunMap()
             AbstractValue Addrs = as[dst_id];
             for (auto vaddr: Addrs.getAddrs())
             {
-                u32_t objId = AbstractState::getInternalID(vaddr);
+                u32_t objId = as.getIDFromAddr(vaddr);
                 AbstractValue range = getRangeLimitFromType(svfir->getGNode(objId)->getType());
                 as.store(vaddr, range);
             }
@@ -180,7 +182,7 @@ void AbsExtAPI::initExtFunMap()
             AbstractValue Addrs = as[dst_id];
             for (auto vaddr: Addrs.getAddrs())
             {
-                u32_t objId = AbstractState::getInternalID(vaddr);
+                u32_t objId = as.getIDFromAddr(vaddr);
                 AbstractValue range = getRangeLimitFromType(svfir->getGNode(objId)->getType());
                 as.store(vaddr, range);
             }
@@ -277,7 +279,7 @@ void AbsExtAPI::initExtFunMap()
         u32_t dst_size = 0;
         for (const auto& addr : as[value_id].getAddrs())
         {
-            NodeID objId = AbstractState::getInternalID(addr);
+            NodeID objId = as.getIDFromAddr(addr);
             if (svfir->getBaseObject(objId)->isConstantByteSize())
             {
                 dst_size = svfir->getBaseObject(objId)->getByteSizeOfObj();
@@ -338,6 +340,38 @@ void AbsExtAPI::initExtFunMap()
     };
     func_map["recv"] = sse_recv;
     func_map["__recv"] = sse_recv;
+
+    auto sse_free = [&](const CallICFGNode *callNode)
+    {
+        if (callNode->arg_size() < 1) return;
+        AbstractState& as = getAbsStateFromTrace(callNode);
+        const u32_t freePtr = callNode->getArgument(0)->getId();
+        for (auto addr: as[freePtr].getAddrs())
+        {
+            if (AbstractState::isInvalidMem(addr))
+            {
+                // Detected a double free — the address has already been freed.
+                // No action is taken at this point.
+            }
+            else
+            {
+                as.addToFreedAddrs(addr);
+            }
+        }
+    };
+    // Add all free-related functions to func_map
+    std::vector<std::string> freeFunctions =
+    {
+        "VOS_MemFree", "cfree", "free", "free_all_mem", "freeaddrinfo",
+        "gcry_mpi_release", "gcry_sexp_release", "globfree", "nhfree",
+        "obstack_free", "safe_cfree", "safe_free", "safefree", "safexfree",
+        "sm_free", "vim_free", "xfree", "SSL_CTX_free", "SSL_free", "XFree"
+    };
+
+    for (const auto& name : freeFunctions)
+    {
+        func_map[name] = sse_free;
+    }
 };
 
 AbstractState& AbsExtAPI::getAbsStateFromTrace(const SVF::ICFGNode* node)
@@ -471,7 +505,7 @@ IntervalValue AbsExtAPI::getStrlen(AbstractState& as, const SVF::SVFVar *strValu
     u32_t dst_size = 0;
     for (const auto& addr : as[value_id].getAddrs())
     {
-        NodeID objId = AbstractState::getInternalID(addr);
+        NodeID objId = as.getIDFromAddr(addr);
         if (svfir->getBaseObject(objId)->isConstantByteSize())
         {
             dst_size = svfir->getBaseObject(objId)->getByteSizeOfObj();
@@ -619,7 +653,7 @@ void AbsExtAPI::handleMemcpy(AbstractState& as, const SVF::SVFVar *dst, const SV
             {
                 for (const auto &src: expr_src.getAddrs())
                 {
-                    u32_t objId = AbstractState::getInternalID(src);
+                    u32_t objId = as.getIDFromAddr(src);
                     if (as.inAddrToValTable(objId))
                     {
                         as.store(dst, as.load(src));
@@ -668,7 +702,7 @@ void AbsExtAPI::handleMemset(AbstractState& as, const SVF::SVFVar *dst, Interval
             AbstractValue lhs_gep = as.getGepObjAddrs(dstId, IntervalValue(index));
             for (const auto &addr: lhs_gep.getAddrs())
             {
-                u32_t objId = AbstractState::getInternalID(addr);
+                u32_t objId = as.getIDFromAddr(addr);
                 if (as.inAddrToValTable(objId))
                 {
                     AbstractValue tmp = as.load(addr);

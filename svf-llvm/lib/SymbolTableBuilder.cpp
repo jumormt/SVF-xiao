@@ -51,6 +51,7 @@ ObjTypeInfo* SymbolTableBuilder::createBlkObjTypeInfo(NodeID symId)
     {
         ObjTypeInfo* ti =svfir->createObjTypeInfo(llvmset->getSVFType(
                              IntegerType::get(llvmset->getContext(), 32)));
+        ti->setNumOfElements(0);
         svfir->objTypeInfoMap[symId] = ti;
     }
     ObjTypeInfo* ti = svfir->objTypeInfoMap[symId];
@@ -65,6 +66,7 @@ ObjTypeInfo* SymbolTableBuilder::createConstantObjTypeInfo(NodeID symId)
     {
         ObjTypeInfo* ti = svfir->createObjTypeInfo(
                               llvmset->getSVFType(IntegerType::get(llvmset->getContext(), 32)));
+        ti->setNumOfElements(0);
         svfir->objTypeInfoMap[symId] = ti;
     }
     ObjTypeInfo* ti = svfir->objTypeInfoMap[symId];
@@ -856,7 +858,7 @@ void SymbolTableBuilder::initTypeInfo(ObjTypeInfo* typeinfo, const Value* val,
     {
         typeinfo->setFlag(ObjTypeInfo::FUNCTION_OBJ);
         analyzeObjType(typeinfo,val);
-        elemNum = getNumOfElements(objTy);
+        elemNum = 0;
     }
     /// if val is AllocaInst, byteSize is Type's LLVM ByteSize * ArraySize
     /// e.g. alloc i32, 10. byteSize is 4 (i32's size) * 10 (ArraySize) = 40
