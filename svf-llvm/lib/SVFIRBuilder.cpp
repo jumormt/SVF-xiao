@@ -63,10 +63,20 @@ SVFIR* SVFIRBuilder::build()
         return fileBuilder.build();
     }
 
-    // Restore All SVFTypes and StInfos from DB
     if (Options::ReadFromDB())
     {
         GraphDBClient::getInstance().readSVFTypesFromDB(dbConnection, "SVFType", pag);
+        GraphDBClient::getInstance().initialSVFPAGNodesFromDB(dbConnection, "PAG",pag);
+        GraphDBClient::getInstance().readBasicBlockGraphFromDB(dbConnection, "BasicBlockGraph");
+        ICFG* icfg = GraphDBClient::getInstance().buildICFGFromDB(dbConnection, "ICFG", pag);
+        pag->icfg = icfg;
+        CallGraph* callGraph = GraphDBClient::getInstance().buildCallGraphFromDB(dbConnection,"CallGraph",pag);
+        CHGraph* chg = new CHGraph();
+        pag->setCHG(chg);
+        pag->callGraph = callGraph;
+        GraphDBClient::getInstance().updatePAGNodesFromDB(dbConnection, "PAG", pag);
+        GraphDBClient::getInstance().loadSVFPAGEdgesFromDB(dbConnection, "PAG",pag);
+        return pag;
     }
 
     // If the SVFIR has been built before, then we return the unique SVFIR of the program
@@ -111,6 +121,9 @@ SVFIR* SVFIRBuilder::build()
     CHGBuilder chgbuilder(chg);
     chgbuilder.buildCHG();
     pag->setCHG(chg);
+    if (Options::Write2DB()) {
+        GraphDBClient::getInstance().insertCHG2db(chg);   
+    }
 
     /// handle functions
     for (Module& M : llvmModuleSet()->getLLVMModules())

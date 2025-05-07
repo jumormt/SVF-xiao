@@ -283,6 +283,10 @@ public:
         this->type = type;
         this->icfgNode = icfgNode;
     }
+    inline void updateSVFValVar(const ICFGNode* icfgNode)
+    {
+        this->icfgNode = icfgNode;
+    }
     static inline bool classof(const ValVar*)
     {
         return true;
@@ -432,6 +436,11 @@ public:
         return getName() + " (argument valvar)";
     }
 
+    inline void addCGNode(const FunObjVar* cgNode)
+    {
+        this->cgNode = cgNode;
+    }
+
     virtual const FunObjVar* getFunction() const;
 
     const FunObjVar* getParent() const;
@@ -522,6 +531,10 @@ public:
     inline const ValVar* getBaseNode(void) const
     {
         return base;
+    }
+    inline void setBaseNode(const ValVar* baseNode)
+    {
+        base = baseNode;
     }
 
     /// Return name of a LLVM value
@@ -642,6 +655,11 @@ public:
         return icfgNode;
     }
 
+    inline void setICFGNode(const ICFGNode* node)
+    {
+        icfgNode = node;
+    }
+
     /// Return name of a LLVM value
     inline const std::string getValueName() const
     {
@@ -659,7 +677,7 @@ public:
     /// Get obj type
     const SVFType* getType() const
     {
-        return typeInfo->getType();
+        return type;
     }
 
     /// Get the number of elements of this object
@@ -1043,6 +1061,17 @@ protected:
         isAddrTaken(isAddrTaken), isUncalled(isUncalled), isNotRet(isNotRet),
         supVarArg(supVarArg),funcType(funcType) {}
 
+    inline void updateExitBlock(SVFBasicBlock *bb)
+    {
+        exitBlock = bb;
+    }
+
+    inline void setLoopAndDomInfo(SVFLoopAndDomInfo *ld)
+    {
+        loopAndDom = ld;
+    }
+    
+
 public:
     typedef SVFLoopAndDomInfo::BBSet BBSet;
     typedef SVFLoopAndDomInfo::BBList BBList;
@@ -1370,6 +1399,10 @@ public:
         return true;
     }
 
+    inline void setFunction(const FunObjVar* cgn)
+    {
+        funObjVar = cgn;
+    }
     virtual const std::string toString() const;
 };
 
@@ -2219,6 +2252,11 @@ public:
         return callGraphNode;
     }
 
+    inline void setCallGraphNode(const FunObjVar* node)
+    {
+        callGraphNode = node;
+    }
+
     virtual const FunObjVar* getFunction() const;
 
     virtual bool isPointer() const;
@@ -2279,6 +2317,11 @@ public:
     }
 
     virtual const FunObjVar* getFunction() const;
+
+    inline void setCallGraphNode(const FunObjVar* node)
+    {
+        callGraphNode = node;
+    }
 
     /// Return name of a LLVM value
     const std::string getValueName() const;

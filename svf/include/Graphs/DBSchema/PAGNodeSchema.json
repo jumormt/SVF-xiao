@@ -687,7 +687,8 @@
                     "index":false
                 }
             ]
-        },        {
+        },        
+        {
             "label" : "FunValVar",
             "type" : "VERTEX",
             "primary" : "id",

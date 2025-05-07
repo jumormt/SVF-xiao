@@ -3,6 +3,7 @@
 #include "Graphs/CallGraph.h"
 #include "Graphs/ICFGEdge.h"
 #include "Graphs/ICFGNode.h"
+#include "Graphs/CHG.h"
 #include "SVFIR/SVFIR.h"
 #include "SVFIR/SVFStatements.h"
 #include "SVFIR/SVFType.h"
@@ -27,6 +28,9 @@ class SVFStmt;
 class SVFBasicBlock;
 class BasicBlockEdge;
 class BasicBlockGraph;
+class CHGraph;
+class CHEdge;
+class CHNode;
 class GraphDBClient
 {
 private:
@@ -75,6 +79,7 @@ public:
                         const std::string& dbname);
     bool addICFGEdge2db(lgraph::RpcClient* connection, const ICFGEdge* edge,
                         const std::string& dbname);
+
     /// pasre the directcallsIds/indirectcallsIds string to vector
     std::vector<int> stringToIds(const std::string& str);
 
@@ -85,6 +90,14 @@ public:
     void insertSVFTypeNodeSet2db(const Set<const SVFType*>* types,
                                  const Set<const StInfo*>* stInfos,
                                  std::string& dbname);
+
+    /// @brief parse the CHG and generate the insert statements for CHG nodes and edges
+    /// @param chg  
+    void insertCHG2db(const CHGraph* chg);
+    void insertCHNode2db(lgraph::RpcClient* connection, const CHNode* node, const std::string& dbname);
+    void insertCHEdge2db(lgraph::RpcClient* connection, const CHEdge* edge, const std::string& dbname);
+    std::string getCHNodeInsertStmt(const CHNode* node);
+    std::string getCHEdgeInsertStmt(const CHEdge* edge);
 
     std::string getPAGNodeInsertStmt(const SVFVar* node);
     void insertPAGNode2db(lgraph::RpcClient* connection, const SVFVar* node,
@@ -217,6 +230,9 @@ public:
     ICFGNode* parseRetICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
     ICFGNode* parseIntraICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
     ICFGNode* parseCallICFGNodeFromDBResult(const cJSON* node, SVFIR* pag);
+    void updateRetPE4RetCFGEdge();
+    void updateCallPEs4CallCFGEdge();
+    
     /// ICFGEdges
     void readICFGEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string edgeType, ICFG* icfg, SVFIR* pag);
     ICFGEdge* parseIntraCFGEdgeFromDBResult(const cJSON* edge, SVFIR* pag, ICFG* icfg);
@@ -233,6 +249,17 @@ public:
     /// read PAGNodes from DB
     void readPAGNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string nodeType, SVFIR* pag);
     void initialSVFPAGNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    void updateSVFPAGNodesAttributesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string nodeType, SVFIR* pag);
+    void updatePAGNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    void updateSVFValVarAtrributes(cJSON* properties, ValVar* var, SVFIR* pag);
+    void updateGepValVarAttributes(cJSON* properties, GepValVar* var, SVFIR* pag);
+    void updateSVFBaseObjVarAtrributes(cJSON* properties, BaseObjVar* var, SVFIR* pag);
+    void updateFunObjVarAttributes(cJSON* properties, FunObjVar* var, SVFIR* pag);
+    void loadSVFPAGEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
+    void readPAGEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string edgeType, SVFIR* pag);
+    void parseAPIdxOperandPairsString(const std::string& ap_idx_operand_pairs, SVFIR* pag, AccessPath* ap);
+    void parseOpVarString(std::string& op_var_node_ids, SVFIR* pag, std::vector<SVFVar*>& opVarNodes);
+
     ObjTypeInfo* parseObjTypeInfoFromDB(cJSON* properties, SVFIR* pag);
 
     template <typename Container>
@@ -254,6 +281,17 @@ public:
         }
 
         return nodesIds.str();
+    }
+
+    std::string extractFuncVectors2String(std::vector<std::vector<const FunObjVar*>> vec) {
+        std::ostringstream oss;
+        for (size_t i = 0; i < vec.size(); ++i) {
+            oss << "{" << extractNodesIds(vec[i]) << "}";
+            if (i + 1 != vec.size()) {
+                oss << ",";
+            }
+        }
+        return oss.str();
     }
 
     template <typename Container>
@@ -402,19 +440,27 @@ public:
         return resultContainer;
     }
 
-    Set<std::string> parseSVFTypes(std::string& typesStr)
+    std::vector<std::string> parseSVFTypes(std::string typesStr)
     {
         typesStr.erase(std::remove(typesStr.begin(), typesStr.end(), '\n'),
                        typesStr.end());
         typesStr.erase(std::remove(typesStr.begin(), typesStr.end(), '\r'),
                        typesStr.end());
-        Set<std::string> result;
+        std::vector<std::string> result;
         std::stringstream ss(typesStr);
         std::string token;
 
         while (std::getline(ss, token, ','))
         {
-            result.insert(token);
+            if (!token.empty() && token.front() == '{')
+            {
+                token.erase(0, 1); 
+            }
+            if (!token.empty() && token.back() == '}')
+            {
+                token.erase(token.size() - 1, 1); 
+            }
+            result.push_back(token);
         }
 
         return result;
@@ -506,6 +552,32 @@ public:
         return mapStr.str();
     }
 
+    template <typename MapType>
+    MapType parseLabelMapFromString(const std::string& str)
+    {
+        MapType result;
+        if (str.empty()) return result;
+    
+        std::stringstream ss(str);
+        std::string pairStr;
+    
+        while (std::getline(ss, pairStr, ','))
+        {
+            size_t colonPos = pairStr.find(':');
+            if (colonPos == std::string::npos) continue;
+    
+            std::string keyStr = pairStr.substr(0, colonPos);
+            std::string valStr = pairStr.substr(colonPos + 1);
+    
+            int key = (keyStr == "NULL") ? -1 : std::stoi(keyStr);
+            int val = std::stoi(valStr);
+    
+            result[key] = val;
+        }
+    
+        return result;
+    }
+
     template <typename BBsMapWithSetType>
     std::string extractBBsMapWithSet2String(const BBsMapWithSetType& bbsMap)
     {
@@ -524,6 +596,50 @@ public:
         }
 
         return mapStr.str();
+    }
+
+    template <typename MapType>
+    MapType parseBBsMapFromString(const std::string& str)
+    {
+        MapType result;
+    
+        using KeyType = typename MapType::key_type;
+        using ValueContainer = typename MapType::mapped_type;
+        using ValueType = typename ValueContainer::value_type;
+    
+        size_t pos = 0;
+        while ((pos = str.find('[', pos)) != std::string::npos)
+        {
+            size_t end = str.find(']', pos);
+            if (end == std::string::npos) break;
+    
+            std::string block = str.substr(pos + 1, end - pos - 1); // earse []
+            pos = end + 1;
+    
+            size_t colonPos = block.find(':');
+            if (colonPos == std::string::npos) continue;
+    
+            std::string keyStr = block.substr(0, colonPos);
+            std::string valuesStr = block.substr(colonPos + 1);
+    
+            KeyType key = static_cast<KeyType>(std::stoi(keyStr));
+            ValueContainer values;
+    
+            if (!valuesStr.empty())
+            {
+                std::stringstream ss(valuesStr);
+                std::string token;
+                while (std::getline(ss, token, ','))
+                {
+                    if (!token.empty())
+                        values.insert(values.end(), static_cast<ValueType>(std::stoi(token)));
+                }
+            }
+    
+            result[key] = values;
+        }
+    
+        return result;
     }
 
     template <typename BBsMapType>
@@ -554,6 +670,33 @@ public:
             }
         }
         return mapStr.str();
+    }
+    
+
+    template <typename MapType>
+    MapType parseBB2PiMapFromString(const std::string& str)
+    {
+        MapType result;
+        if (str.empty()) return result;
+    
+        std::stringstream ss(str);
+        std::string pairStr;
+    
+        while (std::getline(ss, pairStr, ','))
+        {
+            size_t colonPos = pairStr.find(':');
+            if (colonPos == std::string::npos) continue;
+    
+            std::string keyStr = pairStr.substr(0, colonPos);
+            std::string valStr = pairStr.substr(colonPos + 1);
+    
+            int key = (keyStr == "NULL") ? -1 : std::stoi(keyStr);
+            int val = (valStr == "NULL") ? -1 : std::stoi(valStr);
+    
+            result[key] = val;
+        }
+    
+        return result;
     }
 
     template <typename MapType>
@@ -630,6 +773,49 @@ public:
         return "";
     }
 
+    std::vector<std::pair<int, std::string>> parseIdxOperandPairsString(const std::string& str)
+    {
+        std::vector<std::pair<int, std::string>> result;
+
+        if (str.empty() || str == "[]")
+        {
+            return result;
+        }
+
+        size_t pos = 0;
+        std::string content = str.substr(1, str.size() - 2); // remove the outter []
+
+        while ((pos = content.find('{')) != std::string::npos)
+        {
+            size_t end = content.find('}', pos);
+            if (end == std::string::npos)
+                break;
+
+            std::string pairStr =
+                content.substr(pos + 1, end - pos - 1); // extract the pair content
+            content = content.substr(end + 1);          //processing the rest
+
+            size_t comma = pairStr.find(',');
+            if (comma == std::string::npos)
+                continue;
+
+            std::string idStr = pairStr.substr(0, comma);
+            std::string operandStr = pairStr.substr(comma + 1);
+
+            // erase the spaces
+            idStr.erase(std::remove_if(idStr.begin(), idStr.end(), ::isspace),
+                        idStr.end());
+            operandStr.erase(
+                std::remove_if(operandStr.begin(), operandStr.end(), ::isspace),
+                operandStr.end());
+
+            int id = std::stoi(idStr);
+            result.emplace_back(id, operandStr);
+        }
+
+        return result;
+    }
+
     std::string extractSuccessorsPairSet2String(
         const BranchStmt::SuccAndCondPairVec* vec)
     {
@@ -646,10 +832,42 @@ public:
         return oss.str();
     }
 
+    std::vector<std::pair<int, s32_t>> parseSuccessorsPairSetFromString(const std::string& str)
+    {
+        std::vector<std::pair<int, s32_t>> result;
+        if (str.empty())
+            return result;
+    
+        std::stringstream ss(str);
+        std::string pairStr;
+    
+        while (std::getline(ss, pairStr, ',')) {
+            size_t colonPos = pairStr.find(':');
+            if (colonPos != std::string::npos) {
+                int first = std::stoi(pairStr.substr(0, colonPos));
+                s32_t second = static_cast<s32_t>(std::stoi(pairStr.substr(colonPos + 1)));
+                result.emplace_back(first, second);
+            }
+        }
+    
+        return result;
+    }
+
     int parseBBId(const std::string& str) {
         size_t pos = str.find(':');
         int number = std::stoi(str.substr(0, pos));
         return number;
+    }
+
+    std::pair<int, int> parseBBIdPair(const std::string& idStr) {
+        size_t colonPos = idStr.find(':');
+        if (colonPos == std::string::npos) {
+            return std::make_pair(-1, -1); 
+        }
+    
+        int functionId = std::stoi(idStr.substr(0, colonPos));
+        int bbId = std::stoi(idStr.substr(colonPos + 1));
+        return std::make_pair(functionId, bbId);
     }
 };
 

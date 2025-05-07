@@ -131,6 +131,7 @@ protected:
     /// blocks, thus flags are needed to distinguish them
     SVFStmt* hasLabeledEdge(SVFVar* src, SVFVar* dst, SVFStmt::PEDGEK kind,
                             const ICFGNode* cs);
+    SVFStmt* hasEdge(SVFStmt* edge, SVFStmt::PEDGEK kind);
     /// Return MultiOpndStmt since it has more than one operands (we use operand
     /// 2 here to make the flag)
     SVFStmt* hasLabeledEdge(SVFVar* src, SVFVar* op1, SVFStmt::PEDGEK kind,
