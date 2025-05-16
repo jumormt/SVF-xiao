@@ -185,6 +185,19 @@ CallGraphEdge* CallGraph::hasGraphEdge(CallGraphNode* src,
         return nullptr;
 }
 
+CallGraphEdge* CallGraph::hasGraphEdge(CallGraphEdge* cgEdge)
+{
+    CallGraphEdge* outEdge = cgEdge->getSrcNode()->hasOutgoingEdge(cgEdge);
+    CallGraphEdge* inEdge = cgEdge->getDstNode()->hasIncomingEdge(cgEdge);
+    if (outEdge && inEdge)
+    {
+        assert(outEdge == inEdge && "edges not match");
+        return outEdge;
+    }
+    else
+        return nullptr;
+}
+
 /*!
  * get PTACallGraph edge via nodes
  */
@@ -222,6 +235,14 @@ void CallGraph::addIndirectCallGraphEdge(const CallICFGNode* cs,const FunObjVar*
         edge->addInDirectCallSite(cs);
         addEdge(edge);
         callinstToCallGraphEdgesMap[cs].insert(edge);
+    }
+}
+
+void CallGraph::addIndirectCallGraphEdge(CallGraphEdge* cgEdge)
+{
+    if (!hasGraphEdge(cgEdge))
+    {
+        addEdge(cgEdge);
     }
 }
 
@@ -364,6 +385,13 @@ void CallGraph::addCallGraphNode(const FunObjVar* fun)
     callGraphNodeNum++;
 }
 
+void CallGraph::addCallGraphNodeFromDB(CallGraphNode* cgNode)
+{
+    addGNode(cgNode->getId(), cgNode);
+    funToCallGraphNodeMap[cgNode->getFunction()] = cgNode;
+    callGraphNodeNum++;
+}
+
 const CallGraphNode* CallGraph::getCallGraphNode(const std::string& name)
 {
     for (const auto& item : *this)
@@ -391,6 +419,14 @@ void CallGraph::addDirectCallGraphEdge(const CallICFGNode* cs,const FunObjVar* c
         addEdge(edge);
         callinstToCallGraphEdgesMap[cs].insert(edge);
     }
+}
+
+void CallGraph::addDirectCallGraphEdge(CallGraphEdge* cgEdge)
+{
+    if (!hasGraphEdge(cgEdge))
+    {
+        addEdge(cgEdge);
+    }   
 }
 
 namespace SVF
