@@ -238,7 +238,7 @@ void CallGraph::addIndirectCallGraphEdge(const CallICFGNode* cs,const FunObjVar*
     }
 }
 
-void CallGraph::addIndirectCallGraphEdge(CallGraphEdge* cgEdge)
+void CallGraph::addIndirectCallGraphEdgeFromDB(CallGraphEdge* cgEdge)
 {
     if (!hasGraphEdge(cgEdge))
     {
@@ -421,7 +421,7 @@ void CallGraph::addDirectCallGraphEdge(const CallICFGNode* cs,const FunObjVar* c
     }
 }
 
-void CallGraph::addDirectCallGraphEdge(CallGraphEdge* cgEdge)
+void CallGraph::addDirectCallGraphEdgeFromDB(CallGraphEdge* cgEdge)
 {
     if (!hasGraphEdge(cgEdge))
     {

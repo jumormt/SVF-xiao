@@ -324,7 +324,7 @@ public:
         return bb;
     }
 
-    void addBasicBlock(SVFBasicBlock* bb)
+    void addBasicBlockFromDB(SVFBasicBlock* bb)
     {
         id++;
         addGNode(bb->getId(), bb);

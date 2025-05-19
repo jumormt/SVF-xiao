@@ -278,12 +278,12 @@ protected:
 public:
     /// Methods for support type inquiry through isa, cast, and dyn_cast:
     //@{
-    inline void updateSVFValVar(const SVFType* type, const ICFGNode* icfgNode)
+    inline void updateSVFValVarFromDB(const SVFType* type, const ICFGNode* icfgNode)
     {
         this->type = type;
         this->icfgNode = icfgNode;
     }
-    inline void updateSVFValVar(const ICFGNode* icfgNode)
+    inline void updateSVFValVarFromDB(const ICFGNode* icfgNode)
     {
         this->icfgNode = icfgNode;
     }
@@ -346,7 +346,7 @@ protected:
     {
     }
 public:
-    void updateObjVar(const SVFType* type)
+    void updateObjVarFromDB(const SVFType* type)
     {
         this->type = type;
     }
@@ -436,7 +436,7 @@ public:
         return getName() + " (argument valvar)";
     }
 
-    inline void addCGNode(const FunObjVar* cgNode)
+    inline void addCGNodeFromDB(const FunObjVar* cgNode)
     {
         this->cgNode = cgNode;
     }

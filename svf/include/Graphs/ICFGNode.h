@@ -681,7 +681,7 @@ public:
         actualRet = ar;
     }
 
-    inline void addCallBlockNode(const CallICFGNode* cb)
+    inline void addCallBlockNodeFromDB(const CallICFGNode* cb)
     {
         callBlockNode = cb;
     }
