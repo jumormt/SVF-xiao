@@ -187,6 +187,12 @@ public:
     {
         return "Global ICFGNode";
     }
+
+    std::string toDBString() const{
+    const std::string queryStatement ="CREATE (n:GlobalICFGNode {id: " + std::to_string(getId()) +
+    ", kind: " + std::to_string(getNodeKind()) + "})";
+    return queryStatement;
+}
 };
 
 /*!
@@ -243,6 +249,8 @@ public:
     {
         return isRet;
     }
+
+    std::string toDBString() const;
 };
 
 class InterICFGNode : public ICFGNode
@@ -274,6 +282,12 @@ public:
     static inline bool classof(const SVFValue* node)
     {
         return isInterICFGNodeKind(node->getNodeKind());
+    }
+
+    std::string toDBString() const{
+        const std::string queryStatement ="CREATE (n:InterICFGNode {id: " + std::to_string(getId()) +
+        ", kind: " + std::to_string(getNodeKind()) + "})";
+        return queryStatement;
     }
 
     //@}
@@ -359,6 +373,8 @@ public:
     const std::string toString() const override;
 
     const std::string getSourceLoc() const override;
+
+    std::string toDBString() const;
 };
 
 /*!
@@ -436,6 +452,8 @@ public:
     const std::string toString() const override;
 
     const std::string getSourceLoc() const override;
+
+    std::string toDBString() const;
 };
 
 /*!
@@ -625,6 +643,8 @@ public:
     {
         return "CallICFGNode: " + ICFGNode::getSourceLoc();
     }
+
+    std::string toDBString() const;
 };
 
 
@@ -719,6 +739,8 @@ public:
     {
         return "RetICFGNode: " + ICFGNode::getSourceLoc();
     }
+
+    std::string toDBString() const;
 };
 
 } // End namespace SVF

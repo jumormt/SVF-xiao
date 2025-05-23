@@ -1,5 +1,6 @@
 #include "SVFIR/SVFType.h"
 #include <sstream>
+#include "SVFIR/GraphDBClient.h"
 
 namespace SVF
 {
@@ -62,6 +63,34 @@ void SVFArrayType::print(std::ostream& os) const
 void SVFOtherType::print(std::ostream& os) const
 {
     os << repr;
+}
+
+std::string SVFFunctionType::toDBString() const
+{
+    std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFFunctionType {type_name:'" + toString() +
+    "', svf_i8_type_name:'" + getSVFInt8Type()->toString() +
+    "', svf_ptr_type_name:'" + getSVFPtrType()->toString() + 
+    "', kind:" + std::to_string(getKind()) + 
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(getByteSize()) +
+    ", params_types_vec:'" + GraphDBClient::getInstance().extractSVFTypes(getParamTypes()) +
+    "', ret_ty_node_name:'" + getReturnType()->toString() + "'})";
+    return queryStatement;
+}
+
+std::string StInfo::toDBString() const
+{
+    const std::string queryStatement ="CREATE (n:StInfo {id:" + std::to_string(getStinfoId()) +
+    ", fld_idx_vec:'" + GraphDBClient::getInstance().extractIdxs(getFlattenedFieldIdxVec()) +
+    "', elem_idx_vec:'" + GraphDBClient::getInstance().extractIdxs(getFlattenedElemIdxVec()) + 
+    "', finfo_types:'" + GraphDBClient::getInstance().extractSVFTypes(getFlattenFieldTypes()) + 
+    "', flatten_element_types:'" + GraphDBClient::getInstance().extractSVFTypes(getFlattenElementTypes()) + 
+    "', fld_idx_2_type_map:'" + GraphDBClient::getInstance().extractFldIdx2TypeMap(getFldIdx2TypeMap()) +
+    "', stride:" + std::to_string(getStride()) +
+    ", num_of_flatten_elements:" + std::to_string(getNumOfFlattenElements()) +
+    ", num_of_flatten_fields:" + std::to_string(getNumOfFlattenFields()) + "})";
+    return queryStatement;
 }
 
 } // namespace SVF
