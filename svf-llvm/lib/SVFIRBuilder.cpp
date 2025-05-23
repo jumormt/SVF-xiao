@@ -45,6 +45,7 @@ using namespace SVF;
 using namespace SVFUtil;
 using namespace LLVMUtil;
 
+lgraph::RpcClient* dbConnection = SVF::GraphDBClient::getInstance().getConnection();
 
 /*!
  * Start building SVFIR here
@@ -62,6 +63,22 @@ SVFIR* SVFIRBuilder::build()
         return fileBuilder.build();
     }
 
+    if (Options::ReadFromDB())
+    {
+        GraphDBClient::getInstance().readSVFTypesFromDB(dbConnection, "SVFType", pag);
+        GraphDBClient::getInstance().initialSVFPAGNodesFromDB(dbConnection, "PAG",pag);
+        GraphDBClient::getInstance().readBasicBlockGraphFromDB(dbConnection, "BasicBlockGraph");
+        ICFG* icfg = GraphDBClient::getInstance().buildICFGFromDB(dbConnection, "ICFG", pag);
+        pag->icfg = icfg;
+        CallGraph* callGraph = GraphDBClient::getInstance().buildCallGraphFromDB(dbConnection,"CallGraph",pag);
+        CHGraph* chg = new CHGraph();
+        pag->setCHG(chg);
+        pag->callGraph = callGraph;
+        GraphDBClient::getInstance().updatePAGNodesFromDB(dbConnection, "PAG", pag);
+        GraphDBClient::getInstance().loadSVFPAGEdgesFromDB(dbConnection, "PAG",pag);
+        return pag;
+    }
+
     // If the SVFIR has been built before, then we return the unique SVFIR of the program
     if(pag->getNodeNumAfterPAGBuild() > 1)
         return pag;
@@ -72,6 +89,10 @@ SVFIR* SVFIRBuilder::build()
     /// build icfg
     ICFGBuilder icfgbuilder;
     pag->icfg = icfgbuilder.build();
+    if (Options::Write2DB())
+    {
+        SVF::GraphDBClient::getInstance().insertICFG2db(pag->icfg);
+    }
 
     /// initial external library information
     /// initial SVFIR nodes
@@ -91,11 +112,18 @@ SVFIR* SVFIRBuilder::build()
         funset.push_back(llvmModuleSet()->getFunObjVar(item));
     }
     pag->callGraph = callGraphBuilder.buildSVFIRCallGraph(funset);
+    if (Options::Write2DB())
+    {
+        SVF::GraphDBClient::getInstance().insertCallGraph2db(pag->callGraph);
+    }
 
     CHGraph* chg = new CHGraph();
     CHGBuilder chgbuilder(chg);
     chgbuilder.buildCHG();
     pag->setCHG(chg);
+    if (Options::Write2DB()) {
+        GraphDBClient::getInstance().insertCHG2db(chg);   
+    }
 
     /// handle functions
     for (Module& M : llvmModuleSet()->getLLVMModules())
@@ -156,6 +184,12 @@ SVFIR* SVFIRBuilder::build()
     pag->initialiseCandidatePointers();
 
     pag->setNodeNumAfterPAGBuild(pag->getTotalNodeNum());
+
+    if (Options::Write2DB()) {
+        std::string dbname = "SVFType";
+        GraphDBClient::getInstance().insertSVFTypeNodeSet2db(&pag->getSVFTypes(), &pag->getStInfos(), dbname);
+        GraphDBClient::getInstance().insertPAG2db(pag);   
+    }
 
     // dump SVFIR
     if (Options::PAGDotGraph())

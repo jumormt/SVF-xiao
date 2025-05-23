@@ -66,6 +66,8 @@ public:
     //@}
 
     virtual const std::string toString() const;
+
+    std::string toDBString() const;
 };
 
 
@@ -79,6 +81,7 @@ class SVFBasicBlock : public GenericBasicBlockNodeTy
     friend class FunObjVar;
     friend class ICFGBuilder;
     friend class ICFG;
+    friend class GraphDBClient;
 
 public:
     typedef std::vector<const ICFGNode*>::const_iterator const_iterator;
@@ -287,6 +290,18 @@ public:
 
     const std::string toString() const;
 
+    const std::vector<const SVFBasicBlock*> getSuccBBs() const
+    {
+        return succBBs;
+    }
+
+    const std::vector<const SVFBasicBlock*> getPredBBs() const
+    {
+        return predBBs;
+    }
+
+    std::string toDBString() const;
+
 };
 
 
@@ -298,10 +313,11 @@ private:
     NodeID id{0};
 public:
     /// Constructor
-    BasicBlockGraph()
+    BasicBlockGraph(): GenericBasicBlockGraphTy()
     {
 
     }
+
 
     SVFBasicBlock* addBasicBlock(const std::string& bbname)
     {
@@ -310,6 +326,12 @@ public:
         addGNode(id, bb);
         bb->setName(bbname);
         return bb;
+    }
+
+    void addBasicBlockFromDB(SVFBasicBlock* bb)
+    {
+        id++;
+        addGNode(bb->getId(), bb);
     }
 
 };
