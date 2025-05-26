@@ -187,6 +187,8 @@ public:
     {
         return "Global ICFGNode";
     }
+
+    std::string toDBString() const;
 };
 
 /*!
@@ -196,6 +198,16 @@ class IntraICFGNode : public ICFGNode
 {
     friend class SVFIRWriter;
     friend class SVFIRReader;
+    friend class GraphDBClient;
+
+protected:
+    IntraICFGNode(NodeID id, const SVFBasicBlock* bb, const FunObjVar* funObjVar, bool isReturn): ICFGNode(id, IntraBlock),isRet(isReturn)
+    {
+
+        this->fun = funObjVar;
+        this->bb = bb;
+    }
+
 private:
     bool isRet;
 
@@ -233,6 +245,8 @@ public:
     {
         return isRet;
     }
+
+    std::string toDBString() const;
 };
 
 class InterICFGNode : public ICFGNode
@@ -266,6 +280,8 @@ public:
         return isInterICFGNodeKind(node->getNodeKind());
     }
 
+    std::string toDBString() const;
+
     //@}
 };
 
@@ -279,6 +295,15 @@ class FunEntryICFGNode : public InterICFGNode
 {
     friend class SVFIRWriter;
     friend class SVFIRReader;
+    friend class GraphDBClient;
+
+protected:
+    FunEntryICFGNode(NodeID id, const FunObjVar* f, SVFBasicBlock* bb)
+    : InterICFGNode(id, FunEntryBlock)
+    {
+        this->fun = f;
+        this->bb = bb;
+    }
 
 public:
     typedef std::vector<const SVFVar *> FormalParmNodeVec;
@@ -340,6 +365,8 @@ public:
     const std::string toString() const override;
 
     const std::string getSourceLoc() const override;
+
+    std::string toDBString() const;
 };
 
 /*!
@@ -349,6 +376,15 @@ class FunExitICFGNode : public InterICFGNode
 {
     friend class SVFIRWriter;
     friend class SVFIRReader;
+    friend class GraphDBClient;
+
+protected:
+    FunExitICFGNode(NodeID id, const FunObjVar* f, SVFBasicBlock* bb) 
+    : InterICFGNode(id, FunExitBlock), formalRet(nullptr)
+    {
+        this->fun = f;
+        this->bb = bb;
+    }
 
 private:
     const SVFVar *formalRet;
@@ -408,6 +444,8 @@ public:
     const std::string toString() const override;
 
     const std::string getSourceLoc() const override;
+
+    std::string toDBString() const;
 };
 
 /*!
@@ -417,6 +455,7 @@ class CallICFGNode : public InterICFGNode
 {
     friend class SVFIRWriter;
     friend class SVFIRReader;
+    friend class GraphDBClient;
 
 public:
     typedef std::vector<const ValVar *> ActualParmNodeVec;
@@ -433,6 +472,19 @@ protected:
 
     /// Constructor to create empty CallICFGNode (for SVFIRReader/deserialization)
     CallICFGNode(NodeID id) : InterICFGNode(id, FunCallBlock), ret{} {}
+    
+    CallICFGNode(NodeID id, const SVFBasicBlock* bb, const SVFType* type,
+                 const FunObjVar* fun, const FunObjVar* cf, const RetICFGNode* ret, 
+                 bool iv, bool ivc, s32_t vfi, SVFVar* vtabPtr, const std::string& fnv)
+        : InterICFGNode(id, FunCallBlock), ret(ret), calledFunc(cf),
+          isvararg(iv), isVirCallInst(ivc), vtabPtr(vtabPtr),
+          virtualFunIdx(vfi), funNameOfVcall(fnv)
+    {
+        this->fun = fun;
+        this->bb = bb;
+        this->type = type;
+    }
+                
 
 public:
     CallICFGNode(NodeID id, const SVFBasicBlock* b, const SVFType* ty,
@@ -583,6 +635,8 @@ public:
     {
         return "CallICFGNode: " + ICFGNode::getSourceLoc();
     }
+
+    std::string toDBString() const;
 };
 
 
@@ -593,6 +647,16 @@ class RetICFGNode : public InterICFGNode
 {
     friend class SVFIRWriter;
     friend class SVFIRReader;
+    friend class GraphDBClient;
+
+protected:
+    RetICFGNode(NodeID id, const SVFType* type, const SVFBasicBlock* bb, const FunObjVar* funObjVar) : 
+        InterICFGNode(id, FunRetBlock), actualRet(nullptr), callBlockNode(nullptr)
+    {
+        this->fun = funObjVar;
+        this->bb = bb;
+        this->type = type;
+    }
 
 private:
     const SVFVar *actualRet;
@@ -629,6 +693,11 @@ public:
         actualRet = ar;
     }
 
+    inline void addCallBlockNodeFromDB(const CallICFGNode* cb)
+    {
+        callBlockNode = cb;
+    }
+
     ///Methods for support type inquiry through isa, cast, and dyn_cast:
     //@{
     static inline bool classof(const RetICFGNode *)
@@ -662,6 +731,8 @@ public:
     {
         return "RetICFGNode: " + ICFGNode::getSourceLoc();
     }
+
+    std::string toDBString() const;
 };
 
 } // End namespace SVF
