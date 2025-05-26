@@ -2360,6 +2360,7 @@ void GraphDBClient::updateSVFPAGNodesAttributesFromDB(lgraph::RpcClient* connect
                     if (nullptr != callGraphNode)
                     {
                         var->setCallGraphNode(callGraphNode);
+                        pag->varargFunObjSymMap[callGraphNode] = var->getId();
                     }
                     else
                     {

@@ -188,11 +188,7 @@ public:
         return "Global ICFGNode";
     }
 
-    std::string toDBString() const{
-    const std::string queryStatement ="CREATE (n:GlobalICFGNode {id: " + std::to_string(getId()) +
-    ", kind: " + std::to_string(getNodeKind()) + "})";
-    return queryStatement;
-}
+    std::string toDBString() const;
 };
 
 /*!
@@ -284,11 +280,7 @@ public:
         return isInterICFGNodeKind(node->getNodeKind());
     }
 
-    std::string toDBString() const{
-        const std::string queryStatement ="CREATE (n:InterICFGNode {id: " + std::to_string(getId()) +
-        ", kind: " + std::to_string(getNodeKind()) + "})";
-        return queryStatement;
-    }
+    std::string toDBString() const;
 
     //@}
 };

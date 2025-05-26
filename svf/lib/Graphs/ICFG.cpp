@@ -52,6 +52,7 @@ std::string FunEntryICFGNode::toDBString() const
     const std::string queryStatement ="CREATE (n:FunEntryICFGNode {id: " + std::to_string(getId()) +
     ", kind: " + std::to_string(getNodeKind()) +
     ", fun_obj_var_id:" + std::to_string(getFun()->getId()) + 
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
     ", bb_id:" + std::to_string(getBB()->getId()) +
     ", fp_nodes:'" + GraphDBClient::getInstance().extractNodesIds(getFormalParms()) +"'})";
     return queryStatement;
@@ -80,6 +81,7 @@ std::string FunExitICFGNode::toDBString() const
     const std::string queryStatement ="CREATE (n:FunExitICFGNode {id: " + std::to_string(getId()) +
     ", kind: " + std::to_string(getNodeKind()) +
     ", fun_obj_var_id:" + std::to_string(getFun()->getId()) + 
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
     ", bb_id:" + std::to_string(getBB()->getId()) +
     formalRetId + "})";
     return queryStatement;
@@ -220,6 +222,7 @@ std::string CallICFGNode::toDBString() const
     ret_icfg_node_id +
     ", bb_id: " + std::to_string(getBB()->getId()) +
     ", fun_obj_var_id: " + std::to_string(getFun()->getId()) +
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
     ", svf_type:'" + getType()->toString() + "'" +
     ", ap_nodes:'" + GraphDBClient::getInstance().extractNodesIds(getActualParms()) +"'" +
     called_fun_obj_var_id +
@@ -257,6 +260,7 @@ std::string RetICFGNode::toDBString() const
     ", call_block_node_id: " + std::to_string(getCallICFGNode()->getId()) +
     ", bb_id: " + std::to_string(getBB()->getId()) +
     ", fun_obj_var_id: " + std::to_string(getFun()->getId()) +
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
     ", svf_type:'" + getType()->toString() + "'"+"})";
     return queryStatement;
 }
@@ -648,7 +652,23 @@ std::string IntraICFGNode::toDBString() const
     ", kind: " + std::to_string(getNodeKind()) +
     ", is_return: " + (isRetInst() ? "true" : "false") +
     ", fun_obj_var_id:" + std::to_string(getFun()->getId()) +
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
     ", bb_id:" + std::to_string(getBB()->getId()) + "})";
+    return queryStatement;
+}
+
+std::string InterICFGNode::toDBString() const{
+    const std::string queryStatement ="CREATE (n:InterICFGNode {id: " + std::to_string(getId()) +
+    ", kind: " + std::to_string(getNodeKind()) + 
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'})";
+    return queryStatement;
+}
+
+std::string GlobalICFGNode::toDBString() const
+{
+    const std::string queryStatement ="CREATE (n:GlobalICFGNode {id: " + std::to_string(getId()) +
+    ", kind: " + std::to_string(getNodeKind()) + 
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'})";
     return queryStatement;
 }
 /*!

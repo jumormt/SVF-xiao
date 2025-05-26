@@ -564,7 +564,7 @@ std::string ValVar::toDBString() const
 
 std::string ConstDataValVar::getConstDataValVarNodeFieldsStmt() const
 {
-    return ValVar::toDBString();
+    return ValVar::getValVarNodeFieldsStmt();
 }
 
 std::string ConstDataValVar::toDBString()const
