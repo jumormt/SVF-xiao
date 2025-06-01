@@ -76,6 +76,7 @@ SVFIR* SVFIRBuilder::build()
         pag->callGraph = callGraph;
         GraphDBClient::getInstance().updatePAGNodesFromDB(dbConnection, "PAG", pag);
         GraphDBClient::getInstance().loadSVFPAGEdgesFromDB(dbConnection, "PAG",pag);
+        GraphDBClient::getInstance().parseSVFStmtsForICFGNodeFromDBResult(pag);
         return pag;
     }
 
