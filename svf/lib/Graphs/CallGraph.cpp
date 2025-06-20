@@ -392,7 +392,7 @@ void CallGraph::addCallGraphNodeFromDB(CallGraphNode* cgNode)
     callGraphNodeNum++;
 }
 
-const CallGraphNode* CallGraph::getCallGraphNode(const std::string& name)
+const CallGraphNode* CallGraph::getCallGraphNode(const std::string& name) const
 {
     for (const auto& item : *this)
     {

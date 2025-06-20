@@ -215,8 +215,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "index":false,
                     "optional":false
                 },
@@ -300,8 +300,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "index":false,
                     "optional":false
                 },

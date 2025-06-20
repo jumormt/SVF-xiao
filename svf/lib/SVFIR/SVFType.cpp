@@ -37,22 +37,47 @@ void SVFIntegerType::print(std::ostream& os) const
 
 void SVFFunctionType::print(std::ostream& os) const
 {
-    os << *getReturnType();
-    os << " (";
-    for (auto it = params.begin(); it != params.end(); ++it)
+    os << *getReturnType() << "(";
+
+    // Print parameters
+    for (size_t i = 0; i < params.size(); ++i)
     {
-        if (it != params.begin())
+        os << *params[i];
+        // Add comma after all params except the last one
+        if (i != params.size() - 1)
         {
             os << ", ";
         }
-        os << (*it)->toString();
     }
+
+    // Add varargs indicator if needed
+    if (isVarArg())
+    {
+        if (!params.empty())
+        {
+            os << ", ";
+        }
+        os << "...";
+    }
+
     os << ")";
 }
 
 void SVFStructType::print(std::ostream& os) const
 {
-    os << "S." << name;
+    os << "S." << name << " {";
+
+    // Print fields
+    for (size_t i = 0; i < fields.size(); ++i)
+    {
+        os << *fields[i];
+        // Add comma after all fields except the last one
+        if (i != fields.size() - 1)
+        {
+            os << ", ";
+        }
+    }
+    os << "}";
 }
 
 void SVFArrayType::print(std::ostream& os) const
@@ -68,14 +93,14 @@ void SVFOtherType::print(std::ostream& os) const
 std::string SVFFunctionType::toDBString() const
 {
     std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
-    const std::string queryStatement ="CREATE (n:SVFFunctionType {type_name:'" + toString() +
-    "', svf_i8_type_name:'" + getSVFInt8Type()->toString() +
-    "', svf_ptr_type_name:'" + getSVFPtrType()->toString() + 
-    "', kind:" + std::to_string(getKind()) + 
+    const std::string queryStatement ="CREATE (n:SVFFunctionType {id:" + std::to_string(getId()) +
+    ", svf_i8_type_id:" + std::to_string(getSVFInt8Type()->getId()) +
+    ", svf_ptr_type_id:" + std::to_string(getSVFPtrType()->getId()) + 
+    ", kind:" + std::to_string(getKind()) + 
     ", is_single_val_ty:" + is_single_val_ty + 
     ", byte_size:" + std::to_string(getByteSize()) +
     ", params_types_vec:'" + GraphDBClient::getInstance().extractSVFTypes(getParamTypes()) +
-    "', ret_ty_node_name:'" + getReturnType()->toString() + "'})";
+    "', ret_ty_node_id:" + std::to_string(getReturnType()->getId()) + "})";
     return queryStatement;
 }
 
@@ -90,6 +115,22 @@ std::string StInfo::toDBString() const
     "', stride:" + std::to_string(getStride()) +
     ", num_of_flatten_elements:" + std::to_string(getNumOfFlattenElements()) +
     ", num_of_flatten_fields:" + std::to_string(getNumOfFlattenFields()) + "})";
+    return queryStatement;
+}
+
+std::string SVFStructType::toDBString() const
+{
+    std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
+    const std::string queryStatement ="CREATE (n:SVFStructType {id:" + std::to_string(getId()) +
+    ", svf_i8_type_id:" + std::to_string(getSVFInt8Type()->getId()) +
+    ", svf_ptr_type_id:" + std::to_string(getSVFPtrType()->getId()) + 
+    ", kind:" + std::to_string(getKind()) + 
+    ", stinfo_node_id:" + std::to_string(getTypeInfo()->getStinfoId()) +
+    ", is_single_val_ty:" + is_single_val_ty + 
+    ", byte_size:" + std::to_string(getByteSize()) +
+    ", struct_name:'" + getName() + "'" +
+    ", fields_id_vec:'" + GraphDBClient::getInstance().extractSVFTypes(getFieldTypes()) +
+    "'})";
     return queryStatement;
 }
 

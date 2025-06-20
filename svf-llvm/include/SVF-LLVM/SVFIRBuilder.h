@@ -412,6 +412,7 @@ protected:
             }
         }
         assert (false && "Unknown cast inst!");
+        abort();
     }
 
     /// Add Copy edge

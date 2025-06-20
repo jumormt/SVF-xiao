@@ -297,20 +297,19 @@ public:
         auto it = types.begin();
     
         
-        typesStr << "{" << (*it)->toString() << "}";
+        typesStr << "{" << (*it)->getId() << "}";
         ++it;
     
         for (; it != types.end(); ++it)
         {
-            typesStr << "," << "{" << (*it)->toString() << "}";
+            typesStr << "," << "{" << (*it)->getId() << "}";
         }
     
         return typesStr.str();
     }
 
     template <typename Container>
-    Container parseElementsToSVFTypeContainer(
-        std::string& str, const Map<std::string, SVFType*>& typeMap)
+    Container parseElementsToSVFTypeContainer(std::string& str, const Map<int, SVFType*>& typeMap)
     {
         str.erase(std::remove(str.begin(), str.end(), '\n'), str.end());
         str.erase(std::remove(str.begin(), str.end(), '\r'), str.end());
@@ -332,7 +331,8 @@ public:
             token.erase(token.find_last_not_of(" \t") + 1);
             token.erase(0, token.find_first_not_of(" \t"));
     
-            auto it = typeMap.find(token);
+            int typeId = std::stoi(token);
+            auto it = typeMap.find(typeId);
             if (it != typeMap.end())
             {
                 resultContainer.insert(resultContainer.end(), it->second);
@@ -350,13 +350,13 @@ public:
         return resultContainer;
     }
 
-    std::vector<std::string> parseSVFTypes(std::string typesStr)
+    std::vector<int> parseSVFTypes(std::string typesStr)
     {
         typesStr.erase(std::remove(typesStr.begin(), typesStr.end(), '\n'),
                        typesStr.end());
         typesStr.erase(std::remove(typesStr.begin(), typesStr.end(), '\r'),
                        typesStr.end());
-        std::vector<std::string> result;
+        std::vector<int> result;
         std::stringstream ss(typesStr);
         std::string token;
 
@@ -370,7 +370,10 @@ public:
             {
                 token.erase(token.size() - 1, 1); 
             }
-            result.push_back(token);
+            if (!token.empty())
+            {
+                result.push_back(std::stoi(token));
+            }
         }
 
         return result;
@@ -387,19 +390,19 @@ public:
         std::ostringstream mapStr;
         auto it = fldIdx2TypeMap.begin();
     
-        mapStr << "{" << it->first << ":" << it->second->toString() << "}";
+        mapStr << "{" << it->first << ":" << it->second->getId() << "}";
         ++it;
     
         for (; it != fldIdx2TypeMap.end(); ++it)
         {
-            mapStr << ",{" << it->first << ":" << it->second->toString() << "}";
+            mapStr << ",{" << it->first << ":" << it->second->getId() << "}";
         }
     
         return mapStr.str();
     }
 
     template <typename MapType>
-    MapType parseStringToFldIdx2TypeMap(const std::string& str, const Map<std::string, SVFType*>& typeMap)
+    MapType parseStringToFldIdx2TypeMap(const std::string& str, const Map<int, SVFType*>& typeMap)
     {
         MapType resultMap;
     
@@ -422,10 +425,11 @@ public:
             if (colonPos != std::string::npos) {
                 std::string keyStr = token.substr(0, colonPos);
                 std::string typeStr = token.substr(colonPos + 1);
+                int typeId = std::stoi(typeStr);
 
                 u32_t key = static_cast<u32_t>(std::stoi(keyStr));
     
-                auto it = typeMap.find(typeStr);
+                auto it = typeMap.find(typeId);
                 if (it != typeMap.end()) {
                     resultMap[key] = it->second;
                 } else {
@@ -672,7 +676,7 @@ public:
         std::ostringstream oss;
         if (nullptr != pair.first && nullptr != pair.second)
         {
-            oss << "{" << pair.first->getId() << ", " << pair.second->toString()
+            oss << "{" << pair.first->getId() << ", " << pair.second->getId()
                 << "}";
             return oss.str();
         }

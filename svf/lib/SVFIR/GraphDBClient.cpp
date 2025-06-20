@@ -260,9 +260,9 @@ std::string GraphDBClient::getICFGNodeKindString(const ICFGNode* node)
 void GraphDBClient::insertCHG2db(const CHGraph* chg)
 {
     std::string chgNodePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/PAGNodeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/PAGNodeSchema.json";
     std::string chgEdgePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/CHGEdgeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/CHGEdgeSchema.json";
     // add all CHG Node & Edge to DB
     if (nullptr != connection)
     {
@@ -370,9 +370,9 @@ void GraphDBClient::insertICFG2db(const ICFG* icfg)
         createSubGraph(connection, "ICFG");
         // load schema for CallGraph
         std::string ICFGNodePath =
-            SVF_ROOT "/svf/include/Graphs/DBSchema/ICFGNodeSchema.json";
+            SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/ICFGNodeSchema.json";
         std::string ICFGEdgePath =
-            SVF_ROOT "/svf/include/Graphs/DBSchema/ICFGEdgeSchema.json";
+            SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/ICFGEdgeSchema.json";
         loadSchema(connection, ICFGNodePath.c_str(), "ICFG");
         loadSchema(connection, ICFGEdgePath.c_str(), "ICFG");
         std::vector<const ICFGEdge*> edges;
@@ -398,9 +398,9 @@ void GraphDBClient::insertCallGraph2db(const CallGraph* callGraph)
 {
 
     std::string callGraphNodePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/CallGraphNodeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/CallGraphNodeSchema.json";
     std::string callGraphEdgePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/CallGraphEdgeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/CallGraphEdgeSchema.json";
     // add all CallGraph Node & Edge to DB
     if (nullptr != connection)
     {
@@ -446,7 +446,7 @@ void GraphDBClient::insertSVFTypeNodeSet2db(const Set<const SVFType*>* types, co
         // create a new graph name SVFType in db
         createSubGraph(connection, "SVFType");
         // load schema for SVFType
-        loadSchema(connection, SVF_ROOT "/svf/include/Graphs/DBSchema/SVFTypeNodeSchema.json", "SVFType");
+        loadSchema(connection, SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/SVFTypeNodeSchema.json", "SVFType");
         
         // load & insert each svftype node to db
         for (const auto& ty : *types)
@@ -573,13 +573,13 @@ void GraphDBClient::insertBBNode2db(lgraph::RpcClient* connection, const SVFBasi
 void GraphDBClient::insertPAG2db(const PAG* pag)
 {
     std::string pagNodePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/PAGNodeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/PAGNodeSchema.json";
     std::string pagEdgePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/PAGEdgeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/PAGEdgeSchema.json";
     std::string bbNodePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/BasicBlockNodeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/BasicBlockNodeSchema.json";
     std::string bbEdgePath =
-        SVF_ROOT "/svf/include/Graphs/DBSchema/BasicBlockEdgeSchema.json";
+        SVF_SOURCE_DIR "/svf/include/Graphs/DBSchema/BasicBlockEdgeSchema.json";
 
     // add all PAG Node & Edge to DB
     if (nullptr != connection)
@@ -991,14 +991,15 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
     // parse all SVFType
     std::string queryStatement = "MATCH (node) WHERE NOT 'StInfo' IN labels(node) return node";
 
-    Map<std::string, SVFType*> svfTypeMap;
+    Map<int, SVFType*> svfTypeMap;
     Map<int, StInfo*> stInfoMap;
     // Map<SVFType::SVFTyKind, Set<SVFType*>> svfTypeKind2SVFTypesMap;
-    Map<SVFType*, std::pair<std::string, std::string>> svfi8AndPtrTypeMap;
-    Map<std::string, Set<SVFFunctionType*>> functionRetTypeSetMap;
-    Map<SVFFunctionType*, std::vector<std::string>> functionParamsTypeSetMap;
+    Map<SVFType*, std::pair<int, int>> svfi8AndPtrTypeMap;
+    Map<int, Set<SVFFunctionType*>> functionRetTypeSetMap;
+    Map<SVFFunctionType*, std::vector<int>> functionParamsTypeSetMap;
     Map<int,Set<SVFType*>> stInfoId2SVFTypeMap;
-    Map<std::string, Set<SVFArrayType*>> elementTyepsMap;
+    Map<int, Set<SVFArrayType*>> elementTyepsMap;
+    Map<SVFStructType*, std::vector<int>> structType2FieldsTypeIdMap;
     
     cJSON* root = queryFromDB(connection, dbname, queryStatement);
     cJSON* node;
@@ -1017,22 +1018,20 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
             std::string label = cJSON_GetObjectItem(data, "label")->valuestring;
 
             SVFType* type = nullptr;
-            std::string i8Type =
-                cJSON_GetObjectItem(properties, "svf_i8_type_name")
-                    ->valuestring;
-            std::string ptrType =
-                cJSON_GetObjectItem(properties, "svf_ptr_type_name")
-                    ->valuestring;
+            int i8Type =
+                cJSON_GetObjectItem(properties, "svf_i8_type_id")->valueint;
+            int ptrType =
+                cJSON_GetObjectItem(properties, "svf_ptr_type_id")->valueint;
             bool svt = cJSON_IsTrue(
                 cJSON_GetObjectItem(properties, "is_single_val_ty"));
             int byteSize =
                 cJSON_GetObjectItem(properties, "byte_size")->valueint;
-            std::string typeNameString =
-                cJSON_GetObjectItem(properties, "type_name")->valuestring;
+            int typeId =
+                cJSON_GetObjectItem(properties, "id")->valueint;
 
             if (label == "SVFPointerType")
             {
-                type = new SVFPointerType(byteSize, svt);
+                type = new SVFPointerType(typeId, byteSize, svt);
             }
             else if (label == "SVFIntegerType")
             {
@@ -1040,46 +1039,45 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
                     cJSON_GetObjectItem(properties, "single_and_width");
                 short single_and_width =
                     (short)cJSON_GetNumberValue(single_and_width_Json);
-                type = new SVFIntegerType(byteSize, svt, single_and_width);
+                type = new SVFIntegerType(typeId, byteSize, svt, single_and_width);
             }
             else if (label == "SVFFunctionType")
             {
-                SVFFunctionType* funType = new SVFFunctionType(svt, byteSize);
+                SVFFunctionType* funType = new SVFFunctionType(typeId, svt, byteSize);
                 type = funType;
-                std::string retTypeName =
-                    cJSON_GetObjectItem(properties, "ret_ty_node_name")
-                        ->valuestring;
-                auto it = svfTypeMap.find(retTypeName);
+                int retTypeId = cJSON_GetObjectItem(properties, "ret_ty_node_id") ->valueint;
+                auto it = svfTypeMap.find(retTypeId);
                 if (it != svfTypeMap.end())
                 {
                     funType->setReturnType(it->second);
                 }
                 else
                 {
-                    functionRetTypeSetMap[retTypeName].insert(funType);
+                    functionRetTypeSetMap[retTypeId].insert(funType);
                 }
-                std::string paramsTypes =
-                    cJSON_GetObjectItem(properties, "params_types_vec")
-                        ->valuestring;
+                std::string paramsTypes = cJSON_GetObjectItem(properties, "params_types_vec")->valuestring;
                 if (!paramsTypes.empty())
                 {
-                    functionParamsTypeSetMap[funType] =
-                        parseSVFTypes(paramsTypes);
+                    functionParamsTypeSetMap[funType] = parseSVFTypes(paramsTypes);
                 }
             }
             else if (label == "SVFOtherType")
             {
                 std::string repr =
                     cJSON_GetObjectItem(properties, "repr")->valuestring;
-                type = new SVFOtherType(svt, byteSize, repr);
+                type = new SVFOtherType(typeId, svt, byteSize, repr);
             }
             else if (label == "SVFStructType")
             {
-                std::string name =
-                    cJSON_GetObjectItem(properties, "struct_name")->valuestring;
-                type = new SVFStructType(svt, byteSize, name);
-                int stInfoID =
-                    cJSON_GetObjectItem(properties, "stinfo_node_id")->valueint;
+                std::string name = cJSON_GetObjectItem(properties, "struct_name")->valuestring;
+                SVFStructType* structType = new SVFStructType(typeId, svt, byteSize, name);
+                type = structType;
+                std::string fieldTypesStr = cJSON_GetObjectItem(properties, "fields_id_vec")->valuestring;
+                if (!fieldTypesStr.empty())
+                {
+                    structType2FieldsTypeIdMap[structType] = parseSVFTypes(fieldTypesStr);
+                }
+                int stInfoID = cJSON_GetObjectItem(properties, "stinfo_node_id")->valueint;
                 auto it = stInfoMap.find(stInfoID);
                 if (it != stInfoMap.end())
                 {
@@ -1092,13 +1090,10 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
             }
             else if (label == "SVFArrayType")
             {
-                int numOfElement =
-                    cJSON_GetObjectItem(properties, "num_of_element")->valueint;
-                SVFArrayType* arrayType =
-                    new SVFArrayType(svt, byteSize, numOfElement);
+                int numOfElement = cJSON_GetObjectItem(properties, "num_of_element")->valueint;
+                SVFArrayType* arrayType = new SVFArrayType(typeId, svt, byteSize, numOfElement);
                 type = arrayType;
-                int stInfoID =
-                    cJSON_GetObjectItem(properties, "stinfo_node_id")->valueint;
+                int stInfoID = cJSON_GetObjectItem(properties, "stinfo_node_id")->valueint;
                 auto stInfoIter = stInfoMap.find(stInfoID);
                 if (stInfoIter != stInfoMap.end())
                 {
@@ -1108,21 +1103,18 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
                 {
                     stInfoId2SVFTypeMap[stInfoID].insert(type);
                 }
-                std::string typeOfElementName =
-                    cJSON_GetObjectItem(properties,
-                                        "type_of_element_node_type_name")
-                        ->valuestring;
-                auto tyepIter = svfTypeMap.find(typeOfElementName);
+                int typeOfElementId = cJSON_GetObjectItem(properties,"type_of_element_node_type_id")->valueint;
+                auto tyepIter = svfTypeMap.find(typeOfElementId);
                 if (tyepIter != svfTypeMap.end())
                 {
                     arrayType->setTypeOfElement(tyepIter->second);
                 }
                 else
                 {
-                    elementTyepsMap[typeOfElementName].insert(arrayType);
+                    elementTyepsMap[typeOfElementId].insert(arrayType);
                 }
             }
-            svfTypeMap.emplace(typeNameString, type);
+            svfTypeMap.emplace(typeId, type);
             // svfTypeKind2SVFTypesMap[type->getSVFTyKind()].insert(type);
             svfi8AndPtrTypeMap[type] = std::make_pair(i8Type, ptrType);
         }
@@ -1144,57 +1136,33 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
             if (!properties)
                 continue;
 
-            u32_t id = static_cast<u32_t>(
-                cJSON_GetObjectItem(properties, "id")->valueint);
-            std::string fld_idx_vec =
-                cJSON_GetObjectItem(properties, "fld_idx_vec")->valuestring;
-            std::vector<u32_t> fldIdxVec =
-                parseElements2Container<std::vector<u32_t>>(fld_idx_vec);
+            u32_t id = static_cast<u32_t>(cJSON_GetObjectItem(properties, "id")->valueint);
+            std::string fld_idx_vec = cJSON_GetObjectItem(properties, "fld_idx_vec")->valuestring;
+            std::vector<u32_t> fldIdxVec = parseElements2Container<std::vector<u32_t>>(fld_idx_vec);
 
-            std::string elem_idx_vec =
-                cJSON_GetObjectItem(properties, "elem_idx_vec")->valuestring;
-            std::vector<u32_t> elemIdxVec =
-                parseElements2Container<std::vector<u32_t>>(elem_idx_vec);
+            std::string elem_idx_vec = cJSON_GetObjectItem(properties, "elem_idx_vec")->valuestring;
+            std::vector<u32_t> elemIdxVec = parseElements2Container<std::vector<u32_t>>(elem_idx_vec);
 
-            std::string fld_idx_2_type_map =
-                cJSON_GetObjectItem(properties, "fld_idx_2_type_map")
-                    ->valuestring;
-            Map<u32_t, const SVFType*> fldIdx2TypeMap =
-                parseStringToFldIdx2TypeMap<Map<u32_t, const SVFType*>>(
-                    fld_idx_2_type_map, svfTypeMap);
+            std::string fld_idx_2_type_map = cJSON_GetObjectItem(properties, "fld_idx_2_type_map")->valuestring;
+            Map<u32_t, const SVFType*> fldIdx2TypeMap = parseStringToFldIdx2TypeMap<Map<u32_t, const SVFType*>>(fld_idx_2_type_map, svfTypeMap);
 
-            std::string finfo_types =
-                cJSON_GetObjectItem(properties, "finfo_types")->valuestring;
-            std::vector<const SVFType*> finfo =
-                parseElementsToSVFTypeContainer<std::vector<const SVFType*>>(
-                    finfo_types, svfTypeMap);
+            std::string finfo_types = cJSON_GetObjectItem(properties, "finfo_types")->valuestring;
+            std::vector<const SVFType*> finfo = parseElementsToSVFTypeContainer<std::vector<const SVFType*>>(finfo_types, svfTypeMap);
 
-            u32_t stride = static_cast<u32_t>(
-                cJSON_GetObjectItem(properties, "stride")->valueint);
-            u32_t num_of_flatten_elements = static_cast<u32_t>(
-                cJSON_GetObjectItem(properties, "num_of_flatten_elements")
-                    ->valueint);
-            u32_t num_of_flatten_fields = static_cast<u32_t>(
-                cJSON_GetObjectItem(properties, "num_of_flatten_fields")
-                    ->valueint);
-            std::string flatten_element_types =
-                cJSON_GetObjectItem(properties, "flatten_element_types")
-                    ->valuestring;
-            std::vector<const SVFType*> flattenElementTypes =
-                parseElementsToSVFTypeContainer<std::vector<const SVFType*>>(
-                    flatten_element_types, svfTypeMap);
-            StInfo* stInfo =
-                new StInfo(id, fldIdxVec, elemIdxVec, fldIdx2TypeMap, finfo,
-                           stride, num_of_flatten_elements,
-                           num_of_flatten_fields, flattenElementTypes);
+            u32_t stride = static_cast<u32_t>(cJSON_GetObjectItem(properties, "stride")->valueint);
+            u32_t num_of_flatten_elements = static_cast<u32_t>(cJSON_GetObjectItem(properties, "num_of_flatten_elements")->valueint);
+            u32_t num_of_flatten_fields = static_cast<u32_t>(cJSON_GetObjectItem(properties, "num_of_flatten_fields")->valueint);
+            std::string flatten_element_types =cJSON_GetObjectItem(properties, "flatten_element_types")->valuestring;
+            std::vector<const SVFType*> flattenElementTypes =parseElementsToSVFTypeContainer<std::vector<const SVFType*>>(flatten_element_types, svfTypeMap);
+            StInfo* stInfo =new StInfo(id, fldIdxVec, elemIdxVec, fldIdx2TypeMap, finfo,stride, num_of_flatten_elements,num_of_flatten_fields, flattenElementTypes);
             stInfoMap[id] = stInfo;
         }
         cJSON_Delete(root);
     }
 
-    for (auto& [retTypeName, types]:functionRetTypeSetMap)
+    for (auto& [retTypeId, types]:functionRetTypeSetMap)
     {
-        auto retTypeIter = svfTypeMap.find(retTypeName);
+        auto retTypeIter = svfTypeMap.find(retTypeId);
         if (retTypeIter != svfTypeMap.end())
         {
             for (auto& type: types)
@@ -1205,14 +1173,13 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
         else
         {
             SVFUtil::outs()
-                << "Warning3: No matching SVFType found for type: " << retTypeName << "\n";
+                << "Warning: No matching RetType found for typeId: " << retTypeId << "\n";
         }
     }
-    Set<const SVFType*> ori = pag->getSVFTypes();
 
     for (auto& [funType, paramsVec]:functionParamsTypeSetMap)
     {
-        for (const std::string& param : paramsVec)
+        for (const int param : paramsVec)
         {
             auto paramTypeIter = svfTypeMap.find(param);
             if (paramTypeIter != svfTypeMap.end())
@@ -1221,8 +1188,25 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
             } 
             else
             {
-                SVFUtil::outs()<<"Warning2: No matching SVFType found for type: "
+                SVFUtil::outs()<<"Warning: No matching paramType found for typeID: "
                               << param << "\n";
+            }
+        }
+    }
+
+    for (auto& [structType, fieldTypes]:structType2FieldsTypeIdMap)
+    {
+        for (const int fieldTypeId : fieldTypes)
+        {
+            auto fieldTypeIter = svfTypeMap.find(fieldTypeId);
+            if (fieldTypeIter != svfTypeMap.end())
+            {
+                structType->addFieldsType(fieldTypeIter->second);
+            }
+            else
+            {
+                SVFUtil::outs()<<"Warning: No matching fieldType found for typeID: "
+                              << fieldTypeId << "\n";
             }
         }
     }
@@ -1249,9 +1233,9 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
         }
     }
 
-    for (auto& [elementTypesName, arrayTypes]:elementTyepsMap)
+    for (auto& [elementTypesId, arrayTypes]:elementTyepsMap)
     {
-        auto elementTypeIter = svfTypeMap.find(elementTypesName);
+        auto elementTypeIter = svfTypeMap.find(elementTypesId);
         if (elementTypeIter != svfTypeMap.end())
         {
             for (SVFArrayType* type : arrayTypes)
@@ -1261,15 +1245,15 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
         }
         else 
         {
-            SVFUtil::outs()<<"Warning1: No matching SVFType found for type: "
-            << elementTypesName << "\n";
+            SVFUtil::outs()<<"Warning: No matching elementType found for typeId: "
+            << elementTypesId << "\n";
         }
     }
 
     for (auto& [svfType, pair]:svfi8AndPtrTypeMap)
     {
-        std::string svfi8Type = pair.first;
-        std::string svfptrType = pair.second;
+        int svfi8Type = pair.first;
+        int svfptrType = pair.second;
         auto i8Type = svfTypeMap.find(svfi8Type);
         auto ptrType = svfTypeMap.find(svfptrType);
         if (i8Type!=svfTypeMap.end())
@@ -1281,7 +1265,7 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
             svfType->setSVFPtrType(ptrType->second);
         }
     }
-    for (auto& [typeName, type] : svfTypeMap)
+    for (auto& [typeId, type] : svfTypeMap)
     {
         pag->addTypeInfo(type);
     }
@@ -1498,16 +1482,11 @@ void GraphDBClient::readPAGEdgesFromDB(lgraph::RpcClient* connection, const std:
                         fldIdx = 0;
                     }
                     bool variant_field = cJSON_IsTrue(cJSON_GetObjectItem(properties,"variant_field"));
-                    cJSON* ap_gep_pointee_type_name_node = cJSON_GetObjectItem(properties, "ap_gep_pointee_type_name");
+                    int ap_gep_pointee_type_id = cJSON_GetObjectItem(properties, "ap_gep_pointee_type_id")->valueint;
                     const SVFType* gepPointeeType = nullptr;
-                    std::string ap_gep_pointee_type_name = "";
-                    if (nullptr != ap_gep_pointee_type_name_node && nullptr != ap_gep_pointee_type_name_node->valuestring)
+                    if (ap_gep_pointee_type_id != -1)
                     {
-                        ap_gep_pointee_type_name = ap_gep_pointee_type_name_node->valuestring;
-                        if (!ap_gep_pointee_type_name.empty())
-                        {
-                            gepPointeeType = pag->getSVFType(ap_gep_pointee_type_name);
-                        }
+                        gepPointeeType = pag->getSVFType(ap_gep_pointee_type_id);
                     }
                     AccessPath* ap = nullptr;
                     if (nullptr != gepPointeeType)
@@ -1517,8 +1496,8 @@ void GraphDBClient::readPAGEdgesFromDB(lgraph::RpcClient* connection, const std:
                     else
                     {
                         ap = new AccessPath(fldIdx);
-                        if (!ap_gep_pointee_type_name.empty())
-                            SVFUtil::outs() << "Warning: [readPAGEdgesFromDB] No matching SVFType found for ap_gep_pointee_type_name: " << ap_gep_pointee_type_name << " when updating GepStmt:"<<edge_id<< "\n";
+                        if (ap_gep_pointee_type_id != -1)
+                            SVFUtil::outs() << "Warning: [readPAGEdgesFromDB] No matching SVFType found for ap_gep_pointee_type_id: " << ap_gep_pointee_type_id << " when updating GepStmt:"<<edge_id<< "\n";
                     }
                     cJSON* ap_idx_operand_pairs_node = cJSON_GetObjectItem(properties, "ap_idx_operand_pairs");
                     std::string ap_idx_operand_pairs = "";
@@ -2165,16 +2144,11 @@ void GraphDBClient::updateGepValVarAttributes(cJSON* properties, GepValVar* var,
                         << "\n";
     }
     s64_t fldIdx = cJSON_GetObjectItem(properties, "ap_fld_idx")->valueint;
-    cJSON* ap_gep_pointee_type_name_node = cJSON_GetObjectItem(properties, "ap_gep_pointee_type_name");
-    std::string ap_gep_pointee_type_name = "";
-    if (nullptr != ap_gep_pointee_type_name_node && nullptr != ap_gep_pointee_type_name_node->valuestring)
-    {
-        ap_gep_pointee_type_name = ap_gep_pointee_type_name_node->valuestring;
-    }
+    int ap_gep_pointee_type_id = cJSON_GetObjectItem(properties, "ap_gep_pointee_type_id")->valueint;
     const SVFType* gepPointeeType = nullptr;
-    if (!ap_gep_pointee_type_name.empty())
+    if (ap_gep_pointee_type_id != -1)
     {
-        gepPointeeType = pag->getSVFType(ap_gep_pointee_type_name);
+        gepPointeeType = pag->getSVFType(ap_gep_pointee_type_id);
     }
     AccessPath* ap = nullptr;
     if (nullptr != gepPointeeType)
@@ -2184,8 +2158,8 @@ void GraphDBClient::updateGepValVarAttributes(cJSON* properties, GepValVar* var,
     else
     {
         ap = new AccessPath(fldIdx);
-        if (!ap_gep_pointee_type_name.empty())
-            SVFUtil::outs() << "Warning: [updateGepValVarAttributes] No matching SVFType found for ap_gep_pointee_type_name: " << ap_gep_pointee_type_name << " when updating GepValVar:"<<var->getId()<< "\n";
+        if (ap_gep_pointee_type_id != -1)
+            SVFUtil::outs() << "Warning: [updateGepValVarAttributes] No matching SVFType found for ap_gep_pointee_type_id: " << ap_gep_pointee_type_id << " when updating GepValVar:"<<var->getId()<< "\n";
     }
 
     cJSON* ap_idx_operand_pairs_node = cJSON_GetObjectItem(properties, "ap_idx_operand_pairs");
@@ -2206,14 +2180,15 @@ void GraphDBClient::parseAPIdxOperandPairsString(const std::string& ap_idx_opera
         for(auto& pair : pairVec)
         {
             int varId = pair.first;
-            std::string typeName = pair.second;
+            std::string typeIdStr = pair.second;
             const SVFType* type;
-            if (typeName != "NULL")
+            if (typeIdStr != "NULL")
             {
-                type = pag->getSVFType(typeName);
+                int typeId = std::stoi(typeIdStr);
+                type = pag->getSVFType(typeId);
                 if (nullptr == type)
                 {
-                    SVFUtil::outs() << "Warning: [parseAPIdxOperandPairsString] No matching SVFType found for type: " << typeName << " when parsing IdxOperandPair\n";
+                    SVFUtil::outs() << "Warning: [parseAPIdxOperandPairsString] No matching SVFType found for type: " << typeIdStr << " when parsing IdxOperandPair\n";
                 }
             }
             else 
@@ -2587,11 +2562,11 @@ void GraphDBClient::readPAGNodesFromDB(lgraph::RpcClient* connection, const std:
                 if (!properties)
                     continue;
                 int id = cJSON_GetObjectItem(properties,"id")->valueint;
-                std::string svfTypeName = cJSON_GetObjectItem(properties, "svf_type_name")->valuestring;
-                const SVFType* type = pag->getSVFType(svfTypeName);
+                int svfTypeId = cJSON_GetObjectItem(properties, "svf_type_id")->valueint;
+                const SVFType* type = pag->getSVFType(svfTypeId);
                 if (type == nullptr)
                 {
-                    SVFUtil::outs() << "Warning: [readPAGNodesFromDB] No matching SVFType found for type: " << svfTypeName << "for PAGNode:"<<id<<"\n";
+                    SVFUtil::outs() << "Warning: [readPAGNodesFromDB] No matching SVFType found for type: " << svfTypeId << "for PAGNode:"<<id<<"\n";
                 }
     
                 if (nodeType == "ConstNullPtrValVar")
@@ -2672,8 +2647,8 @@ void GraphDBClient::readPAGNodesFromDB(lgraph::RpcClient* connection, const std:
                 }
                 else if (nodeType == "GepValVar")
                 {
-                    std::string gep_val_svf_type_name = cJSON_GetObjectItem(properties, "gep_val_svf_type_name")->valuestring;
-                    const SVFType* gepValType = pag->getSVFType(gep_val_svf_type_name);
+                    int gep_val_svf_type_id = cJSON_GetObjectItem(properties, "gep_val_svf_type_id")->valueint;
+                    const SVFType* gepValType = pag->getSVFType(gep_val_svf_type_id);
                     GepValVar* var = new GepValVar(id, type, gepValType, ValVar::GepValNode);
                     pag->addInitValNodeFromDB(var);
                     NodeIDAllocator::get()->increaseNumOfValues();
@@ -2745,8 +2720,8 @@ void GraphDBClient::readPAGNodesFromDB(lgraph::RpcClient* connection, const std:
                     bool is_uncalled = cJSON_IsTrue(cJSON_GetObjectItem(properties, "is_uncalled"));
                     bool is_not_return = cJSON_IsTrue(cJSON_GetObjectItem(properties, "is_not_ret"));
                     bool sup_var_arg = cJSON_IsTrue(cJSON_GetObjectItem(properties, "sup_var_arg"));
-                    std::string fun_type_name = cJSON_GetObjectItem(properties, "fun_type_name")->valuestring;
-                    const SVFFunctionType* funcType = SVFUtil::dyn_cast<SVFFunctionType>(pag->getSVFType(fun_type_name));
+                    int fun_type_id = cJSON_GetObjectItem(properties, "fun_type_id")->valueint;
+                    const SVFFunctionType* funcType = SVFUtil::dyn_cast<SVFFunctionType>(pag->getSVFType(fun_type_id));
                     FunObjVar* var = new FunObjVar(id, type, objTypeInfo, is_decl, intrinsic, is_addr_taken, is_uncalled, is_not_return, sup_var_arg, funcType, ObjVar::FunObjNode);
                     std::string all_args_node_ids = cJSON_GetObjectItem(properties, "all_args_node_ids")->valuestring;
                     if (!all_args_node_ids.empty())
@@ -2814,8 +2789,8 @@ void GraphDBClient::readPAGNodesFromDB(lgraph::RpcClient* connection, const std:
 
 ObjTypeInfo* GraphDBClient::parseObjTypeInfoFromDB(cJSON* properties, SVFIR* pag)
 {
-    std::string obj_type_info_type_name = cJSON_GetObjectItem(properties, "obj_type_info_type_name")->valuestring;
-    const SVFType* objTypeInfoType = pag->getSVFType(obj_type_info_type_name);
+    int obj_type_info_type_id = cJSON_GetObjectItem(properties, "obj_type_info_type_id")->valueint;
+    const SVFType* objTypeInfoType = pag->getSVFType(obj_type_info_type_id);
     int obj_type_info_flags = cJSON_GetObjectItem(properties, "obj_type_info_flags")->valueint;
     int obj_type_info_max_offset_limit = cJSON_GetObjectItem(properties, "obj_type_info_max_offset_limit")->valueint;
     int obj_type_info_elem_num = cJSON_GetObjectItem(properties, "obj_type_info_elem_num")->valueint;
@@ -3315,11 +3290,11 @@ ICFGNode* GraphDBClient::parseRetICFGNodeFromDBResult(const cJSON* node, SVFIR* 
     SVFBasicBlock* bb = funObjVar->getBasicBlockGraph()->getGNode(bb_id);
 
     // parse retICFGNode svfType
-    std::string svfTypeName = cJSON_GetObjectItem(properties, "svf_type")->valuestring;
-    const SVFType* type = pag->getSVFType(svfTypeName);
+    int svfTypeId = cJSON_GetObjectItem(properties, "svf_type_id")->valueint;
+    const SVFType* type = pag->getSVFType(svfTypeId);
     if (nullptr == type)
     {
-        SVFUtil::outs() << "Warning: [parseRetICFGNodeFromDBResult] No matching SVFType found for: " << svfTypeName << "\n";
+        SVFUtil::outs() << "Warning: [parseRetICFGNodeFromDBResult] No matching SVFType found for: " << svfTypeId << "\n";
     }
 
     // create RetICFGNode Instance 
@@ -3391,11 +3366,11 @@ ICFGNode* GraphDBClient::parseCallICFGNodeFromDBResult(const cJSON* node, SVFIR*
     SVFBasicBlock* bb = funObjVar->getBasicBlockGraph()->getGNode(bb_id);
 
     // parse CallICFGNode svfType
-    std::string svfTypeName = cJSON_GetObjectItem(properties, "svf_type")->valuestring;
-    const SVFType* type = pag->getSVFType(svfTypeName);
+    int svfTypeId = cJSON_GetObjectItem(properties, "svf_type_id")->valueint;
+    const SVFType* type = pag->getSVFType(svfTypeId);
     if (nullptr == type)
     {
-        SVFUtil::outs() << "Warning: [parseCallICFGNodeFromDBResult] No matching SVFType found for: " << svfTypeName << "\n";
+        SVFUtil::outs() << "Warning: [parseCallICFGNodeFromDBResult] No matching SVFType found for: " << svfTypeId << "\n";
     }
 
     // parse CallICFGNode calledFunObjVar

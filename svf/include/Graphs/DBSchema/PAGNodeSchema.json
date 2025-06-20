@@ -18,8 +18,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -55,8 +55,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -98,8 +98,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -135,8 +135,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -190,8 +190,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -220,8 +220,8 @@
                     "index":false
                 },
                 {
-                    "name":"gep_val_svf_type_name",
-                    "type":"STRING",
+                    "name":"gep_val_svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -232,9 +232,9 @@
                     "index":false
                 },
                 {
-                    "name":"ap_gep_pointee_type_name",
-                    "type":"STRING",
-                    "optional":true,
+                    "name":"ap_gep_pointee_type_id",
+                    "type":"INT32",
+                    "optional":false,
                     "index":false
                 },
                 {
@@ -263,8 +263,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -287,8 +287,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -336,8 +336,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -385,8 +385,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -409,8 +409,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -458,8 +458,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -482,8 +482,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -531,8 +531,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -555,8 +555,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -621,8 +621,8 @@
                     "index":false
                 },
                 {
-                    "name":"fun_type_name",
-                    "type":"STRING",
+                    "name":"fun_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -712,8 +712,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -761,8 +761,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -804,8 +804,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -847,8 +847,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -890,8 +890,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -933,8 +933,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -982,8 +982,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1037,8 +1037,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1080,8 +1080,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1104,8 +1104,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1153,8 +1153,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1177,8 +1177,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1226,8 +1226,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1250,8 +1250,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1299,8 +1299,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1323,8 +1323,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1378,8 +1378,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1402,8 +1402,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1463,8 +1463,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1487,8 +1487,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1536,8 +1536,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1585,8 +1585,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1634,8 +1634,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1677,8 +1677,8 @@
                     "index":false
                 },
                 {
-                    "name":"svf_type_name",
-                    "type":"STRING",
+                    "name":"svf_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },
@@ -1701,8 +1701,8 @@
                     "index":false
                 },
                 {
-                    "name":"obj_type_info_type_name",
-                    "type":"STRING",
+                    "name":"obj_type_info_type_id",
+                    "type":"INT32",
                     "optional":false,
                     "index":false
                 },

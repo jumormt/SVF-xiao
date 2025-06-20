@@ -223,7 +223,7 @@ std::string CallICFGNode::toDBString() const
     ", bb_id: " + std::to_string(getBB()->getId()) +
     ", fun_obj_var_id: " + std::to_string(getFun()->getId()) +
     ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
-    ", svf_type:'" + getType()->toString() + "'" +
+    ", svf_type_id:" + std::to_string(getType()->getId()) + 
     ", ap_nodes:'" + GraphDBClient::getInstance().extractNodesIds(getActualParms()) +"'" +
     called_fun_obj_var_id +
     ", is_vararg: " + (isVarArg() ? "true" : "false") +
@@ -261,7 +261,7 @@ std::string RetICFGNode::toDBString() const
     ", bb_id: " + std::to_string(getBB()->getId()) +
     ", fun_obj_var_id: " + std::to_string(getFun()->getId()) +
     ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
-    ", svf_type:'" + getType()->toString() + "'"+"})";
+    ", svf_type_id:" + std::to_string(getType()->getId()) + "})";
     return queryStatement;
 }
 

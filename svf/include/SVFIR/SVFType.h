@@ -232,15 +232,15 @@ private:
     StInfo* typeinfo;   ///< SVF's TypeInfo
     bool isSingleValTy; ///< The type represents a single value, not struct or
     u32_t byteSize; ///< LLVM Byte Size
+    u32_t id;
     ///< array
 
 protected:
-    SVFType(bool svt, SVFTyKind k, u32_t Sz = 1)
+    SVFType(bool svt, SVFTyKind k, u32_t i = 0, u32_t Sz = 1)
         : kind(k), typeinfo(nullptr),
-          isSingleValTy(svt), byteSize(Sz)
+          isSingleValTy(svt), byteSize(Sz), id(i)
     {
     }
-
 public:
     SVFType(void) = delete;
     virtual ~SVFType() {}
@@ -256,6 +256,11 @@ public:
 
     virtual void print(std::ostream& os) const = 0;
 
+
+    u32_t getId() const
+    {
+        return id;
+    }
 
     inline void setTypeInfo(StInfo* ti)
     {
@@ -310,13 +315,13 @@ class SVFPointerType : public SVFType
     friend class SVFIRReader;
 
 public:
-    SVFPointerType(u32_t byteSize = 1)
-        : SVFType(true, SVFPointerTy, byteSize)
+    SVFPointerType(u32_t i, u32_t byteSize = 1)
+        : SVFType(true, SVFPointerTy, i, byteSize)
     {
     }
 
-    SVFPointerType(u32_t byteSize, bool isSingleValTy)
-        : SVFType(isSingleValTy, SVFPointerTy, byteSize)
+    SVFPointerType(u32_t id, u32_t byteSize, bool isSingleValTy)
+        : SVFType(isSingleValTy, SVFPointerTy, id, byteSize)
     {
         
     }
@@ -331,10 +336,10 @@ public:
     std::string toDBString() const
     {
         std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
-        const std::string queryStatement ="CREATE (n:SVFPointerType {type_name:'" + toString() +
-        "', svf_i8_type_name:'" + getSVFInt8Type()->toString() +
-        "', svf_ptr_type_name:'" + getSVFPtrType()->toString() + 
-        "', kind:" + std::to_string(getKind()) + 
+        const std::string queryStatement ="CREATE (n:SVFPointerType {id:" + std::to_string(getId()) +
+        ", svf_i8_type_id:" + std::to_string(getSVFInt8Type()->getId()) +
+        ", svf_ptr_type_id:" + std::to_string(getSVFPtrType()->getId()) + 
+        ", kind:" + std::to_string(getKind()) + 
         ", is_single_val_ty:" + is_single_val_ty + 
         ", byte_size:" + std::to_string(getByteSize()) + "})";
         return queryStatement;
@@ -350,9 +355,9 @@ private:
     short signAndWidth; ///< For printing
 
 public:
-    SVFIntegerType(u32_t byteSize = 1) : SVFType(true, SVFIntegerTy, byteSize) {}
-    SVFIntegerType(u32_t byteSize, bool isSingleValTy,short signAndWidth)
-        : SVFType(isSingleValTy, SVFIntegerTy, byteSize)
+    SVFIntegerType(u32_t i, u32_t byteSize = 1) : SVFType(true, SVFIntegerTy, i, byteSize) {}
+    SVFIntegerType(u32_t i, u32_t byteSize, bool isSingleValTy,short signAndWidth)
+        : SVFType(isSingleValTy, SVFIntegerTy, i, byteSize)
     {
         this->signAndWidth = signAndWidth;
     }
@@ -381,10 +386,10 @@ public:
     std::string toDBString() const
     {
         std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
-        const std::string queryStatement ="CREATE (n:SVFIntegerType {type_name:'" + toString() +
-        "', svf_i8_type_name:'" + getSVFInt8Type()->toString() +
-        "', svf_ptr_type_name:'" + getSVFPtrType()->toString() + 
-        "', kind:" + std::to_string(getKind()) + 
+        const std::string queryStatement ="CREATE (n:SVFIntegerType {id:" + std::to_string(getId()) +
+        ", svf_i8_type_id:" + std::to_string(getSVFInt8Type()->getId()) +
+        ", svf_ptr_type_id:" + std::to_string(getSVFPtrType()->getId()) + 
+        ", kind:" + std::to_string(getKind()) + 
         ", is_single_val_ty:" + is_single_val_ty + 
         ", byte_size:" + std::to_string(getByteSize()) +
         ", single_and_width:" + std::to_string(getSignAndWidth()) + "})";
@@ -403,13 +408,13 @@ private:
     bool varArg;
 
 public:
-    SVFFunctionType(const SVFType* rt, const std::vector<const SVFType*>& p, bool isvararg)
-        : SVFType(false, SVFFunctionTy, 1), retTy(rt), params(p), varArg(isvararg)
+    SVFFunctionType(u32_t i, const SVFType* rt, const std::vector<const SVFType*>& p, bool isvararg)
+        : SVFType(false, SVFFunctionTy,  i, 1), retTy(rt), params(p), varArg(isvararg)
     {
     }
 
-    SVFFunctionType(bool svt, u32_t byteSize)
-        : SVFType(svt, SVFFunctionTy, byteSize)
+    SVFFunctionType(u32_t id, bool svt, u32_t byteSize)
+        : SVFType(svt, SVFFunctionTy, id, byteSize)
     {
     }
 
@@ -455,10 +460,15 @@ class SVFStructType : public SVFType
 private:
     /// @brief Field for printing & debugging
     std::string name;
+    std::vector<const SVFType*> fields;
 
 public:
-    SVFStructType(u32_t byteSize = 1) : SVFType(false, SVFStructTy, byteSize) {}
-    SVFStructType(bool svt, u32_t byteSize, std::string name) : SVFType(svt, SVFStructTy, byteSize),name(name) {}
+    SVFStructType(u32_t i, std::vector<const SVFType *> &f, u32_t byteSize = 1) :
+        SVFType(false, SVFStructTy, i, byteSize), fields(f)
+    {
+    }
+
+    SVFStructType(u32_t i, bool svt, u32_t byteSize, std::string name) : SVFType(svt, SVFStructTy, i, byteSize),name(name) {}
 
     static inline bool classof(const SVFType* node)
     {
@@ -486,19 +496,17 @@ public:
         name = std::move(structName);
     }
 
-    std::string toDBString() const
+    const std::vector<const SVFType*>& getFieldTypes() const
     {
-        std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
-        const std::string queryStatement ="CREATE (n:SVFStructType {type_name:'" + toString() +
-        "', svf_i8_type_name:'" + getSVFInt8Type()->toString() +
-        "', svf_ptr_type_name:'" + getSVFPtrType()->toString() + 
-        "', kind:" + std::to_string(getKind()) + 
-        ", stinfo_node_id:" + std::to_string(getTypeInfo()->getStinfoId()) +
-        ", is_single_val_ty:" + is_single_val_ty + 
-        ", byte_size:" + std::to_string(getByteSize()) +
-        ", struct_name:'" + getName() + "'})";
-        return queryStatement;
+        return fields;
     }
+
+    void addFieldsType(const SVFType* type) 
+    {
+        fields.push_back(type);
+    }
+
+    std::string toDBString() const;
 };
 
 class SVFArrayType : public SVFType
@@ -511,12 +519,12 @@ private:
     const SVFType* typeOfElement; /// For printing & debugging
 
 public:
-    SVFArrayType(u32_t byteSize = 1)
-        : SVFType(false, SVFArrayTy, byteSize), numOfElement(0), typeOfElement(nullptr)
+    SVFArrayType(u32_t i, u32_t byteSize = 1)
+        : SVFType(false, SVFArrayTy, i, byteSize), numOfElement(0), typeOfElement(nullptr)
     {
     }
-    SVFArrayType(bool svt, u32_t byteSize, unsigned elemNum)
-        : SVFType(svt, SVFArrayTy, byteSize), numOfElement(elemNum), typeOfElement(nullptr)
+    SVFArrayType(u32_t id, bool svt, u32_t byteSize, unsigned elemNum)
+        : SVFType(svt, SVFArrayTy, id, byteSize), numOfElement(elemNum), typeOfElement(nullptr)
     {
         
     }
@@ -551,15 +559,15 @@ public:
     std::string toDBString() const
     {
         std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
-        const std::string queryStatement ="CREATE (n:SVFArrayType {type_name:'" +toString() +
-        "', svf_i8_type_name:'" + getSVFInt8Type()->toString() +
-        "', svf_ptr_type_name:'" + getSVFPtrType()->toString() + 
-        "', kind:" + std::to_string(getKind()) + 
+        const std::string queryStatement ="CREATE (n:SVFArrayType {id:" +std::to_string(getId()) +
+        ", svf_i8_type_id:" + std::to_string(getSVFInt8Type()->getId()) +
+        ", svf_ptr_type_id:" + std::to_string(getSVFPtrType()->getId()) + 
+        ", kind:" + std::to_string(getKind()) + 
         ", stinfo_node_id:" + std::to_string(getTypeInfo()->getStinfoId()) +
         ", is_single_val_ty:" + is_single_val_ty + 
         ", byte_size:" + std::to_string(getByteSize()) +
         ", num_of_element:" + std::to_string(getNumOfElement()) + 
-        ", type_of_element_node_type_name:'" + getTypeOfElement()->toString() + "'})";
+        ", type_of_element_node_type_id:" + std::to_string(getTypeOfElement()->getId()) + "})";
         return queryStatement;
     }
 
@@ -575,8 +583,8 @@ private:
     std::string repr; /// Field representation for printing
 
 public:
-    SVFOtherType(bool isSingleValueTy, u32_t byteSize = 1) : SVFType(isSingleValueTy, SVFOtherTy, byteSize) {}
-    SVFOtherType(bool isSingleValueTy, u32_t byteSize, std::string repr) : SVFType(isSingleValueTy, SVFOtherTy, byteSize),repr(repr) {}
+    SVFOtherType(u32_t i, bool isSingleValueTy, u32_t byteSize = 1) : SVFType(isSingleValueTy, SVFOtherTy, i, byteSize) {}
+    SVFOtherType(u32_t i, bool isSingleValueTy, u32_t byteSize, std::string repr) : SVFType(isSingleValueTy, SVFOtherTy, i, byteSize),repr(repr) {}
 
     static inline bool classof(const SVFType* node)
     {
@@ -607,10 +615,10 @@ public:
     std::string toDBString() const
     {
         std::string is_single_val_ty = isSingleValueType() ? "true" : "false";
-        const std::string queryStatement ="CREATE (n:SVFOtherType {type_name:'" + toString() +
-        "', svf_i8_type_name:'" + getSVFInt8Type()->toString() +
-        "', svf_ptr_type_name:'" + getSVFPtrType()->toString() + 
-        "', kind:" + std::to_string(getKind()) + 
+        const std::string queryStatement ="CREATE (n:SVFOtherType {id:" + std::to_string(getId()) +
+        ", svf_i8_type_id:" + std::to_string(getSVFInt8Type()->getId()) +
+        ", svf_ptr_type_id:" + std::to_string(getSVFPtrType()->getId()) + 
+        ", kind:" + std::to_string(getKind()) + 
         ", is_single_val_ty:" + is_single_val_ty + 
         ", byte_size:" + std::to_string(getByteSize()) +
         ", repr:'" + getRepr() + "'})";
