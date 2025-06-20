@@ -116,6 +116,7 @@ class IntraCFGEdge : public ICFGEdge
     friend class SVFIRReader;
     friend class ICFG;
     friend class SVFIRBuilder;
+    friend class GraphDBClient;
 
 public:
     /// Constructor
@@ -174,6 +175,8 @@ private:
     {
         branchCondVal = bVal;
     }
+
+    std::string toDBString() const;
 };
 
 /*!
@@ -225,6 +228,8 @@ public:
     }
     //@}
     virtual const std::string toString() const;
+
+    std::string toDBString() const;
 };
 
 /*!
@@ -274,6 +279,8 @@ public:
     }
     //@}
     virtual const std::string toString() const;
+
+    std::string toDBString() const;
 };
 
 } // End namespace SVF
