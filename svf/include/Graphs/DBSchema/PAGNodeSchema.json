@@ -242,6 +242,12 @@
                     "type":"STRING",
                     "optional":true,
                     "index":false
+                },
+                {
+                    "name":"llvm_var_inst_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -688,6 +694,12 @@
                 },
                 {
                     "name":"func_annotation",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"val_name",
                     "type":"STRING",
                     "optional":false,
                     "index":false

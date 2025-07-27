@@ -186,6 +186,11 @@ std::string CallICFGNode::toDBString() const
     std::string virtual_fun_idx = "";
     std::string is_vir_call_inst = isVirtualCall() ? "true" : "false";
     std::string virtualFunAppendix = "";
+    int indFunPtrId = -1;
+    if (isIndirectCall())
+    {
+        indFunPtrId = getIndFunPtr()->getId();
+    }
     if (isVirtualCall())
     {
         fun_name_of_v_call = ", fun_name_of_v_call: '"+getFunNameOfVirtualCall()+"'";
@@ -228,6 +233,7 @@ std::string CallICFGNode::toDBString() const
     called_fun_obj_var_id +
     ", is_vararg: " + (isVarArg() ? "true" : "false") +
     ", is_vir_call_inst: " + (isVirtualCall() ? "true" : "false") +
+    ", ind_fun_ptr_var_id:" + std::to_string(indFunPtrId) +
     virtualFunAppendix+"})";
     return queryStatement;
 }

@@ -469,6 +469,7 @@ protected:
     SVFVar* vtabPtr;                /// virtual table pointer
     s32_t virtualFunIdx;            /// virtual function index of the virtual table(s) at a virtual call
     std::string funNameOfVcall;     /// the function name of this virtual call
+    const SVFVar* indFunPtr;
 
     /// Constructor to create empty CallICFGNode (for SVFIRReader/deserialization)
     CallICFGNode(NodeID id) : InterICFGNode(id, FunCallBlock), ret{} {}
@@ -637,6 +638,18 @@ public:
     }
 
     std::string toDBString() const;
+
+    inline void setIndFunPtr(const SVFVar* indFun)
+    {
+        assert(isIndirectCall() && "not a indirect call?");
+        indFunPtr = indFun;
+    }
+
+    inline const SVFVar* getIndFunPtr() const
+    {
+        assert(isIndirectCall() && "not a indirect call?");
+        return indFunPtr;
+    }
 };
 
 

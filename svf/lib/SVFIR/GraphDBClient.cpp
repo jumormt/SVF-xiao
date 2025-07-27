@@ -202,6 +202,7 @@ bool GraphDBClient::addCallGraphEdge2db(lgraph::RpcClient* connection,
             SVFUtil::outs() << "Warining: Failed to add callgraph edge to db " << dbname << " "
                             << result << "\n";
         }
+        // SVFUtil::outs()<<"CallGraph Edge Insert Query:"<<queryStatement<<"\n";
         return ret;
     }
     return false;
@@ -1136,7 +1137,7 @@ void GraphDBClient::addSVFTypeNodeFromDB(lgraph::RpcClient* connection, const st
             if (!properties)
                 continue;
 
-            u32_t id = static_cast<u32_t>(cJSON_GetObjectItem(properties, "id")->valueint);
+            u32_t id = static_cast<u32_t>(cJSON_GetObjectItem(properties, "st_info_id")->valueint);
             std::string fld_idx_vec = cJSON_GetObjectItem(properties, "fld_idx_vec")->valuestring;
             std::vector<u32_t> fldIdxVec = parseElements2Container<std::vector<u32_t>>(fld_idx_vec);
 
@@ -1732,8 +1733,24 @@ void GraphDBClient::readPAGEdgesFromDB(lgraph::RpcClient* connection, const std:
                 stmt->setCallEdgeLabelCounter(static_cast<u64_t>(call_edge_label_counter));
                 stmt->setStoreEdgeLabelCounter(static_cast<u64_t>(store_edge_label_counter));
                 stmt->setMultiOpndLabelCounter(static_cast<u64_t>(multi_opnd_label_counter));
-                std::string inst2_label_map = cJSON_GetObjectItem(properties,"inst2_label_map")->valuestring;
-                std::string var2_label_map = cJSON_GetObjectItem(properties,"var2_label_map")->valuestring; 
+                std::string inst2_label_map;
+                cJSON* inst2_label_map_item = cJSON_GetObjectItem(properties,"inst2_label_map");
+                if (nullptr != inst2_label_map_item->valuestring)
+                {
+                    inst2_label_map = inst2_label_map_item->valuestring;
+                } 
+                else {
+                    inst2_label_map = "";
+                }
+                std::string var2_label_map;
+                cJSON* var2_label_map_item = cJSON_GetObjectItem(properties,"var2_label_map");
+                if (nullptr != var2_label_map_item->valuestring)
+                {
+                    var2_label_map = var2_label_map_item->valuestring;
+                } 
+                else {
+                    var2_label_map = "";
+                }
                 Map<int, u32_t> inst2_label_map_ids = parseLabelMapFromString<Map<int, u32_t>>(inst2_label_map);
                 Map<int, u32_t> var2_label_map_ids = parseLabelMapFromString<Map<int, u32_t>>(var2_label_map);
                 if (!inst2_label_map_ids.empty())
@@ -2170,6 +2187,8 @@ void GraphDBClient::updateGepValVarAttributes(cJSON* properties, GepValVar* var,
     }
     parseAPIdxOperandPairsString(ap_idx_operand_pairs, pag, ap);
     var->setAccessPath(ap);
+    int llvm_var_inst_id = cJSON_GetObjectItem(properties, "llvm_var_inst_id")->valueint;
+    pag->addGepValObjFromDB(llvm_var_inst_id, var);
 }
 
 void GraphDBClient::parseAPIdxOperandPairsString(const std::string& ap_idx_operand_pairs, SVFIR* pag, AccessPath* ap)
@@ -2723,6 +2742,18 @@ void GraphDBClient::readPAGNodesFromDB(lgraph::RpcClient* connection, const std:
                     int fun_type_id = cJSON_GetObjectItem(properties, "fun_type_id")->valueint;
                     const SVFFunctionType* funcType = SVFUtil::dyn_cast<SVFFunctionType>(pag->getSVFType(fun_type_id));
                     FunObjVar* var = new FunObjVar(id, type, objTypeInfo, is_decl, intrinsic, is_addr_taken, is_uncalled, is_not_return, sup_var_arg, funcType, ObjVar::FunObjNode);
+                    std::string func_annotation = cJSON_GetObjectItem(properties, "func_annotation")->valuestring;
+                    if (!func_annotation.empty())
+                    {
+                        std::vector<std::string> func_annotation_vector;
+                        func_annotation_vector = deserializeAnnotations(func_annotation);
+                        ExtAPI::getExtAPI()->setExtFuncAnnotations(var, func_annotation_vector);
+                    }
+                    std::string val_name = cJSON_GetObjectItem(properties, "val_name")->valuestring;
+                    if (!val_name.empty())
+                    {
+                        var->setName(val_name);
+                    }
                     std::string all_args_node_ids = cJSON_GetObjectItem(properties, "all_args_node_ids")->valuestring;
                     if (!all_args_node_ids.empty())
                     {
@@ -3017,7 +3048,23 @@ void GraphDBClient::readICFGNodesFromDB(lgraph::RpcClient* connection, const std
                     icfgNode = parseCallICFGNodeFromDBResult(node, pag);
                     if (nullptr != icfgNode)
                     {
-                        icfg->addCallICFGNodeFromDB(SVFUtil::cast<CallICFGNode>(icfgNode));
+                        CallICFGNode* callNode = SVFUtil::cast<CallICFGNode>(icfgNode);
+                        icfg->addCallICFGNodeFromDB(callNode);
+                        if (callNode->isIndirectCall())
+                        {
+                            pag->addIndirectCallsites(callNode, callNode->getIndFunPtr()->getId());
+                            // SVFUtil::outs() << "Added indirect call site for node: " << callNode->getId() << "\n";
+                            pag->addCallSite(callNode);
+                        }
+                        else 
+                        {
+                            const FunObjVar* calledFunc = callNode->getCalledFunction();
+                            if (calledFunc != nullptr && calledFunc->isIntrinsic() == false )
+                            {
+                                // SVFUtil::outs() << "Added direct call site for node: " << callNode->getId() << "\n";
+                                pag->addCallSite(callNode);
+                            }
+                        }
                     }
                 }
                 
@@ -3423,6 +3470,20 @@ ICFGNode* GraphDBClient::parseCallICFGNodeFromDBResult(const cJSON* node, SVFIR*
     // create CallICFGNode Instance
     icfgNode = new CallICFGNode(id, bb, type, funObjVar, calledFunc, retICFGNode,
         is_vararg, is_vir_call_inst, virtualFunIdx, vtabPtr, fun_name_of_v_call);
+
+    int indFunPtrId = cJSON_GetObjectItem(properties, "ind_fun_ptr_var_id")->valueint;
+    if (indFunPtrId != -1)
+    {
+        SVFVar* indFunPtr = pag->getGNode(indFunPtrId);
+        if (nullptr != indFunPtr)
+        {
+            icfgNode->setIndFunPtr(indFunPtr);
+        }
+        else
+        {
+            SVFUtil::outs() << "Warning: [parseCallICFGNodeFromDBResult] No matching Indirect Function Pointer Var found for id: " << indFunPtrId << "\n";
+        }
+    }
     
     // parse CallICFGNode APNodes
     std::string ap_nodes = cJSON_GetObjectItem(properties, "ap_nodes")->valuestring;
@@ -3767,7 +3828,6 @@ CallGraphEdge* GraphDBClient::parseCallGraphEdgeFromDB(const cJSON* edge, SVFIR*
     int csid = cJSON_GetObjectItem(properties,"csid")->valueint;
     std::string direct_call_set = cJSON_GetObjectItem(properties,"direct_call_set")->valuestring;
     std::string indirect_call_set = cJSON_GetObjectItem(properties, "indirect_call_set")->valuestring;
-
     int kind = cJSON_GetObjectItem(properties, "kind")->valueint;
 
     CallGraphNode* srcNode = callGraph->getGNode(src_id);
@@ -3794,7 +3854,6 @@ CallGraphEdge* GraphDBClient::parseCallGraphEdgeFromDB(const cJSON* edge, SVFIR*
             CallICFGNode* node = SVFUtil::dyn_cast<CallICFGNode>(pag->getICFG()->getGNode(directCallId));
             callGraph->addCallSiteFromDB(node, node->getFun(), cgEdge->getCallSiteID());
             cgEdge->addDirectCallSite(node);
-            pag->addCallSite(node);
             callGraph->callinstToCallGraphEdgesMap[node].insert(cgEdge);
         }
     }
@@ -3809,7 +3868,6 @@ CallGraphEdge* GraphDBClient::parseCallGraphEdgeFromDB(const cJSON* edge, SVFIR*
             callGraph->numOfResolvedIndCallEdge++;
             callGraph->addCallSiteFromDB(node, node->getFun(), cgEdge->getCallSiteID());
             cgEdge->addInDirectCallSite(node);
-            pag->addCallSite(node);
             callGraph->callinstToCallGraphEdgesMap[node].insert(cgEdge);
         }
     }

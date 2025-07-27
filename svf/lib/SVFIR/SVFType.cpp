@@ -106,7 +106,7 @@ std::string SVFFunctionType::toDBString() const
 
 std::string StInfo::toDBString() const
 {
-    const std::string queryStatement ="CREATE (n:StInfo {id:" + std::to_string(getStinfoId()) +
+    const std::string queryStatement ="CREATE (n:StInfo {st_info_id:" + std::to_string(getStinfoId()) +
     ", fld_idx_vec:'" + GraphDBClient::getInstance().extractIdxs(getFlattenedFieldIdxVec()) +
     "', elem_idx_vec:'" + GraphDBClient::getInstance().extractIdxs(getFlattenedElemIdxVec()) + 
     "', finfo_types:'" + GraphDBClient::getInstance().extractSVFTypes(getFlattenFieldTypes()) + 

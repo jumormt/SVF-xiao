@@ -267,6 +267,12 @@
                     "type":"STRING",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"ind_fun_ptr_var_id",
+                    "type":"INT32",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },

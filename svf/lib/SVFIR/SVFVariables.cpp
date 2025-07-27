@@ -693,8 +693,9 @@ std::string GepValVar::toDBString()const
     getValVarNodeFieldsStmt() 
     + ", kind:" + std::to_string(getNodeKind())
     + ", base_val_id:" + std::to_string(getBaseNode()->getId())
-    + ", gep_val_svf_type_id:"+std::to_string(getType()->getId()) +
+    + ", gep_val_svf_type_id:"+std::to_string(getType()->getId()) 
     + ", ap_fld_idx:"+std::to_string(getConstantFieldIdx())
+    + ", llvm_var_inst_id:" + std::to_string(getLLVMVarInstID()) 
     + accessPathFieldsStr.str()
     + "})";
     return queryStatement;
@@ -879,6 +880,15 @@ std::string FunObjVar::toDBString() const
     {
         annotationsStr = GraphDBClient::getInstance().serializeAnnotations(annotationsVector);
     }
+    std::ostringstream valNameStr;
+    if (getName().empty())
+    {
+        valNameStr << ",val_name:''";
+    }
+    else 
+    {
+        valNameStr << ",val_name:'"<<getName()<<"'";
+    }
     const std::string queryStatement ="CREATE (n:FunObjVar {"+
     getBaseObjVarNodeFieldsStmt() 
     + ", kind:" + std::to_string(getNodeKind())
@@ -901,6 +911,7 @@ std::string FunObjVar::toDBString() const
     + ", bb2_p_dom_level:'" + GraphDBClient::getInstance().extractLabelMap2String(&(getLoopAndDomInfo()->getBBPDomLevel())) + "'"
     + ", bb2_pi_dom:'" + GraphDBClient::getInstance().extractBBsMap2String(&(getLoopAndDomInfo()->getBB2PIdom())) + "'"
     + ", func_annotation:'" + annotationsStr + "'"
+    + valNameStr.str()
     + "})";
     return queryStatement;
 }
