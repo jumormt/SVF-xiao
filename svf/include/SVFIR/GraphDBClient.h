@@ -125,6 +125,7 @@ public:
     void readBasicBlockGraphFromDB(lgraph::RpcClient* connection, const std::string& dbname);
     void readBasicBlockNodesFromDB(lgraph::RpcClient* connection, const std::string& dbname, FunObjVar* funObjVar);
     void readBasicBlockEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, FunObjVar* funObjVar);
+    void updateBasicBlockNodes(ICFG* icfg);
 
     /// read ICFGNodes & ICFGEdge from DB
     ICFG* buildICFGFromDB(lgraph::RpcClient* connection, const std::string& dbname, SVFIR* pag);
