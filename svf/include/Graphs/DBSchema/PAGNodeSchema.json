@@ -34,6 +34,12 @@
                     "type":"STRING",
                     "optional":true,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -77,6 +83,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -113,6 +125,12 @@
                     "name":"out_edge_kind_to_set_map",
                     "type":"STRING",
                     "optional":true,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
                     "index":false
                 }
             ]
@@ -167,6 +185,12 @@
                 {
                     "name":"arg_no",
                     "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -248,6 +272,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -321,6 +351,12 @@
                     "type":"INT32",
                     "optional":true,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -368,6 +404,12 @@
                 {
                     "name":"app_offset",
                     "type":"INT64",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -443,6 +485,12 @@
                     "type":"INT32",
                     "optional":true,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -515,6 +563,12 @@
                     "name":"obj_type_info_byte_size",
                     "type":"INT32",
                     "optional":true,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
                     "index":false
                 }
             ]
@@ -703,6 +757,12 @@
                     "type":"STRING",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },        
@@ -752,6 +812,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -793,6 +859,12 @@
                 {
                     "name":"icfg_node_id",
                     "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -838,6 +910,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -881,6 +959,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -922,6 +1006,12 @@
                 {
                     "name":"icfg_node_id",
                     "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -971,6 +1061,12 @@
                 {
                     "name":"dval",
                     "type":"DOUBLE",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -1028,6 +1124,12 @@
                     "type":"INT64",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -1069,6 +1171,12 @@
                 {
                     "name":"icfg_node_id",
                     "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -1144,6 +1252,12 @@
                     "type":"INT32",
                     "optional":true,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -1217,6 +1331,12 @@
                     "type":"INT32",
                     "optional":true,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -1289,6 +1409,12 @@
                     "name":"obj_type_info_byte_size",
                     "type":"INT32",
                     "optional":true,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
                     "index":false
                 }
             ]
@@ -1367,6 +1493,12 @@
                 {
                     "name":"dval",
                     "type":"FLOAT",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -1454,6 +1586,12 @@
                     "type":"INT64",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -1527,6 +1665,12 @@
                     "type":"INT32",
                     "optional":true,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -1574,6 +1718,12 @@
                 {
                     "name":"call_graph_node_id",
                     "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -1625,6 +1775,12 @@
                     "type":"INT32",
                     "optional":false,
                     "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
+                    "index":false
                 }
             ]
         },
@@ -1666,6 +1822,12 @@
                 {
                     "name":"icfg_node_id",
                     "type":"INT32",
+                    "optional":false,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
                     "optional":false,
                     "index":false
                 }
@@ -1740,6 +1902,12 @@
                     "name":"obj_type_info_byte_size",
                     "type":"INT32",
                     "optional":true,
+                    "index":false
+                },
+                {
+                    "name":"source_loc",
+                    "type":"STRING",
+                    "optional":false,
                     "index":false
                 }
             ]

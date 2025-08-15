@@ -537,7 +537,7 @@ std::string SVFVar::getSVFVarNodeFieldsStmt() const
     ", svf_type_id:"+ std::to_string(getType()->getId()) +
     ", in_edge_kind_to_set_map:'" + GraphDBClient::getInstance().pagEdgeToSetMapTyToString(getInEdgeKindToSetMap()) +
     "', out_edge_kind_to_set_map:'" + GraphDBClient::getInstance().pagEdgeToSetMapTyToString(getOutEdgeKindToSetMap()) +
-    "'";
+    "'" + sourceLocToDBString();
     return fieldsStr;
 }
 

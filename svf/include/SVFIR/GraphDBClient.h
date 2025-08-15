@@ -167,6 +167,20 @@ public:
     void readPAGEdgesFromDB(lgraph::RpcClient* connection, const std::string& dbname, std::string edgeType, SVFIR* pag);
     void parseAPIdxOperandPairsString(const std::string& ap_idx_operand_pairs, SVFIR* pag, AccessPath* ap);
     void parseOpVarString(std::string& op_var_node_ids, SVFIR* pag, std::vector<SVFVar*>& opVarNodes);
+    std::string parseNodeSourceLocation(cJSON* node) const
+    {
+        cJSON* data = cJSON_GetObjectItem(node, "node");
+        if (!data)
+            return "";
+
+        cJSON* properties = cJSON_GetObjectItem(data, "properties");
+        if (!properties)
+            return "";
+
+        std::string sourceLocation = cJSON_GetObjectItem(properties, "source_loc")->valuestring;
+
+        return sourceLocation.empty() ? "" : sourceLocation;
+    }
 
     ObjTypeInfo* parseObjTypeInfoFromDB(cJSON* properties, SVFIR* pag);
 

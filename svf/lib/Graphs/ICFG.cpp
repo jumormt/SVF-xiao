@@ -54,7 +54,8 @@ std::string FunEntryICFGNode::toDBString() const
     ", fun_obj_var_id:" + std::to_string(getFun()->getId()) + 
     ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
     ", bb_id:" + std::to_string(getBB()->getId()) +
-    ", fp_nodes:'" + GraphDBClient::getInstance().extractNodesIds(getFormalParms()) +"'})";
+    ", fp_nodes:'" + GraphDBClient::getInstance().extractNodesIds(getFormalParms()) +"'"+
+    sourceLocToDBString() + "})";
     return queryStatement;
 }
 
@@ -83,7 +84,7 @@ std::string FunExitICFGNode::toDBString() const
     ", fun_obj_var_id:" + std::to_string(getFun()->getId()) + 
     ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
     ", bb_id:" + std::to_string(getBB()->getId()) +
-    formalRetId + "})";
+    formalRetId + sourceLocToDBString() + "})";
     return queryStatement;
 }
 
@@ -234,7 +235,7 @@ std::string CallICFGNode::toDBString() const
     ", is_vararg: " + (isVarArg() ? "true" : "false") +
     ", is_vir_call_inst: " + (isVirtualCall() ? "true" : "false") +
     ", ind_fun_ptr_var_id:" + std::to_string(indFunPtrId) +
-    virtualFunAppendix+"})";
+    virtualFunAppendix+ sourceLocToDBString() +"})";
     return queryStatement;
 }
 
@@ -267,7 +268,7 @@ std::string RetICFGNode::toDBString() const
     ", bb_id: " + std::to_string(getBB()->getId()) +
     ", fun_obj_var_id: " + std::to_string(getFun()->getId()) +
     ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
-    ", svf_type_id:" + std::to_string(getType()->getId()) + "})";
+    ", svf_type_id:" + std::to_string(getType()->getId()) + sourceLocToDBString() + "})";
     return queryStatement;
 }
 
@@ -659,14 +660,16 @@ std::string IntraICFGNode::toDBString() const
     ", is_return: " + (isRetInst() ? "true" : "false") +
     ", fun_obj_var_id:" + std::to_string(getFun()->getId()) +
     ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'" +
-    ", bb_id:" + std::to_string(getBB()->getId()) + "})";
+    ", bb_id:" + std::to_string(getBB()->getId()) + 
+    sourceLocToDBString() + "})";
     return queryStatement;
 }
 
 std::string InterICFGNode::toDBString() const{
     const std::string queryStatement ="CREATE (n:InterICFGNode {id: " + std::to_string(getId()) +
     ", kind: " + std::to_string(getNodeKind()) + 
-    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'})";
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'"+
+    sourceLocToDBString() + "})";
     return queryStatement;
 }
 
@@ -674,7 +677,8 @@ std::string GlobalICFGNode::toDBString() const
 {
     const std::string queryStatement ="CREATE (n:GlobalICFGNode {id: " + std::to_string(getId()) +
     ", kind: " + std::to_string(getNodeKind()) + 
-    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts()) +"'})";
+    ", pag_edge_ids:'" + GraphDBClient::getInstance().extractEdgesIds(getSVFStmts())  +"'"+
+    sourceLocToDBString() + "})";
     return queryStatement;
 }
 /*!
