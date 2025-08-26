@@ -48,6 +48,7 @@ class SVFIR : public IRGraph
     friend class SVFIRWriter;
     friend class SVFIRReader;
     friend class BVDataPTAImpl;
+    friend class GraphDBClient;
 
 public:
     typedef Set<const CallICFGNode*> CallSiteSet;
@@ -502,6 +503,59 @@ public:
     /// Print SVFIR
     void print();
 
+protected:
+    /// Add a value (pointer) node
+    inline NodeID addValNodeFromDB(ValVar* node)
+    {
+        assert(node && "node cannot be nullptr.");
+        if (hasGNode(node->getId()))
+        {
+            ValVar* valvar = SVFUtil::cast<ValVar>(getGNode(node->getId()));
+            valvar->updateSVFValVarFromDB(node->getType(), node->getICFGNode());
+            return valvar->getId();
+        }
+        return addNode(node);
+    }
+    /// Add a memory obj node
+    inline NodeID addObjNodeFromDB(ObjVar* node)
+    {
+        assert(node && "node cannot be nullptr.");
+        if (hasGNode(node->getId()))
+        {
+            ObjVar* objVar = SVFUtil::cast<ObjVar>(getGNode(node->getId()));
+            objVar->updateObjVarFromDB(node->getType());
+            return objVar->getId();
+        }
+        return addNode(node);
+    }
+
+    inline NodeID addInitValNodeFromDB(ValVar* node)
+    {
+        return addValNode(node);
+    }
+
+    inline NodeID addBaseObjNodeFromDB(BaseObjVar* node)
+    {
+        memToFieldsMap[node->getId()].set(node->getId());
+        return addObjNode(node);
+    }
+
+    inline NodeID addDummyObjNodeFromDB(DummyObjVar* node)
+    {
+        if (idToObjTypeInfoMap().find(node->getId()) == idToObjTypeInfoMap().end())
+        {
+            ObjTypeInfo* ti = node->getTypeInfo();
+            idToObjTypeInfoMap()[node->getId()] = ti;
+            return addObjNode(node);
+        }
+        else
+        {
+            return addObjNode(node);
+        }
+    }
+
+    void addGepObjNodeFromDB(GepObjVar* gepObj);
+
 private:
 
     /// Map a SVFStatement type to a set of corresponding SVF statements
@@ -526,10 +580,22 @@ private:
         funEntryBlockNode->addFormalParms(arg);
         funArgsListMap[fun].push_back(arg);
     }
+
+    inline void addFunArgsFromDB(FunEntryICFGNode* funEntryBlockNode, FunObjVar* fun, const SVFVar* arg)
+    {
+        funEntryBlockNode->addFormalParms(arg);
+        funArgsListMap[fun].push_back(arg);
+    }
     /// Add function returns
     inline void addFunRet(const FunObjVar* fun, const SVFVar* ret)
     {
         FunExitICFGNode* funExitBlockNode = icfg->getFunExitICFGNode(fun);
+        funExitBlockNode->addFormalRet(ret);
+        funRetMap[fun] = ret;
+    }
+
+    inline void addFunRetFromDB(FunExitICFGNode* funExitBlockNode, FunObjVar* fun, const SVFVar* ret)
+    {
         funExitBlockNode->addFormalRet(ret);
         funRetMap[fun] = ret;
     }
@@ -682,7 +748,7 @@ private:
     inline NodeID addConstantAggObjNode(const NodeID i, ObjTypeInfo* ti, const SVFType* type, const ICFGNode* node)
     {
         memToFieldsMap[i].set(i);
-        ConstAggObjVar* conObj = new ConstAggObjVar(i, ti, type, node);
+                ConstAggObjVar* conObj = new ConstAggObjVar(i, ti, type, node);
         return addObjNode(conObj);
     }
     inline NodeID addConstantDataObjNode(const NodeID i, ObjTypeInfo* ti, const SVFType* type, const ICFGNode* node)
@@ -791,42 +857,66 @@ private:
     /// Add callsites
     inline void addCallSite(const CallICFGNode* call)
     {
-        callSiteSet.insert(call);
+        // if (call->getId() == 9889 ||call->getId() == 9914 ||call->getId() == 9922 ||call->getId() == 9944 ||call->getId() == 10733 ||call->getId() == 10741 ||call->getId() == 10762 ||call->getId() == 10770 )
+        // {
+
+        // } else {
+            callSiteSet.insert(call);
+        //     SVFUtil::outs()<< "Adding callsite: " << call->getId() << "\n";
+        // }
+    }
+
+    inline void addGepValObjFromDB(NodeID curInstID, const GepValVar* gepValvar)
+    {
+        GepValObjMap[curInstID][std::make_pair(gepValvar->getBaseNode()->getId(), gepValvar->getAccessPath())] = gepValvar->getId();
     }
     /// Add an edge into SVFIR
     //@{
     /// Add Address edge
     AddrStmt* addAddrStmt(NodeID src, NodeID dst);
+    void addAddrStmtFromDB(AddrStmt* edge);
     /// Add Copy edge
     CopyStmt* addCopyStmt(NodeID src, NodeID dst, CopyStmt::CopyKind type);
+    void addCopyStmtFromDB(CopyStmt* edge);
 
     /// Add phi node information
     PhiStmt*  addPhiStmt(NodeID res, NodeID opnd, const ICFGNode* pred);
+    void addPhiStmtFromDB(PhiStmt* edge, SVFVar* src, SVFVar* dst);
     /// Add SelectStmt
     SelectStmt*  addSelectStmt(NodeID res, NodeID op1, NodeID op2, NodeID cond);
+    void addSelectStmtFromDB(SelectStmt* edge, SVFVar* src, SVFVar* dst);
     /// Add Copy edge
     CmpStmt* addCmpStmt(NodeID op1, NodeID op2, NodeID dst, u32_t predict);
+    void addCmpStmtFromDB(CmpStmt* edge, SVFVar* src, SVFVar* dst);
     /// Add Copy edge
     BinaryOPStmt* addBinaryOPStmt(NodeID op1, NodeID op2, NodeID dst,
                                   u32_t opcode);
+    void addBinaryOPStmtFromDB(BinaryOPStmt* edge, SVFVar* src, SVFVar* dst);
     /// Add Unary edge
     UnaryOPStmt* addUnaryOPStmt(NodeID src, NodeID dst, u32_t opcode);
+    void addUnaryOPStmtFromDB(UnaryOPStmt* edge, SVFVar* src, SVFVar* dst);
     /// Add BranchStmt
     BranchStmt* addBranchStmt(NodeID br, NodeID cond,
                               const BranchStmt::SuccAndCondPairVec& succs);
+    void addBranchStmtFromDB(BranchStmt* edge, SVFVar* src, SVFVar* dst);
     /// Add Load edge
     LoadStmt* addLoadStmt(NodeID src, NodeID dst);
+    void addLoadStmtFromDB(LoadStmt* edge);
     /// Add Store edge
     StoreStmt* addStoreStmt(NodeID src, NodeID dst, const ICFGNode* val);
+    void addStoreStmtFromDB(StoreStmt* edge, SVFVar* src, SVFVar* dst);
     /// Add Call edge
     CallPE* addCallPE(NodeID src, NodeID dst, const CallICFGNode* cs,
                       const FunEntryICFGNode* entry);
+    void addCallPEFromDB(CallPE* edge, SVFVar* src, SVFVar* dst);
     /// Add Return edge
     RetPE* addRetPE(NodeID src, NodeID dst, const CallICFGNode* cs,
                     const FunExitICFGNode* exit);
+    void addRetPEFromDB(RetPE* edge, SVFVar* src, SVFVar* dst);
     /// Add Gep edge
     GepStmt* addGepStmt(NodeID src, NodeID dst, const AccessPath& ap,
                         bool constGep);
+    void addGepStmtFromDB(GepStmt* edge);
     /// Add Offset(Gep) edge
     GepStmt* addNormalGepStmt(NodeID src, NodeID dst, const AccessPath& ap);
     /// Add Variant(Gep) edge

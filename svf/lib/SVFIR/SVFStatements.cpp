@@ -30,6 +30,7 @@
 #include "SVFIR/SVFStatements.h"
 #include "SVFIR/SVFIR.h"
 #include "Util/Options.h"
+#include "SVFIR/GraphDBClient.h"
 
 using namespace SVF;
 using namespace SVFUtil;
@@ -51,6 +52,16 @@ SVFStmt::SVFStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, bool real) :
     if(real)
     {
         edgeId = SVFIR::getPAG()->getTotalEdgeNum();
+        SVFIR::getPAG()->incEdgeNum();
+    }
+}
+
+SVFStmt::SVFStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, ICFGNode* icfgNode, bool real) :
+GenericPAGEdgeTy(s,d,k),value(value),basicBlock(nullptr),icfgNode(icfgNode),edgeId(eid)
+{
+    if(real)
+    {
+        edgeId = eid;
         SVFIR::getPAG()->incEdgeNum();
     }
 }
@@ -329,6 +340,8 @@ StoreStmt::StoreStmt(SVFVar* s, SVFVar* d, const ICFGNode* st)
     : AssignStmt(s, d, makeEdgeFlagWithStoreInst(SVFStmt::Store, st))
 {
 }
+StoreStmt::StoreStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, ICFGNode* icfgNode)
+: AssignStmt(s, d, k, eid, value, icfgNode) {}
 
 CallPE::CallPE(SVFVar* s, SVFVar* d, const CallICFGNode* i,
                const FunEntryICFGNode* e, GEdgeKind k)
@@ -336,11 +349,20 @@ CallPE::CallPE(SVFVar* s, SVFVar* d, const CallICFGNode* i,
 {
 }
 
+CallPE::CallPE(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, ICFGNode* icfgNode, const CallICFGNode* call,
+    const FunEntryICFGNode* entry): AssignStmt(s, d, k, eid, value, icfgNode), call(call), entry(entry) 
+{
+
+}
+
 RetPE::RetPE(SVFVar* s, SVFVar* d, const CallICFGNode* i,
              const FunExitICFGNode* e, GEdgeKind k)
     : AssignStmt(s, d, makeEdgeFlagWithCallInst(k, i)), call(i), exit(e)
 {
 }
+
+RetPE::RetPE(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, ICFGNode* icfgNode, const CallICFGNode* call,
+    const FunExitICFGNode* exit): AssignStmt(s, d, k, eid, value, icfgNode), call(call), exit(exit) {}
 
 MultiOpndStmt::MultiOpndStmt(SVFVar* r, const OPVars& opnds, GEdgeFlag k)
     : SVFStmt(opnds.at(0), r, k), opVars(opnds)
@@ -355,10 +377,22 @@ CmpStmt::CmpStmt(SVFVar* s, const OPVars& opnds, u32_t pre)
     assert(opnds.size() == 2 && "CmpStmt can only have two operands!");
 }
 
+CmpStmt::CmpStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, u32_t predicate, ICFGNode* icfgNode, const OPVars& opnds)
+: MultiOpndStmt(s, d, k, eid, value, icfgNode, opnds), predicate(predicate) 
+{
+    assert(opnds.size() == 2 && "CmpStmt can only have two operands!");
+}
+
 SelectStmt::SelectStmt(SVFVar* s, const OPVars& opnds, const SVFVar* cond)
     : MultiOpndStmt(s, opnds,
                     makeEdgeFlagWithAddionalOpnd(SVFStmt::Select, opnds.at(1))),
       condition(cond)
+{
+    assert(opnds.size() == 2 && "SelectStmt can only have two operands!");
+}
+
+SelectStmt::SelectStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, SVFVar* condition, ICFGNode* icfgNode, const OPVars& opnds)
+    : MultiOpndStmt(s, d, k, eid, value, icfgNode, opnds), condition(condition) 
 {
     assert(opnds.size() == 2 && "SelectStmt can only have two operands!");
 }
@@ -370,4 +404,472 @@ BinaryOPStmt::BinaryOPStmt(SVFVar* s, const OPVars& opnds, u32_t oc)
       opcode(oc)
 {
     assert(opnds.size() == 2 && "BinaryOPStmt can only have two operands!");
+}
+
+BinaryOPStmt::BinaryOPStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, u32_t opcode, ICFGNode* icfgNode, const OPVars& opnds)
+    : MultiOpndStmt(s, d, k, eid, value, icfgNode, opnds), opcode(opcode) 
+{
+    assert(opnds.size() == 2 && "BinaryOPStmt can only have two operands!");
+}
+
+std::string SVFStmt::generateSVFStmtEdgeFieldsStmt() const
+{
+    std::string valueStr = "";
+    if (nullptr != getValue())
+    {
+        valueStr += ", svf_var_node_id:"+ std::to_string(getValue()->getId());
+    }
+    else
+    {
+        valueStr += ", svf_var_node_id:-1";
+    }
+    std::string bb_id_str = "";
+    if (nullptr != getBB())
+    {
+        bb_id_str += ", bb_id:'" + std::to_string(getBB()->getParent()->getId()) + ":" + std::to_string(getBB()->getId())+"'";
+    }
+    else 
+    {
+        bb_id_str += ", bb_id:''";
+    }
+
+    std::string icfg_node_id_str = "";
+    if (nullptr != getICFGNode())
+    {
+        icfg_node_id_str += ", icfg_node_id:" + std::to_string(getICFGNode()->getId());
+    }
+    else 
+    {
+        icfg_node_id_str += ", icfg_node_id:-1";
+    }
+
+    std::string inst2_label_map = "";
+    if (nullptr != getInst2LabelMap() && !getInst2LabelMap()->empty())
+    {
+        inst2_label_map += ", inst2_label_map:'"+ GraphDBClient::getInstance().extractLabelMap2String(getInst2LabelMap()) +"'";
+    }
+
+    std::string var2_label_map = "";
+    if (nullptr != getVar2LabelMap() && !getVar2LabelMap()->empty())
+    {
+        var2_label_map += ", var2_label_map:'"+ GraphDBClient::getInstance().extractLabelMap2String(getVar2LabelMap()) +"'";
+    }
+    std::string fieldsStr = "";
+    fieldsStr += "edge_id: " + std::to_string(getEdgeID()) + 
+    valueStr +
+    bb_id_str +
+    icfg_node_id_str +
+    inst2_label_map +
+    var2_label_map +
+    ", call_edge_label_counter:" + std::to_string(*(getCallEdgeLabelCounter())) +
+    ", store_edge_label_counter:" + std::to_string(*(getStoreEdgeLabelCounter())) +
+    ", multi_opnd_label_counter:" + std::to_string(*(getMultiOpndLabelCounter())) +
+    ", edge_flag:" + std::to_string(getEdgeKindWithoutMask());
+    return fieldsStr;
+}
+
+std::string SVFStmt::toDBString() const
+{
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getSrcNode());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getDstNode());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(getDstNode()->getId()) +
+        " CREATE (n)-[r:SVFStmt{"+
+        generateSVFStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string AddrStmt::toDBString() const
+{
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:AddrStmt{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", arr_size:'" + GraphDBClient::getInstance().extractNodesIds(getArrSize()) +"'"+
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string CopyStmt::toDBString() const
+{
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:CopyStmt{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", copy_kind:" + std::to_string(getCopyKind()) +
+        "}]->(m)";
+    return queryStatement;  
+}
+
+std::string StoreStmt::toDBString() const
+{
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:StoreStmt{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string LoadStmt::toDBString() const
+{
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:LoadStmt{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string GepStmt::toDBString() const
+{
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    std::ostringstream accessPathStr;
+    accessPathStr << "";
+    if (!isVariantFieldGep())
+    {
+        accessPathStr << ", ap_fld_idx:"
+                      << std::to_string(getConstantStructFldIdx());
+    }
+    else
+    {
+        accessPathStr << ", ap_fld_idx:-1";
+    }
+
+    if (nullptr != getAccessPath().gepSrcPointeeType())
+    {
+        accessPathStr << ", ap_gep_pointee_type_id:"<< getAccessPath().gepSrcPointeeType()->getId();
+    }
+    else 
+    {
+        accessPathStr << ", ap_gep_pointee_type_id:-1";
+    }
+    if (!getAccessPath().getIdxOperandPairVec().empty())
+    {
+        accessPathStr << ", ap_idx_operand_pairs:'"
+                      << GraphDBClient::getInstance().IdxOperandPairsToString(
+                             &(getAccessPath().getIdxOperandPairVec()))
+                      << "'";
+    }
+
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:GepStmt{" + generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        accessPathStr.str() +
+        ", variant_field:" + (isVariantFieldGep()? "true" : "false") +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string CallPE::toDBString() const
+{
+    std::string callInstStr = "";
+    std::string funEntryICFGNodeStr = "";
+    if (nullptr != getCallInst()) 
+    {
+        callInstStr +=  ", call_icfg_node_id:" + std::to_string(getCallInst()->getId());
+    }
+    else
+    {
+        callInstStr +=  ", call_icfg_node_id:-1";
+    }
+
+    if (nullptr != getFunEntryICFGNode())
+    {
+        funEntryICFGNodeStr +=  ", fun_entry_icfg_node_id:" + std::to_string(getFunEntryICFGNode()->getId());
+    }
+    else 
+    {
+        funEntryICFGNodeStr +=  ", fun_entry_icfg_node_id:-1";
+    }
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:CallPE{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        callInstStr +
+        funEntryICFGNodeStr +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string RetPE::toDBString() const
+{
+    std::string callInstStr = "";
+    std::string funExitICFGNodeStr = "";
+    if (nullptr != getCallInst()) 
+    {
+        callInstStr +=  ", call_icfg_node_id:" + std::to_string(getCallInst()->getId());
+    }
+    else 
+    {
+        callInstStr +=  ", call_icfg_node_id:-1";
+    }
+
+    if (nullptr != getFunExitICFGNode())
+    {
+        funExitICFGNodeStr +=  ", fun_exit_icfg_node_id:" + std::to_string(getFunExitICFGNode()->getId());
+    }
+    else 
+    {
+        funExitICFGNodeStr +=  ", fun_exit_icfg_node_id:-1";
+    }
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:RetPE{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        callInstStr +
+        funExitICFGNodeStr +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string TDForkPE::toDBString() const
+{
+    std::string callInstStr = "";
+    std::string funEntryICFGNodeStr = "";
+    if (nullptr != getCallInst()) 
+    {
+        callInstStr +=  ", call_icfg_node_id:" + std::to_string(getCallInst()->getId());
+    }
+    else 
+    {
+        callInstStr +=  ", call_icfg_node_id:-1";
+    }
+
+    if (nullptr != getFunEntryICFGNode())
+    {
+        funEntryICFGNodeStr +=  ", fun_entry_icfg_node_id:" + std::to_string(getFunEntryICFGNode()->getId());
+    }
+    else 
+    {
+        funEntryICFGNodeStr +=  ", fun_entry_icfg_node_id:-1";
+    }
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:TDForkPE{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        callInstStr +
+        funEntryICFGNodeStr +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string TDJoinPE::toDBString() const
+{
+    std::string callInstStr = "";
+    std::string funExitICFGNodeStr = "";
+    if (nullptr != getCallInst()) 
+    {
+        callInstStr +=  ", call_icfg_node_id:" + std::to_string(getCallInst()->getId());
+    }
+    else
+    {
+        callInstStr +=  ", call_icfg_node_id:-1";
+    }
+
+    if (nullptr != getFunExitICFGNode())
+    {
+        funExitICFGNodeStr +=  ", fun_exit_icfg_node_id:" + std::to_string(getFunExitICFGNode()->getId());
+    }
+    else 
+    {
+        funExitICFGNodeStr +=  ", fun_exit_icfg_node_id:-1";
+    }
+    std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(getRHSVar()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(getLHSVar()->getId())+"}) WHERE n.id = " +
+        std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:TDJoinPE{"+
+        generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        callInstStr +
+        funExitICFGNodeStr +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string MultiOpndStmt::generateMultiOpndStmtEdgeFieldsStmt() const
+{
+    std::string stmt = generateSVFStmtEdgeFieldsStmt();
+    if (!getOpndVars().empty())
+    {
+        stmt += ", op_var_node_ids:'" + GraphDBClient::getInstance().extractNodesIds(getOpndVars())+"'";
+    }
+    else 
+    {
+        stmt += ", op_var_node_ids:''";
+    }
+    return stmt;
+}
+
+std::string MultiOpndStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getSrcNode());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getDstNode());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(SVFStmt::getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(SVFStmt::getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(SVFStmt::getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(SVFStmt::getDstNode()->getId()) +
+        " CREATE (n)-[r:MultiOpndStmt{"+
+        generateMultiOpndStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string PhiStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getSrcNode());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getDstNode());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(SVFStmt::getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(SVFStmt::getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(SVFStmt::getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(SVFStmt::getDstNode()->getId()) +
+        " CREATE (n)-[r:PhiStmt{"+
+        generateMultiOpndStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", op_icfg_nodes_ids:'" + GraphDBClient::getInstance().extractNodesIds(*(getOpICFGNodeVec())) + "'"+
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string SelectStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getSrcNode());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getDstNode());
+    const std::string queryStatement =
+       "MATCH (n:"+srcKind+"{id:"+std::to_string(SVFStmt::getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(SVFStmt::getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(SVFStmt::getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(SVFStmt::getDstNode()->getId()) +
+        " CREATE (n)-[r:SelectStmt{"+
+        generateMultiOpndStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", condition_svf_var_node_id:" + std::to_string(getCondition()->getId()) + 
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string CmpStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getSrcNode());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getDstNode());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(SVFStmt::getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(SVFStmt::getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(SVFStmt::getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(SVFStmt::getDstNode()->getId()) +
+        " CREATE (n)-[r:CmpStmt{"+
+        generateMultiOpndStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", predicate:" + std::to_string(getPredicate()) + 
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string BinaryOPStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getSrcNode());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getDstNode());
+    const std::string queryStatement =
+       "MATCH (n:"+srcKind+"{id:"+std::to_string(SVFStmt::getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(SVFStmt::getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(SVFStmt::getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(SVFStmt::getDstNode()->getId()) +
+        " CREATE (n)-[r:BinaryOPStmt{"+
+        generateMultiOpndStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", op_code:" + std::to_string(getOpcode()) + 
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string UnaryOPStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getSrcNode());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getDstNode());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(SVFStmt::getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(SVFStmt::getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(SVFStmt::getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(SVFStmt::getDstNode()->getId()) +
+        " CREATE (n)-[r:UnaryOPStmt{"+
+        generateSVFStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", op_code:" + std::to_string(getOpcode()) + 
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string BranchStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getSrcNode());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(SVFStmt::getDstNode());
+    const std::string queryStatement =
+        "MATCH (n:"+srcKind+"{id:"+std::to_string(SVFStmt::getSrcNode()->getId())+"}), (m:"+dstKind+"{id:"+std::to_string(SVFStmt::getDstNode()->getId())+"}) WHERE n.id = " +
+        std::to_string(SVFStmt::getSrcNode()->getId()) +
+        " AND m.id = " + std::to_string(SVFStmt::getDstNode()->getId()) +
+        " CREATE (n)-[r:BranchStmt{"+
+        generateSVFStmtEdgeFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) +
+        ", successors:'" + GraphDBClient::getInstance().extractSuccessorsPairSet2String(&(getSuccessors())) + "'"+ 
+        ", condition_svf_var_node_id:" + std::to_string(getCondition()->getId()) +
+        ", br_inst_svf_var_node_id:" + std::to_string(getBranchInst()->getId()) +
+        "}]->(m)";
+    return queryStatement;
+}
+
+std::string AssignStmt::toDBString() const
+{
+    const std::string srcKind = GraphDBClient::getInstance().getPAGNodeKindString(getRHSVar());
+    const std::string dstKind = GraphDBClient::getInstance().getPAGNodeKindString(getLHSVar());
+    const std::string queryStatement =
+        "MATCH (n:" + srcKind + "{id:" + std::to_string(getRHSVar()->getId()) +
+        "}), (m:" + dstKind + "{id:" + std::to_string(getLHSVar()->getId()) +
+        "}) WHERE n.id = " + std::to_string(getRHSVar()->getId()) +
+        " AND m.id = " + std::to_string(getLHSVar()->getId()) +
+        " CREATE (n)-[r:AssignStmt{" + generateAssignStmtFieldsStmt() +
+        ", kind:" + std::to_string(getEdgeKind()) + "}]->(m)";
+    return queryStatement;
 }
