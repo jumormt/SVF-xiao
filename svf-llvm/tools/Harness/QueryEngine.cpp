@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <fstream>
 #include <regex>
+#include <set>
 #include <stdexcept>
 
 using namespace SVF;
@@ -132,36 +133,71 @@ size_t editDistance(const std::string& fullA, const std::string& fullB)
 }
 } // namespace
 
-const CallGraphNode* QueryEngine::findFunction(const std::string& name) const
+std::vector<const CallGraphNode*>
+QueryEngine::findFunctions(const std::string& name) const
 {
-    std::vector<std::string> candidates;
+    std::vector<const CallGraphNode*> matches;
     for (const auto& it : *callgraph)
     {
         const CallGraphNode* node = it.second;
         if (!node->getFunction())
             continue;
         if (node->getFunction()->getName() == name)
-            return node;
-        candidates.push_back(node->getFunction()->getName());
+            matches.push_back(node);
     }
-    // Miss: suggest the 5 closest names. Dedup first (same-named statics),
-    // then order by (distance, name) for a deterministic hint.
-    std::sort(candidates.begin(), candidates.end());
-    candidates.erase(std::unique(candidates.begin(), candidates.end()),
-                     candidates.end());
-    std::stable_sort(candidates.begin(), candidates.end(),
-                     [&](const std::string& a, const std::string& b)
+    return matches;
+}
+
+const CallGraphNode* QueryEngine::findFunction(const std::string& name) const
+{
+    // Collect all unique candidate names for the hint, simultaneously
+    // checking for exact matches.
+    std::set<std::string> candidateSet;
+    std::vector<const CallGraphNode*> matches;
+    for (const auto& it : *callgraph)
     {
-        return editDistance(name, a) < editDistance(name, b);
+        const CallGraphNode* node = it.second;
+        if (!node->getFunction())
+            continue;
+        const std::string& fname = node->getFunction()->getName();
+        if (fname == name)
+            matches.push_back(node);
+        else
+            candidateSet.insert(fname);
+    }
+    if (matches.size() == 1)
+        return matches[0];
+    if (matches.size() > 1)
+    {
+        throw std::runtime_error(
+            "ambiguous function name '" + name + "': " +
+            std::to_string(matches.size()) +
+            " matches; use functions() to disambiguate");
+    }
+    // Miss: suggest the 5 closest names.
+    // Compute edit-distance ONCE per unique candidate (Fix 3: avoid
+    // recomputing inside a sort comparator which would be O(n log n) DP runs).
+    std::vector<std::pair<size_t, std::string>> scored;
+    scored.reserve(candidateSet.size());
+    for (const std::string& cand : candidateSet)
+        scored.emplace_back(editDistance(name, cand), cand);
+    // partial_sort: only the first 5 by (distance, name) — O(n log 5).
+    const size_t topN = std::min<size_t>(5, scored.size());
+    std::partial_sort(scored.begin(), scored.begin() + topN, scored.end(),
+                      [](const std::pair<size_t, std::string>& a,
+                         const std::pair<size_t, std::string>& b)
+    {
+        if (a.first != b.first)
+            return a.first < b.first;
+        return a.second < b.second;
     });
-    if (candidates.size() > 5)
-        candidates.resize(5);
+    scored.resize(topN);
     std::string msg = "unknown function '" + name + "'";
-    if (!candidates.empty())
+    if (!scored.empty())
     {
         msg += "; did you mean: ";
-        for (size_t i = 0; i < candidates.size(); ++i)
-            msg += (i ? ", " : "") + candidates[i];
+        for (size_t i = 0; i < scored.size(); ++i)
+            msg += (i ? ", " : "") + scored[i].second;
         msg += "?";
     }
     throw std::runtime_error(msg);
@@ -172,7 +208,18 @@ json QueryEngine::callEdges(const json& params, bool incoming) const
     if (!params.contains("func") || !params["func"].is_string())
         throw std::runtime_error("missing required string param: func");
     const std::string name = params["func"].get<std::string>();
-    const CallGraphNode* node = findFunction(name);
+
+    // Use findFunctions (merge semantics): collect results from ALL nodes
+    // that have this name (handles same-named statics across translation
+    // units). Never raises an ambiguity error — callers/callees always merge.
+    const std::vector<const CallGraphNode*> nodes = findFunctions(name);
+    if (nodes.empty())
+    {
+        // No matches: delegate to findFunction to produce the edit-distance
+        // hint (it will always throw).
+        findFunction(name); // throws
+    }
+    const size_t matchedFunctions = nodes.size();
 
     struct Row
     {
@@ -181,22 +228,26 @@ json QueryEngine::callEdges(const json& params, bool incoming) const
         bool direct;
     };
     std::vector<Row> rows;
-    const auto& edges = incoming ? node->getInEdges() : node->getOutEdges();
-    for (const CallGraphEdge* e : edges)
+    for (const CallGraphNode* node : nodes)
     {
-        // CallGraphNode names can differ from FunObjVar names only when fun
-        // is null, which addCallGraphNode never produces; keep getFunction()
-        // for symmetry with functions().
-        const std::string caller = e->getSrcNode()->getFunction()->getName();
-        const std::string callee = e->getDstNode()->getFunction()->getName();
-        for (auto it = e->directCallsBegin(); it != e->directCallsEnd(); ++it)
-            rows.push_back({caller, callee, *it, true});
-        for (auto it = e->indirectCallsBegin(); it != e->indirectCallsEnd();
-             ++it)
-            rows.push_back({caller, callee, *it, false});
+        const auto& edges = incoming ? node->getInEdges() : node->getOutEdges();
+        for (const CallGraphEdge* e : edges)
+        {
+            // CallGraphNode names can differ from FunObjVar names only when
+            // fun is null, which addCallGraphNode never produces; keep
+            // getFunction() for symmetry with functions().
+            const std::string caller = e->getSrcNode()->getFunction()->getName();
+            const std::string callee = e->getDstNode()->getFunction()->getName();
+            for (auto it = e->directCallsBegin(); it != e->directCallsEnd();
+                 ++it)
+                rows.push_back({caller, callee, *it, true});
+            for (auto it = e->indirectCallsBegin();
+                 it != e->indirectCallsEnd(); ++it)
+                rows.push_back({caller, callee, *it, false});
+        }
     }
     // Callsite sets are unordered; sort by (callsite id, callee) so output is
-    // stable across runs (one callsite can have several indirect callees).
+    // stable across runs even after merging rows from multiple nodes.
     std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b)
     {
         if (a.cs->getId() != b.cs->getId())
@@ -215,7 +266,8 @@ json QueryEngine::callEdges(const json& params, bool incoming) const
                          {"callsite", evidence::node(r.cs)},
                          {"direct", r.direct}});
     return json{{"function", name}, {"calls", std::move(calls)},
-                {"total", total}, {"truncated", truncated}};
+                {"total", total}, {"truncated", truncated},
+                {"matched_functions", matchedFunctions}};
 }
 
 json QueryEngine::schemaQ(const json&) const

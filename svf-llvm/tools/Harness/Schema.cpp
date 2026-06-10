@@ -426,17 +426,24 @@ json methods()
     a.push_back(method("callers",
         "Who calls this function? Each result is one call edge with callsite "
         "evidence (file:line of the call) and whether the call is direct or "
-        "resolved through a function pointer by the pointer analysis.",
+        "resolved through a function pointer by the pointer analysis. When "
+        "multiple static functions share the same name (across translation "
+        "units), results from ALL matching nodes are merged and "
+        "matched_functions reports how many were found.",
         json{{"func", param("string",
             "Exact function name (resolve with `functions` first).", true)}},
-        "[{caller, callee, callsite: <evidence node>, direct: bool}]"));
+        "{function, calls: [{caller, callee, callsite: <evidence node>, "
+        "direct: bool}], total, truncated, matched_functions: N}"));
     a.push_back(method("callees",
         "What does this function call? Includes indirect calls resolved by "
         "Andersen's analysis, so a function-pointer call reports its "
-        "possible concrete targets.",
+        "possible concrete targets. When multiple static functions share the "
+        "same name (across translation units), results from ALL matching "
+        "nodes are merged and matched_functions reports how many were found.",
         json{{"func", param("string",
             "Exact function name (resolve with `functions` first).", true)}},
-        "[{caller, callee, callsite: <evidence node>, direct: bool}]"));
+        "{function, calls: [{caller, callee, callsite: <evidence node>, "
+        "direct: bool}], total, truncated, matched_functions: N}"));
     a.push_back(method("cfg",
         "The control-flow graph of one function: its ICFG nodes (one per "
         "instruction/boundary, with source lines) and intraprocedural edges. "

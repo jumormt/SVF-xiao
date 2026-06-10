@@ -69,10 +69,22 @@ private:
     /// daemon/program it is talking to.
     nlohmann::json schemaQ(const nlohmann::json&) const;
     /// Shared body of callers()/callees(): walk the function's call-graph
-    /// node IN (incoming=callers) or OUT (callees) edges.
+    /// node IN (incoming=callers) or OUT (callees) edges. Merges results
+    /// from ALL name-matching nodes (handles same-named statics across TUs)
+    /// and adds "matched_functions": N to the result (1 in the common case).
     nlohmann::json callEdges(const nlohmann::json& params, bool incoming) const;
+    /// Returns ALL call-graph nodes whose function name exactly matches
+    /// ``name``. Returns an empty vector only when there are no matches
+    /// (the caller is responsible for raising the error). Never throws.
+    std::vector<const SVF::CallGraphNode*>
+    findFunctions(const std::string& name) const;
     /// Exact-name lookup over call-graph nodes. On miss throws
     /// std::runtime_error listing up to 5 closest names by edit distance.
+    /// On ambiguity (multiple statics with the same name) throws
+    /// std::runtime_error with a clear message directing the caller to
+    /// use functions() to disambiguate. Prefer findFunctions() + merge
+    /// semantics for callers/callees; reserve findFunction() for future
+    /// single-target uses that must reject ambiguity.
     const SVF::CallGraphNode* findFunction(const std::string& name) const;
 
     /// Module paths as given to the ctor; reported in schema().program.

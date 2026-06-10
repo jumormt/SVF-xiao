@@ -14,6 +14,10 @@ def build_fixture(tmpdir, name="demo.c"):
                            "-fno-discard-value-names", "-o", out, src])
     return out
 
+def build_fixtures(tmpdir, names):
+    """Build multiple fixtures; returns list of .ll paths in the same order."""
+    return [build_fixture(tmpdir, name) for name in names]
+
 class HarnessTest(unittest.TestCase):
     def test_help(self):
         out = subprocess.run([BIN, "--help"], capture_output=True, text=True)
@@ -39,10 +43,19 @@ class HarnessTest(unittest.TestCase):
             self.assertIn("icfg_nodes", j); self.assertIn("svfg_nodes", j)
 
     def oneshot(self, method, params, fixture="demo.c"):
+        """Run a one-shot query.
+
+        ``fixture`` may be a single filename (str) or a list of filenames for
+        multi-module tests.  All fixtures are compiled and passed to svf-harness
+        together.
+        """
         with tempfile.TemporaryDirectory() as td:
-            ll = build_fixture(td, fixture)
+            if isinstance(fixture, list):
+                lls = build_fixtures(td, fixture)
+            else:
+                lls = [build_fixture(td, fixture)]
             out = subprocess.run([BIN, "--oneshot", method, "--params",
-                                  json.dumps(params), ll],
+                                  json.dumps(params)] + lls,
                                  capture_output=True, text=True)
             self.assertEqual(out.returncode, 0, f"stderr={out.stderr} stdout={out.stdout}")
             return json.loads(out.stdout)
@@ -194,6 +207,13 @@ class HarnessTest(unittest.TestCase):
                               "callers", "callees"}, implemented)
         self.assertIn("evidence_record", j)
         self.assertIn("program", j)
+        # Drift guard: callers/callees returns docs must describe the real shape.
+        method_returns = {m["name"]: m.get("returns", "") for m in j["methods"]}
+        for mname in ("callers", "callees"):
+            self.assertIn("calls", method_returns[mname],
+                          f"{mname} returns doc missing 'calls'")
+            self.assertIn("truncated", method_returns[mname],
+                          f"{mname} returns doc missing 'truncated'")
 
     @unittest.skipUnless(
         os.path.isdir(os.path.join(HERE, "..", "..", "..", "..", "svf", "lib")),
@@ -250,6 +270,13 @@ class HarnessTest(unittest.TestCase):
             self.assertEqual(out.returncode, 1)
             j = json.loads(out.stdout)
             self.assertIn("make_buf", j["error"]["message"])
+
+    def test_duplicate_function_names_merged(self):
+        j = self.oneshot("callers", {"func": "helper"},
+                         fixture=["dup_a.c", "dup_b.c"])
+        self.assertEqual(j["matched_functions"], 2)
+        callers = {c["caller"] for c in j["calls"]}
+        self.assertEqual(callers, {"entry_a", "entry_b"})
 
 if __name__ == "__main__":
     unittest.main()
