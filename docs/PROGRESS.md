@@ -22,15 +22,18 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 4:** start Task 4.2 (callers/callees), Step 1
-  (failing tests: `callers("fill")` shows the `use_after_free` callsite with
-  file/line evidence; `callees("use_after_free")` includes make_buf/fill/free; new
-  fixture `tests/fixtures/indirect.c` proving Andersen-resolved indirect callees).
-  Implement via CallGraph node in/out edges, results
-  `{caller,callee,callsite:<evidence>,direct}`; unknown function → JSON-RPC error
-  with edit-distance hint (≤5 names). Task 4.1 done (commit c7f0029f, 11/11 tests):
-  schema() with 67 audited node_kinds — see Task 4.1 implementation notes in the
-  plan (second alias pair FormalParmPHI/ActualRetPHI; runtime implemented-flags).
+- **svf-harness-thin-slice Phase 4:** start Task 4.3 (cfg/defuse/pts/aliases),
+  Step 1 (failing tests: `cfg("use_after_free")` nodes with line numbers + intra
+  edges; `pts` of `b` → exactly one heap object at the malloc line; `aliases` of
+  `b` ⊇ fill's param `p`; `defuse` of `b` includes the free callsite + return
+  load; carry-over obligation: instruction-level locs via the `"fl"` evidence
+  path + one ir-truncation case). Needs the var-resolution helper
+  (`{file,line,name?}` / `{func,ret|arg}`) shared with Phase 5 — see plan
+  Task 4.3 bullets. Task 4.2 done (commit 70338a39, 17/17 tests): callers/callees
+  via CallGraphEdge direct/indirect callsite sets; reuse
+  `findFunction()` (CallGraphNode lookup + edit-distance hint) for Task 4.3's
+  func params; note indirect.c uses explicit stores (clang-10 memcpy-from-const
+  not resolved by SVF — see Task 4.2 notes).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -111,4 +114,21 @@ value-flow paths with structured evidence.
   toString prefixes == node_kinds, both diffs empty)
 - **Files:** svf-llvm/tools/Harness/{Schema.h,Schema.cpp,QueryEngine.h,
   QueryEngine.cpp,CMakeLists.txt,tests/run_tests.py}
+- **Blockers:** none
+
+### 2026-06-10 (Task 4.2)
+- **Focus:** svf-harness Phase 4 Task 4.2 — callers/callees + review carry-overs
+- **Completed:** callers/callees via CallGraphNode in/out edges with per-callsite
+  direct/indirect expansion + CallICFGNode evidence; findFunction() with
+  Levenshtein did-you-mean hint (≤5 names); indirect.c fixture (explicit stores —
+  clang-10 lowers initializer lists to memcpy-from-const which SVF doesn't
+  resolve, see plan notes); carry-overs: check_schema_kinds.py text-invariant
+  script (67 kinds) wired into run_tests.py, schema test asserts implemented set
+  + full method docs. Commit 70338a39.
+- **Tests:** 17/17 harness python tests green (new: callers_of_fill,
+  callees_of_use_after_free, indirect_callees_resolved, unknown_function_hint,
+  schema_kind_invariant); manual: callees(apply) → dbl/neg direct=false;
+  unknown 'make_buff' → "did you mean: make_buf, ..."
+- **Files:** svf-llvm/tools/Harness/{QueryEngine.h,QueryEngine.cpp,
+  tests/run_tests.py,tests/check_schema_kinds.py,tests/fixtures/indirect.c}
 - **Blockers:** none

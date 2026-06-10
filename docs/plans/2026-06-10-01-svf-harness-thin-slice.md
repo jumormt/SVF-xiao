@@ -467,7 +467,7 @@ no enum. Do NOT build node_kinds from GNodeK enums alone.
 
 ### Task 4.2: callers / callees
 
-- [ ] **Step 1: Failing test** — `callers("fill")` contains a callsite in
+- [x] **Step 1: Failing test** — `callers("fill")` contains a callsite in
   `use_after_free` (file/line evidence); `callees({"func":"use_after_free"})` includes
   `make_buf`, `fill`, `free`; add an indirect-call fixture `tests/fixtures/indirect.c`
   (function pointer table) and assert the indirect callee is resolved (this exercises
@@ -481,11 +481,40 @@ int apply(int which, int x) { op_t ops[2] = {dbl, neg}; return ops[which](x); }
 int main(void) { return apply(0, 21); }
 ```
 
-- [ ] **Step 2: Implement** via `CallGraph` node in/out edges; each edge result:
+- [x] **Step 2: Implement** via `CallGraph` node in/out edges; each edge result:
   `{caller, callee, callsite: <evidence node>, direct: bool}`. Unknown function name →
   JSON-RPC error with `hint` listing up to 5 closest names (use simple
   edit-distance over callgraph names).
-- [ ] **Step 3: PASS + Commit** — `harness: call graph navigation with indirect calls`
+- [x] **Step 3: PASS + Commit** — `harness: call graph navigation with indirect calls`
+
+**Task 4.2 implementation notes (commit 70338a39, 17/17 tests green):**
+- `QueryEngine::callEdges(params, incoming)` backs both methods: walk the
+  function's `CallGraphNode` in/out edges; a `CallGraphEdge` merges all calls
+  between two functions, so its `directCalls`/`indirectCalls` callsite sets
+  (`directCallsBegin/End`, `indirectCallsBegin/End`) are expanded to one result
+  row per (callsite, callee). Rows sorted by (callsite ICFG id, callee) — the
+  sets are unordered. Same 200-cap/total/truncated shape as `functions()`.
+- `findFunction()` returns the `CallGraphNode*` (not just `FunObjVar*`, since
+  the edges live on the node); on miss it throws with the 5 closest names by
+  iterative two-row Levenshtein (names capped at 64 chars), deduped + sorted
+  by (distance, name) for a deterministic hint.
+- **Fixture deviation (documented):** `indirect.c` fills the function-pointer
+  table with explicit element stores instead of the planned initializer list
+  `op_t ops[2] = {dbl, neg};`. Reason: clang 10 lowers the initializer to
+  `llvm.memcpy.p0i8.p0i8.i64` from a constant global aggregate
+  (`@__const.apply.ops`), and SVF's MEMCPY extapi summary does not propagate
+  the function pointers through that copy — Andersen leaves the callsite
+  unresolved (verified: same harness code resolves {dbl, neg} with explicit
+  stores; static-function names need no adaptation, they stay `dbl`/`neg`).
+  Possible SVF-core improvement, noted, not pursued in v0.
+- Carry-overs done: `tests/check_schema_kinds.py` (~55 lines, stdlib-only text
+  analysis; per-toString-body LEADING `rawstr << "..."` literals — first of
+  body or first after `if(...)`/`else`, which captures both alias pairs and
+  drops mid-body output like `"SVFStmt: ["`; edge names filtered by `Edge`
+  suffix; 67 kinds consistent), wired into run_tests.py with skipUnless on
+  svf/lib presence; `test_schema_self_describing` now asserts
+  {schema,summary,functions,callers,callees} ⊆ implemented set and that every
+  implemented method has dict params + non-empty returns.
 
 ### Task 4.3: cfg / defuse / pts / aliases
 
