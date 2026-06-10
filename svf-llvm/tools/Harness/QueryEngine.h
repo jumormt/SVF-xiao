@@ -11,6 +11,7 @@ class SVFIR;
 class SVFG;
 class AndersenBase;
 class CallGraph;
+class CallGraphNode;
 }
 
 class QueryEngine
@@ -28,6 +29,19 @@ public:
     /// determinism across TUs. Result includes "total" (pre-cap match count),
     /// "truncated" bool, and "functions" array; capped at 200 entries.
     nlohmann::json functions(const nlohmann::json& params) const;
+    /// Call-graph navigation for params["func"] (exact name). One result row
+    /// per callsite (a CallGraphEdge merges all calls between two functions;
+    /// we expand its direct/indirect callsite sets), each with callsite
+    /// evidence and direct=false for Andersen-resolved function-pointer
+    /// calls. Same {calls, total, truncated} cap-at-200 shape as functions().
+    nlohmann::json callers(const nlohmann::json& params) const
+    {
+        return callEdges(params, /*incoming=*/true);
+    }
+    nlohmann::json callees(const nlohmann::json& params) const
+    {
+        return callEdges(params, /*incoming=*/false);
+    }
 
     // One instance per process — SVF state (LLVMModuleSet/PAG) is global.
     // Never throw from callbacks passed into SVF/LLVM code.
@@ -54,6 +68,12 @@ private:
     /// block (module paths + summary counts) so a client can verify which
     /// daemon/program it is talking to.
     nlohmann::json schemaQ(const nlohmann::json&) const;
+    /// Shared body of callers()/callees(): walk the function's call-graph
+    /// node IN (incoming=callers) or OUT (callees) edges.
+    nlohmann::json callEdges(const nlohmann::json& params, bool incoming) const;
+    /// Exact-name lookup over call-graph nodes. On miss throws
+    /// std::runtime_error listing up to 5 closest names by edit distance.
+    const SVF::CallGraphNode* findFunction(const std::string& name) const;
 
     /// Module paths as given to the ctor; reported in schema().program.
     std::vector<std::string> modules;

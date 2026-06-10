@@ -185,8 +185,24 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual(len(j["methods"]), 11)
         for m in j["methods"]:
             self.assertTrue(m["description"]); self.assertIn("params", m)
+            if m["implemented"]:
+                # every dispatchable method must be fully documented
+                self.assertIsInstance(m["params"], dict)
+                self.assertTrue(m["returns"], f"missing returns: {m['name']}")
+        implemented = {m["name"] for m in j["methods"] if m["implemented"]}
+        self.assertLessEqual({"schema", "summary", "functions",
+                              "callers", "callees"}, implemented)
         self.assertIn("evidence_record", j)
         self.assertIn("program", j)
+
+    @unittest.skipUnless(
+        os.path.isdir(os.path.join(HERE, "..", "..", "..", "..", "svf", "lib")),
+        "svf/lib sources not present")
+    def test_schema_kind_invariant(self):
+        out = subprocess.run([sys.executable,
+                              os.path.join(HERE, "check_schema_kinds.py")],
+                             capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
     def test_schema_summary_consistency(self):
         # regression: dangling SVFG pointer corrupted svfg_nodes after schema()
@@ -205,6 +221,35 @@ class HarnessTest(unittest.TestCase):
                 self.assertLess(before["svfg_nodes"], 10000)  # demo fixture is tiny
             finally:
                 self.client(sock, "shutdown", {}); srv.wait(timeout=10)
+
+    def test_callers_of_fill(self):
+        j = self.oneshot("callers", {"func": "fill"})
+        self.assertEqual(j["function"], "fill")
+        callers = {c["caller"] for c in j["calls"]}
+        self.assertIn("use_after_free", callers)
+        c = [c for c in j["calls"] if c["caller"] == "use_after_free"][0]
+        self.assertTrue(c["callsite"]["loc"]["file"].endswith("demo.c"))
+        self.assertTrue(c["direct"])
+
+    def test_callees_of_use_after_free(self):
+        j = self.oneshot("callees", {"func": "use_after_free"})
+        callees = {c["callee"] for c in j["calls"]}
+        self.assertLessEqual({"make_buf", "fill", "free"}, callees)
+
+    def test_indirect_callees_resolved(self):
+        j = self.oneshot("callees", {"func": "apply"}, fixture="indirect.c")
+        indirect = [c for c in j["calls"] if not c["direct"]]
+        self.assertEqual({c["callee"] for c in indirect}, {"dbl", "neg"})
+
+    def test_unknown_function_hint(self):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            out = subprocess.run([BIN, "--oneshot", "callers", "--params",
+                                  json.dumps({"func": "make_buff"}), ll],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            j = json.loads(out.stdout)
+            self.assertIn("make_buf", j["error"]["message"])
 
 if __name__ == "__main__":
     unittest.main()
