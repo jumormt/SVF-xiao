@@ -341,7 +341,7 @@ exercised by later tasks (callers/cfg). `--params` is stripped before
 - Modify: `svf-harness.cpp`, `CMakeLists.txt`
 - Test: append to `tests/run_tests.py`
 
-- [ ] **Step 1: Failing test (daemon lifecycle)**
+- [x] **Step 1: Failing test (daemon lifecycle)**
 
 ```python
     def test_daemon_roundtrip(self):
@@ -370,14 +370,14 @@ exercised by later tasks (callers/cfg). `--params` is stripped before
         return resp["result"]
 ```
 
-- [ ] **Step 2: HarnessServer** — POSIX `AF_UNIX` stream socket: `socket/bind/listen`,
+- [x] **Step 2: HarnessServer** — POSIX `AF_UNIX` stream socket: `socket/bind/listen`,
   accept loop, read one line per connection, parse JSON-RPC 2.0
   (`{jsonrpc,id,method,params}`), call `QueryEngine::dispatch`, reply
   `{"jsonrpc":"2.0","id":id,"result":...}` or `{"error":{"code":-32601|-32602|-32000,
   "message":...,"data":{"hint":...}}}`, `unlink` socket on exit. `shutdown` method
   breaks the loop. Register SIGINT/SIGTERM handlers to unlink the socket.
 
-- [ ] **Step 3: Client mode in main** — every non-`serve` subcommand: build the same
+- [x] **Step 3: Client mode in main** — every non-`serve` subcommand: build the same
   JSON-RPC request (params from `--params` JSON or method-specific flags added later),
   connect to `--socket` (default: `/tmp/svf-harness-$(sha1(abs bitcode paths or cwd))
   .sock` — for the default, clients use `--socket` or the `SVF_HARNESS_SOCKET` env
@@ -385,7 +385,25 @@ exercised by later tasks (callers/cfg). `--params` is stripped before
   Remove `--oneshot` test path? **No** — keep `--oneshot` permanently (CI-friendly,
   no socket needed).
 
-- [ ] **Step 4: Build + test PASS; Commit** — `harness: daemon serve loop + JSON-RPC client mode`
+- [x] **Step 4: Build + test PASS; Commit** — `harness: daemon serve loop + JSON-RPC client mode`
+
+**Task 3.1 implementation notes (commit 227e72ee, 9/9 tests green):** Tests landed in a
+stricter form than the sketch above: `client()` returns the full JSON-RPC envelope (asserts
+`jsonrpc`/`id`), `test_daemon_roundtrip` also checks -32601 + `data.hint` for an unknown
+method and that the socket file is gone after shutdown; added `test_cli_client_subcommand`;
+client helper uses a 60 s `settimeout` (recv timeout instead of sleeps). Default socket id
+uses FNV-1a 64 (first 12 hex chars) of absolute module paths joined by ':', not sha1.
+Resolution order `--socket > SVF_HARNESS_SOCKET > hash default` lives in
+`resolveSocketPath()`; the client side (`resolveClientSocket()`) falls back to a unique
+`/tmp/svf-harness-*.sock` glob, else errors with a hint. `HarnessServer` binds+listens in
+the ctor (socket file exists when it returns; throws "daemon already running" after a live
+connect probe, unlinks stale files), `run()` is only the accept loop; 1 MiB request cap →
+-32600; SIGPIPE ignored; SIGINT/SIGTERM via sigaction without SA_RESTART → EINTR → cleanup.
+-32601 hint is built from `QueryEngine::methodNames()`, backed by the same static method
+table `dispatch()` uses (no duplicated method list). `dumpJson` moved to shared
+`JsonUtil.h` (namespace `harness`), used for stdout and all socket writes. Output contract
+split: oneshot errors stay `{"error":{...}}`; client mode prints the bare JSON-RPC error
+object `{code,message[,data]}` on exit 1 (matches what the daemon returns).
 
 ## Phase 4: Schema + graph navigation
 

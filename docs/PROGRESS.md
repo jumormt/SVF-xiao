@@ -22,12 +22,14 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 3:** start Task 3.1 (HarnessServer + client mode +
-  shutdown), Step 1 (failing daemon-lifecycle test `test_daemon_roundtrip` with
-  `client(sock, method, params)` JSON-RPC helper over Unix socket). Task 2.2 done
-  (commit cebb73e3): `functions(pattern)` + Evidence records + `--params`, 5 python
-  tests green. See Task 2.2 implementation notes in the plan for API deltas
-  (SVFValue.h moved to SVFIR/, sourceLoc "fl" vs "file" keys, FunObjVar accessors).
+- **svf-harness-thin-slice Phase 4:** start Task 4.1 (`schema()`), Step 1 (failing
+  test `test_schema_self_describing`: node_kinds/edge_kinds/methods with non-empty
+  descriptions, 11 methods). Mind the review-decision in the plan: node_kinds must
+  derive from `toString()` prefixes (incl. `FormalINPHISVFGNode`/`ActualOUTPHISVFGNode`
+  aliases), not GNodeK enums alone; `schema().methods` should reuse
+  `QueryEngine::methodNames()`/method table added in Task 3.1. Task 3.1 done (commit
+  227e72ee): daemon + client mode, 9 python tests green — see Task 3.1 implementation
+  notes in the plan (socket resolution, error contracts, method registry).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -79,4 +81,18 @@ value-flow paths with structured evidence.
   manual: pattern "make" → make_buf only; bad JSON / bad regex → JSON error exit 1
 - **Files:** svf-llvm/tools/Harness/{Evidence.h,Evidence.cpp,QueryEngine.h,
   QueryEngine.cpp,svf-harness.cpp,CMakeLists.txt,tests/run_tests.py}
+- **Blockers:** none
+
+### 2026-06-10 (Task 3.1)
+- **Focus:** svf-harness Phase 3 Task 3.1 — daemon serve loop + JSON-RPC client mode
+- **Completed:** HarnessServer (AF_UNIX newline-delimited JSON-RPC 2.0, stale-socket
+  probe, 1 MiB cap, -32700/-32600/-32601+hint/-32000, shutdown method, SIGINT/SIGTERM
+  cleanup); `serve` subcommand with `--socket > SVF_HARNESS_SOCKET > FNV-1a default`
+  resolution; client mode for any non-serve subcommand (unique /tmp glob fallback);
+  QueryEngine method table + methodNames(); shared JsonUtil.h dumpJson. Commit 227e72ee.
+- **Tests:** 9/9 harness python tests green (new: test_daemon_roundtrip,
+  test_cli_client_subcommand); manual: stale socket reuse, double-daemon error rc=1,
+  SIGTERM unlink, oversize -32600, early-disconnect survival, env-var + auto-discovery
+- **Files:** svf-llvm/tools/Harness/{HarnessServer.h,HarnessServer.cpp,JsonUtil.h,
+  QueryEngine.h,QueryEngine.cpp,svf-harness.cpp,CMakeLists.txt,tests/run_tests.py}
 - **Blockers:** none
