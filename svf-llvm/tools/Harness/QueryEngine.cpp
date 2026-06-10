@@ -1,7 +1,10 @@
 //===- QueryEngine.cpp -- SVF analysis bootstrap + query dispatch --------===//
+//
+// Bootstrap, dispatch and the function-lookup helpers. The per-method query
+// bodies live in Queries.cpp (same class, second TU).
+//
+//===----------------------------------------------------------------------===//
 #include "QueryEngine.h"
-#include "Evidence.h"
-#include "Schema.h"
 #include "Graphs/CallGraph.h"
 #include "Graphs/SVFG.h"
 #include "SVF-LLVM/LLVMModule.h"
@@ -10,7 +13,6 @@
 #include "WPA/Andersen.h"
 #include <algorithm>
 #include <fstream>
-#include <regex>
 #include <set>
 #include <stdexcept>
 
@@ -56,59 +58,6 @@ json QueryEngine::summary() const
     j["svfg_nodes"] = svfg->getTotalNodeNum();
     j["pag_nodes"] = pag->getTotalNodeNum();
     return j;
-}
-
-json QueryEngine::functions(const json& params) const
-{
-    std::string pattern = params.value("pattern", "");
-    std::regex re;
-    bool filter = !pattern.empty();
-    if (filter)
-    {
-        try
-        {
-            re = std::regex(pattern, std::regex::ECMAScript);
-        }
-        catch (const std::regex_error& e)
-        {
-            throw std::runtime_error("invalid pattern: " + pattern + " (" +
-                                     e.what() + ")");
-        }
-    }
-    std::vector<const FunObjVar*> funs;
-    for (const auto& it : *callgraph)
-    {
-        const FunObjVar* fun = it.second->getFunction();
-        if (!fun)
-            continue;
-        if (filter && !std::regex_search(fun->getName(), re))
-            continue;
-        funs.push_back(fun);
-    }
-    // Sort by (name, node-id) so same-named statics from different TUs order
-    // deterministically across runs.
-    std::sort(funs.begin(), funs.end(),
-              [&](const FunObjVar* a, const FunObjVar* b)
-    {
-        if (a->getName() != b->getName())
-            return a->getName() < b->getName();
-        return a->getId() < b->getId();
-    });
-    constexpr size_t kCap = 200;
-    size_t total = funs.size(); // pre-cap match count
-    bool truncated = funs.size() > kCap;
-    if (truncated)
-        funs.resize(kCap);
-    json out = json::array();
-    for (const FunObjVar* fun : funs)
-    {
-        out.push_back({{"name", fun->getName()},
-                       {"loc", evidence::loc(fun->getSourceLoc())},
-                       {"is_decl", fun->isDeclaration()},
-                       {"num_args", fun->arg_size()}});
-    }
-    return json{{"functions", std::move(out)}, {"truncated", truncated},
-                {"total", total}};
 }
 
 namespace
@@ -203,89 +152,6 @@ const CallGraphNode* QueryEngine::findFunction(const std::string& name) const
     throw std::runtime_error(msg);
 }
 
-json QueryEngine::callEdges(const json& params, bool incoming) const
-{
-    if (!params.contains("func") || !params["func"].is_string())
-        throw std::runtime_error("missing required string param: func");
-    const std::string name = params["func"].get<std::string>();
-
-    // Use findFunctions (merge semantics): collect results from ALL nodes
-    // that have this name (handles same-named statics across translation
-    // units). Never raises an ambiguity error — callers/callees always merge.
-    const std::vector<const CallGraphNode*> nodes = findFunctions(name);
-    if (nodes.empty())
-    {
-        // No matches: delegate to findFunction to produce the edit-distance
-        // hint (it will always throw).
-        findFunction(name); // throws
-    }
-    const size_t matchedFunctions = nodes.size();
-
-    struct Row
-    {
-        std::string caller, callee;
-        const CallICFGNode* cs;
-        bool direct;
-    };
-    std::vector<Row> rows;
-    for (const CallGraphNode* node : nodes)
-    {
-        const auto& edges = incoming ? node->getInEdges() : node->getOutEdges();
-        for (const CallGraphEdge* e : edges)
-        {
-            // CallGraphNode names can differ from FunObjVar names only when
-            // fun is null, which addCallGraphNode never produces; keep
-            // getFunction() for symmetry with functions().
-            const std::string caller = e->getSrcNode()->getFunction()->getName();
-            const std::string callee = e->getDstNode()->getFunction()->getName();
-            for (auto it = e->directCallsBegin(); it != e->directCallsEnd();
-                 ++it)
-                rows.push_back({caller, callee, *it, true});
-            for (auto it = e->indirectCallsBegin();
-                 it != e->indirectCallsEnd(); ++it)
-                rows.push_back({caller, callee, *it, false});
-        }
-    }
-    // Callsite sets are unordered; sort by (callsite id, callee) so output is
-    // stable across runs even after merging rows from multiple nodes.
-    std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b)
-    {
-        if (a.cs->getId() != b.cs->getId())
-            return a.cs->getId() < b.cs->getId();
-        return a.callee < b.callee;
-    });
-    constexpr size_t kCap = 200;
-    size_t total = rows.size();
-    bool truncated = rows.size() > kCap;
-    if (truncated)
-        rows.resize(kCap);
-    json calls = json::array();
-    for (const Row& r : rows)
-        calls.push_back({{"caller", r.caller},
-                         {"callee", r.callee},
-                         {"callsite", evidence::node(r.cs)},
-                         {"direct", r.direct}});
-    return json{{"function", name}, {"calls", std::move(calls)},
-                {"total", total}, {"truncated", truncated},
-                {"matched_functions", matchedFunctions}};
-}
-
-json QueryEngine::schemaQ(const json&) const
-{
-    json j = schema::registry();
-    // "implemented" comes from the live method table, not from Schema.cpp, so
-    // the schema stays honest as methods land without anyone updating a flag.
-    const std::vector<std::string> impl = methodNames();
-    for (json& m : j["methods"])
-    {
-        const std::string name = m["name"].get<std::string>();
-        m["implemented"] =
-            std::find(impl.begin(), impl.end(), name) != impl.end();
-    }
-    j["program"] = json{{"modules", modules}, {"summary", summary()}};
-    return j;
-}
-
 const std::vector<QueryEngine::Method>& QueryEngine::methodTable()
 {
     static const std::vector<Method> table = {
@@ -294,6 +160,10 @@ const std::vector<QueryEngine::Method>& QueryEngine::methodTable()
         {"functions", &QueryEngine::functions},
         {"callers", &QueryEngine::callers},
         {"callees", &QueryEngine::callees},
+        {"cfg", &QueryEngine::cfg},
+        {"defuse", &QueryEngine::defuse},
+        {"pts", &QueryEngine::pts},
+        {"aliases", &QueryEngine::aliases},
     };
     return table;
 }

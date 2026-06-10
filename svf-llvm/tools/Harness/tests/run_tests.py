@@ -214,6 +214,15 @@ class HarnessTest(unittest.TestCase):
                           f"{mname} returns doc missing 'calls'")
             self.assertIn("truncated", method_returns[mname],
                           f"{mname} returns doc missing 'truncated'")
+        # Drift guard: cfg/defuse/pts/aliases returns docs (Task 4.3 shapes).
+        for mname in ("cfg", "defuse", "pts", "aliases"):
+            self.assertIn("truncated", method_returns[mname],
+                          f"{mname} returns doc missing 'truncated'")
+        for mname in ("defuse", "pts", "aliases"):
+            self.assertIn("vars", method_returns[mname],
+                          f"{mname} returns doc missing 'vars'")
+        self.assertIn("points_to", method_returns["pts"])
+        self.assertIn("total_nodes", method_returns["cfg"])
 
     @unittest.skipUnless(
         os.path.isdir(os.path.join(HERE, "..", "..", "..", "..", "svf", "lib")),
@@ -270,6 +279,81 @@ class HarnessTest(unittest.TestCase):
             self.assertEqual(out.returncode, 1)
             j = json.loads(out.stdout)
             self.assertIn("make_buf", j["error"]["message"])
+
+    def test_cfg_of_use_after_free(self):
+        j = self.oneshot("cfg", {"func": "use_after_free"})
+        self.assertEqual(j["function"], "use_after_free")
+        self.assertGreater(len(j["nodes"]), 3)
+        kinds = {e["kind"] for e in j["edges"]}
+        self.assertIn("IntraCFGEdge", kinds)
+        files = {n["loc"]["file"] for n in j["nodes"] if n["loc"]["file"]}
+        self.assertTrue(all(f.endswith("demo.c") for f in files), files)
+        # instruction-level locs arrive via the "fl" key path of evidence::loc
+        self.assertTrue(any(n["loc"]["line"] > 0 for n in j["nodes"]))
+        self.assertEqual(j["total_nodes"], len(j["nodes"]))
+        self.assertEqual(j["total_edges"], len(j["edges"]))
+        self.assertFalse(j["truncated"])
+
+    def test_cfg_ir_truncation(self):
+        # long_ir calls a 20-arg helper: its CallICFGNode toString() exceeds
+        # the ~200-byte ir cap, so some node's ir must end with the ellipsis.
+        j = self.oneshot("cfg", {"func": "long_ir"})
+        self.assertTrue(any(n["ir"].endswith("…") for n in j["nodes"]),
+                        sorted(len(n["ir"].encode()) for n in j["nodes"]))
+
+    def test_pts_of_b_contains_heap_obj(self):
+        j = self.oneshot("pts", {"var": {"func": "malloc", "ret": True}})
+        self.assertGreaterEqual(len(j["vars"]), 1)
+        objs = [o for v in j["vars"] for o in v["points_to"]]
+        self.assertTrue(any(o["kind"] == "HeapObjVar" for o in objs), objs)
+        heap = [o for o in objs if o["kind"] == "HeapObjVar"][0]
+        self.assertEqual(heap["loc"]["line"], 4)  # the malloc in make_buf
+
+    def test_defuse_of_b(self):
+        # demo.c line 8: `char* b = make_buf(8);`
+        j = self.oneshot("defuse", {"var": {"file": "demo.c", "line": 8,
+                                            "name": "b"}})
+        self.assertGreaterEqual(len(j["vars"]), 1)
+        v = j["vars"][0]
+        self.assertTrue(v["defs"], v)
+        for s in v["defs"] + v["uses"]:
+            self.assertIn("stmt", s); self.assertIn("at", s)
+        use_lines = {u["at"]["loc"]["line"] for u in v["uses"]}
+        # b is loaded for fill(b) (line 9), free(b) (line 10), b[0] (line 11);
+        # require the free callsite line or the return load line.
+        self.assertTrue(use_lines & {10, 11}, use_lines)
+        # instruction-level locs arrive via the "fl" key path of evidence::loc
+        use_files = {u["at"]["loc"]["file"] for u in v["uses"]
+                     if u["at"]["loc"]["file"]}
+        self.assertTrue(use_files, v["uses"])
+        self.assertTrue(all(f.endswith("demo.c") for f in use_files), use_files)
+
+    def test_aliases_of_malloc_ret(self):
+        # Andersen MAY-alias, v0 scope: candidates are ValVars of the var's
+        # OWN function only. The malloc result lives in make_buf, where it
+        # flows to make_buf's unique return-value var — so at least one alias
+        # (sharing the line-4 heap object) must be reported. b/p in other
+        # functions are deliberately out of scope in v0.
+        j = self.oneshot("aliases", {"var": {"func": "malloc", "ret": True}})
+        self.assertGreaterEqual(len(j["vars"]), 1)
+        v = j["vars"][0]
+        self.assertTrue(v["aliases"], j)
+        # the var itself is excluded from its alias list
+        self.assertTrue(all(a["id"] != v["var"]["id"] for a in v["aliases"]))
+
+    def test_var_resolution_error_hint(self):
+        # nonexistent line -> error listing the accepted anchor forms
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            out = subprocess.run([BIN, "--oneshot", "defuse", "--params",
+                                  json.dumps({"var": {"file": "demo.c",
+                                                      "line": 999}}), ll],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            msg = json.loads(out.stdout)["error"]["message"]
+            self.assertIn("file", msg)
+            self.assertIn("999", msg)
+            self.assertIn("nearest", msg)  # nearby defining lines are listed
 
     def test_duplicate_function_names_merged(self):
         j = self.oneshot("callers", {"func": "helper"},

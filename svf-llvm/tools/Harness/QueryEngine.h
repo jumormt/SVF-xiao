@@ -12,6 +12,7 @@ class SVFG;
 class AndersenBase;
 class CallGraph;
 class CallGraphNode;
+class SVFVar;
 }
 
 class QueryEngine
@@ -42,6 +43,23 @@ public:
     {
         return callEdges(params, /*incoming=*/false);
     }
+    /// Control-flow graph of params["func"] (exact name; throws on ambiguity
+    /// — pick by functions() first). All ICFG nodes of the function plus
+    /// their outgoing edges labelled IntraCFGEdge/CallCFGEdge/RetCFGEdge.
+    /// Nodes capped at 500, edges at 1000; "truncated" reflects either cap.
+    nlohmann::json cfg(const nlohmann::json& params) const;
+    /// Def/use statements of each var resolved from params["var"] (see
+    /// resolveVars). defs = SVFStmt in-edges, uses = out-edges; each emitted
+    /// as {stmt: <SVFStmt kind>, at: <evidence of its ICFG node>}.
+    nlohmann::json defuse(const nlohmann::json& params) const;
+    /// Andersen may-points-to set of each var resolved from params["var"]:
+    /// the abstract objects (ObjVar-family) it may target.
+    nlohmann::json pts(const nlohmann::json& params) const;
+    /// May-aliases of each var resolved from params["var"]. v0 candidate
+    /// scope: ValVars of the var's OWN function only (documented limitation);
+    /// vars with no enclosing function get an empty list. Capped at 50
+    /// aliases per var.
+    nlohmann::json aliases(const nlohmann::json& params) const;
 
     // One instance per process — SVF state (LLVMModuleSet/PAG) is global.
     // Never throw from callbacks passed into SVF/LLVM code.
@@ -86,6 +104,21 @@ private:
     /// semantics for callers/callees; reserve findFunction() for future
     /// single-target uses that must reject ambiguity.
     const SVF::CallGraphNode* findFunction(const std::string& name) const;
+    /// Resolve a JSON "var" anchor to SVFVar(s). Accepted forms:
+    ///  {"file": "demo.c", "line": 8}             — all SVFVars whose def
+    ///      stmt sits at that line (file matched by path suffix)
+    ///  {"file": ..., "line": N, "name": "b"}     — additionally filter by
+    ///      LLVM value-name substring
+    ///  {"func": "malloc", "ret": true}           — return-value vars at
+    ///      every callsite of func
+    ///  {"func": "memcpy", "arg": 0}              — actual-argument vars at
+    ///      every callsite of func
+    /// Result is deduped and sorted by node id. Empty resolution throws
+    /// std::runtime_error listing the accepted forms (and, for file:line
+    /// misses, up to 5 nearest lines in that file that DO define vars).
+    /// Shared by defuse/pts/aliases and (Task 5.1) vfpath/reachable anchors.
+    std::vector<const SVF::SVFVar*>
+    resolveVars(const nlohmann::json& spec) const;
 
     /// Module paths as given to the ctor; reported in schema().program.
     std::vector<std::string> modules;

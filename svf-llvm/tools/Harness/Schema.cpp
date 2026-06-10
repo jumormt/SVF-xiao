@@ -446,33 +446,51 @@ json methods()
         "direct: bool}], total, truncated, matched_functions: N}"));
     a.push_back(method("cfg",
         "The control-flow graph of one function: its ICFG nodes (one per "
-        "instruction/boundary, with source lines) and intraprocedural edges. "
-        "Use it to understand statement order and branching before "
-        "interpreting a value-flow path.",
+        "instruction/boundary, with source lines) and their outgoing edges "
+        "(IntraCFGEdge within the function; CallCFGEdge/RetCFGEdge where "
+        "control crosses into/out of callees). Use it to understand "
+        "statement order and branching before interpreting a value-flow "
+        "path. Rejects ambiguous names (same-named statics in several "
+        "translation units) — disambiguate with `functions` first.",
         json{{"func", param("string",
             "Exact function name (resolve with `functions` first).", true)}},
-        "{nodes: [<evidence node>], edges: [{src, dst, kind}]}"));
+        "{function, nodes: [<evidence node>], edges: [{src, dst, kind: "
+        "IntraCFGEdge|CallCFGEdge|RetCFGEdge}], total_nodes, total_edges, "
+        "truncated} (nodes capped at 500, edges at 1000; edge endpoints are "
+        "node ids and may refer to nodes beyond the cap or in other "
+        "functions)"));
     a.push_back(method("defuse",
-        "Definition and use sites of one variable: where it gets its value "
-        "and every statement that consumes it. Lighter than vfpath when you "
-        "only need 'where is b used after this line?'.",
+        "Definition and use statements of each variable the anchor resolves "
+        "to: where it gets its value (defs) and every statement that "
+        "consumes it (uses). Lighter than vfpath when you only need 'where "
+        "is b used after this line?'.",
         json{{"var", param("object", kAnchorDesc, true)}},
-        "{var: <evidence node>, defs: [<evidence node>], uses: [<evidence node>]}"));
+        "{vars: [{var: <evidence node>, defs: [{stmt, at: <evidence node>}], "
+        "uses: [{stmt, at: <evidence node>}]}], total, truncated} — stmt is "
+        "the SVFIR statement kind (Addr/Copy/Load/Store/Call/Ret/Gep/Phi/"
+        "...), at is the ICFG node it sits on (file:line of the "
+        "instruction)"));
     a.push_back(method("pts",
-        "Andersen's may-points-to set of a pointer: the abstract objects "
-        "(allocation sites) it can target. Answers 'which malloc/global/"
-        "stack slot does p point to?'. Over-approximate: targets MAY be "
-        "pointed to.",
+        "Andersen's may-points-to set of each variable the anchor resolves "
+        "to: the abstract objects (allocation sites) it can target. Answers "
+        "'which malloc/global/stack slot does p point to?'. "
+        "Over-approximate: targets MAY be pointed to.",
         json{{"var", param("object", kAnchorDesc, true)}},
-        "{var: <evidence node>, pts: [<evidence node>]} (objects are "
-        "ObjVar-family kinds)"));
+        "{vars: [{var: <evidence node>, points_to: [<evidence node>]}], "
+        "total, truncated} (points_to entries are ObjVar-family kinds; their "
+        "loc is the allocation site)"));
     a.push_back(method("aliases",
-        "Other pointers that may alias this one (overlapping points-to "
-        "sets). Use it to find every name a buffer is reachable through "
-        "before concluding a write cannot affect it. May-alias, capped, "
-        "see `truncated`.",
+        "Other pointers that may alias each variable the anchor resolves to "
+        "(Andersen MAY-alias: overlapping points-to sets). Use it to find "
+        "every name a buffer is reachable through before concluding a write "
+        "cannot affect it. v0 LIMITATION: candidates are only the ValVars of "
+        "the variable's OWN function (use vfpath/pts to reason across "
+        "functions); variables with no enclosing function get an empty "
+        "list.",
         json{{"var", param("object", kAnchorDesc, true)}},
-        "{var: <evidence node>, aliases: [<evidence node>], truncated}"));
+        "{vars: [{var: <evidence node>, aliases: [<evidence node>]}], total, "
+        "truncated} (capped at 50 aliases per var; the var itself is "
+        "excluded)"));
     a.push_back(method("vfpath",
         "Value-flow paths from a source to a sink over the sparse value-flow "
         "graph: HOW a value gets from A to B, step by step, with evidence "
