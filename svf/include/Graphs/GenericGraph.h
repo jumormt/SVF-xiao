@@ -33,6 +33,7 @@
 #include "SVFIR/SVFType.h"
 #include "Util/iterator.h"
 #include "Graphs/GraphTraits.h"
+#include "SVFIR/SVFValue.h"
 
 namespace SVF
 {
@@ -48,8 +49,6 @@ template <typename, typename> class GenericGraphReader;
 template<class NodeTy>
 class GenericEdge
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
 
 public:
     /// Node type
@@ -134,20 +133,18 @@ protected:
 };
 
 
+
 /*!
  * Generic node on the graph as base class
  */
 template<class NodeTy,class EdgeTy>
-class GenericNode
+class GenericNode: public SVFValue
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
 
 public:
     typedef NodeTy NodeType;
     typedef EdgeTy EdgeType;
     /// Edge kind
-    typedef s64_t GNodeK;
     typedef OrderedSet<EdgeType*, typename EdgeType::equalGEdge> GEdgeSetTy;
     /// Edge iterator
     ///@{
@@ -156,15 +153,13 @@ public:
     ///@}
 
 private:
-    NodeID id;		///< Node ID
-    GNodeK nodeKind;	///< Node kind
 
     GEdgeSetTy InEdges; ///< all incoming edge of this node
     GEdgeSetTy OutEdges; ///< all outgoing edge of this node
 
 public:
     /// Constructor
-    GenericNode(NodeID i, GNodeK k): id(i),nodeKind(k)
+    GenericNode(NodeID i, GNodeK k, const SVFType* svfType = nullptr): SVFValue(i, k, svfType)
     {
 
     }
@@ -174,18 +169,6 @@ public:
     {
         for (auto * edge : OutEdges)
             delete edge;
-    }
-
-    /// Get ID
-    inline NodeID getId() const
-    {
-        return id;
-    }
-
-    /// Get node kind
-    inline GNodeK getNodeKind() const
-    {
-        return nodeKind;
     }
 
     /// Get incoming/outgoing edge set
@@ -334,6 +317,16 @@ public:
             return nullptr;
     }
     //@}
+
+    static inline bool classof(const GenericNode<NodeTy, EdgeTy>*)
+    {
+        return true;
+    }
+
+    static inline bool classof(const SVFValue*)
+    {
+        return true;
+    }
 };
 
 /*
@@ -343,8 +336,6 @@ public:
 template<class NodeTy, class EdgeTy>
 class GenericGraph
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
     friend class GenericGraphWriter<NodeTy, EdgeTy>;
     friend class GenericGraphReader<NodeTy, EdgeTy>;
 

@@ -49,8 +49,8 @@ class DDAVFSolver
     friend class DDAStat;
 public:
     typedef SCCDetection<SVFG*> SVFGSCC;
-    typedef SCCDetection<PTACallGraph*> CallGraphSCC;
-    typedef PTACallGraphEdge::CallInstSet CallInstSet;
+    typedef SCCDetection<CallGraph*> CallGraphSCC;
+    typedef CallGraphEdge::CallInstSet CallInstSet;
     typedef SVFIR::CallSiteSet CallSiteSet;
     typedef OrderedSet<DPIm> DPTItemSet;
     typedef OrderedMap<DPIm, CPtSet> DPImToCPtSetMap;
@@ -191,7 +191,7 @@ protected:
         }
         else if(const LoadSVFGNode* load = SVFUtil::dyn_cast<LoadSVFGNode>(node))
         {
-            if(load->getPAGDstNode()->isPointer() == false)
+            if(load->getDstNode()->isPointer() == false)
                 return;
 
             CPtSet loadpts;
@@ -203,7 +203,7 @@ protected:
         }
         else if(const StoreSVFGNode* store = SVFUtil::dyn_cast<StoreSVFGNode>(node))
         {
-            if(store->getPAGSrcNode()->isPointer() == false)
+            if(store->getSrcNode()->isPointer() == false)
                 return;
 
             if(isMustAlias(getLoadDpm(dpm),dpm))
@@ -344,9 +344,9 @@ protected:
         }
     }
     /// GetDefinition SVFG
-    inline const SVFGNode* getDefSVFGNode(const PAGNode* pagNode) const
+    inline const SVFGNode* getDefSVFGNode(const ValVar* valVar) const
     {
-        return getSVFG()->getDefSVFGNode(pagNode);
+        return getSVFG()->getDefSVFGNode(valVar);
     }
     /// Backward traverse along indirect value flows
     void backtraceAlongIndirectVF(CPtSet& pts, const DPIm& oldDpm)
@@ -392,33 +392,33 @@ protected:
     inline void startNewPTCompFromLoadSrc(CPtSet& pts, const DPIm& oldDpm)
     {
         const LoadSVFGNode* load = SVFUtil::cast<LoadSVFGNode>(oldDpm.getLoc());
-        const SVFGNode* loadSrc = getDefSVFGNode(load->getPAGSrcNode());
+        const SVFGNode* loadSrc = getDefSVFGNode(load->getSrcNode());
         DBOUT(DDDA, SVFUtil::outs() << "!##start new computation from loadSrc svfgNode " <<
               load->getId() << " --> " << loadSrc->getId() << "\n");
         const SVFGEdge* edge = getSVFG()->getIntraVFGEdge(loadSrc,load,SVFGEdge::IntraDirectVF);
         assert(edge && "Edge not found!!");
-        backwardPropDpm(pts,load->getPAGSrcNodeID(),oldDpm,edge);
+        backwardPropDpm(pts,load->getSrcNodeID(),oldDpm,edge);
 
     }
     inline void startNewPTCompFromStoreDst(CPtSet& pts, const DPIm& oldDpm)
     {
         const StoreSVFGNode* store = SVFUtil::cast<StoreSVFGNode>(oldDpm.getLoc());
-        const SVFGNode* storeDst = getDefSVFGNode(store->getPAGDstNode());
+        const SVFGNode* storeDst = getDefSVFGNode(store->getDstNode());
         DBOUT(DDDA, SVFUtil::outs() << "!##start new computation from storeDst svfgNode " <<
               store->getId() << " --> " << storeDst->getId() << "\n");
         const SVFGEdge* edge = getSVFG()->getIntraVFGEdge(storeDst,store,SVFGEdge::IntraDirectVF);
         assert(edge && "Edge not found!!");
-        backwardPropDpm(pts,store->getPAGDstNodeID(),oldDpm,edge);
+        backwardPropDpm(pts,store->getDstNodeID(),oldDpm,edge);
     }
     inline void backtraceToStoreSrc(CPtSet& pts, const DPIm& oldDpm)
     {
         const StoreSVFGNode* store = SVFUtil::cast<StoreSVFGNode>(oldDpm.getLoc());
-        const SVFGNode* storeSrc = getDefSVFGNode(store->getPAGSrcNode());
+        const SVFGNode* storeSrc = getDefSVFGNode(store->getSrcNode());
         DBOUT(DDDA, SVFUtil::outs() << "++backtrace to storeSrc from svfgNode " << getLoadDpm(oldDpm).getLoc()->getId() << " to "<<
               store->getId() << " to " << storeSrc->getId() <<"\n");
         const SVFGEdge* edge = getSVFG()->getIntraVFGEdge(storeSrc,store,SVFGEdge::IntraDirectVF);
         assert(edge && "Edge not found!!");
-        backwardPropDpm(pts,store->getPAGSrcNodeID(),oldDpm,edge);
+        backwardPropDpm(pts,store->getSrcNodeID(),oldDpm,edge);
     }
     //@}
 
@@ -471,11 +471,11 @@ protected:
     virtual inline bool isLocalCVarInRecursion(const CVar& var) const
     {
         NodeID id = getPtrNodeID(var);
-        const MemObj* obj = _pag->getObject(id);
-        assert(obj && "object not found!!");
-        if(obj->isStack())
+        const BaseObjVar* baseObj = _pag->getBaseObject(id);
+        assert(baseObj && "base object is null??");
+        if(SVFUtil::isa<StackObjVar>(baseObj))
         {
-            if(const SVFFunction* svffun = _pag->getGNode(id)->getFunction())
+            if(const FunObjVar* svffun = _pag->getSVFVar(id)->getFunction())
             {
                 return _callGraphSCC->isInCycle(_callGraph->getCallGraphNode(svffun)->getId());
             }
@@ -497,20 +497,20 @@ protected:
             {
                 NodeID funPtr = _pag->getFunPtr(cbn);
                 DPIm funPtrDpm(dpm);
-                funPtrDpm.setLocVar(getSVFG()->getDefSVFGNode(_pag->getGNode(funPtr)),funPtr);
+                funPtrDpm.setLocVar(getSVFG()->getDefSVFGNode(_pag->getValVar(funPtr)),funPtr);
                 findPT(funPtrDpm);
             }
         }
-        else if(const SVFFunction* fun = getSVFG()->isFunEntrySVFGNode(dpm.getLoc()))
+        else if(const FunObjVar* fun = getSVFG()->isFunEntrySVFGNode(dpm.getLoc()))
         {
             CallInstSet csSet;
             /// use pre-analysis call graph to approximate all potential callsites
-            _ander->getPTACallGraph()->getIndCallSitesInvokingCallee(fun,csSet);
+            _ander->getCallGraph()->getIndCallSitesInvokingCallee(fun,csSet);
             for(CallInstSet::const_iterator it = csSet.begin(), eit = csSet.end(); it!=eit; ++it)
             {
                 NodeID funPtr = _pag->getFunPtr(*it);
                 DPIm funPtrDpm(dpm);
-                funPtrDpm.setLocVar(getSVFG()->getDefSVFGNode(_pag->getGNode(funPtr)),funPtr);
+                funPtrDpm.setLocVar(getSVFG()->getDefSVFGNode(_pag->getValVar(funPtr)),funPtr);
                 findPT(funPtrDpm);
             }
         }
@@ -624,7 +624,7 @@ protected:
         return (getSVFGSCCRepNode(edge->getSrcID()) == getSVFGSCCRepNode(edge->getDstID()));
     }
     /// Set callgraph
-    inline void setCallGraph (PTACallGraph* cg)
+    inline void setCallGraph (CallGraph* cg)
     {
         _callGraph = cg;
     }
@@ -637,21 +637,20 @@ protected:
     //@{
     virtual inline bool isHeapCondMemObj(const CVar& var, const StoreSVFGNode*)
     {
-        const MemObj* mem = _pag->getObject(getPtrNodeID(var));
-        assert(mem && "memory object is null??");
-        return mem->isHeap();
+        const BaseObjVar* pVar = _pag->getBaseObject(getPtrNodeID(var));
+        return pVar && SVFUtil::isa<HeapObjVar, DummyObjVar>(pVar);
     }
 
     inline bool isArrayCondMemObj(const CVar& var) const
     {
-        const MemObj* mem = _pag->getObject(getPtrNodeID(var));
-        assert(mem && "memory object is null??");
-        return mem->isArray();
+        const BaseObjVar* obj = _pag->getBaseObject(getPtrNodeID(var));
+        assert(obj && "base object is null??");
+        return obj->isArray();
     }
     inline bool isFieldInsenCondMemObj(const CVar& var) const
     {
-        const MemObj* mem =  _pag->getBaseObj(getPtrNodeID(var));
-        return mem->isFieldInsensitive();
+        const BaseObjVar* baseObj = _pag->getBaseObject(getPtrNodeID(var));
+        return baseObj->isFieldInsensitive();
     }
     //@}
 private:
@@ -775,8 +774,8 @@ protected:
     SVFG* _svfg;					///< SVFG
     AndersenWaveDiff* _ander;		///< Andersen's analysis
     NodeBS candidateQueries;		///< candidate pointers;
-    PTACallGraph* _callGraph;		///< CallGraph
-    CallGraphSCC* _callGraphSCC;	///< SCC for CallGraph
+    CallGraph* _callGraph;		///< PTACallGraph
+    CallGraphSCC* _callGraphSCC;	///< SCC for PTACallGraph
     SVFGSCC* _svfgSCC;				///< SCC for SVFG
     DPTItemSet backwardVisited;		///< visited map during backward traversing
     DPImToCPtSetMap dpmToTLCPtSetMap;	///< points-to caching map for top-level vars

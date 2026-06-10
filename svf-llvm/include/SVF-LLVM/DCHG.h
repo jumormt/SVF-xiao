@@ -17,14 +17,12 @@
 #include "Graphs/GenericGraph.h"
 #include "Graphs/CHG.h"
 #include "SVF-LLVM/BasicTypes.h"
-#include "SVFIR/SVFModule.h"
 #include "Util/SVFUtil.h"
 #include "Util/WorkList.h"
 
 namespace SVF
 {
 
-class SVFModule;
 class DCHNode;
 
 class DCHEdge : public GenericEdge<DCHNode>
@@ -73,7 +71,7 @@ public:
 
     typedef std::vector<const Function*> FuncVector;
 
-    DCHNode(const DIType* diType, NodeID i = 0, GNodeK k = 0)
+    DCHNode(const DIType* diType, NodeID i = 0, GNodeK k = GNodeK::DCHNodeKd)
         : GenericNode<DCHNode, DCHEdge>(i, k), vtable(nullptr), flags(0)
     {
         this->diType = diType;
@@ -93,12 +91,12 @@ public:
 
     ~DCHNode() { }
 
-    const DIType *getType(void) const
+    const DIType * getDIType(void) const
     {
         return diType;
     }
 
-    std::string getName() const
+    virtual const std::string& getName() const
     {
         return typeName;
     }
@@ -161,12 +159,12 @@ public:
         return typedefs;
     }
 
-    void setVTable(const SVFGlobalValue *vtbl)
+    void setVTable(const GlobalObjVar *vtbl)
     {
         vtable = vtbl;
     }
 
-    const SVFGlobalValue *getVTable() const
+    const GlobalObjVar *getVTable() const
     {
         return vtable;
     }
@@ -193,7 +191,7 @@ private:
     const DIType *diType;
     /// Typedefs which map to this type.
     Set<const DIDerivedType *> typedefs;
-    const SVFGlobalValue* vtable;
+    const GlobalObjVar* vtable;
     std::string typeName;
     size_t flags;
     /// The virtual functions which this class actually defines/overrides.
@@ -230,8 +228,8 @@ public:
     static bool isAgg(const DIType* t);
 
 public:
-    DCHGraph(const SVFModule *svfMod)
-        : svfModule(svfMod), numTypes(0)   // vfID(0), buildingCHGTime(0) {
+    DCHGraph()
+        :numTypes(0)   // vfID(0), buildingCHGTime(0) {
     {
         this->kind = DI;
     }
@@ -249,12 +247,12 @@ public:
 
     void print(void);
 
-    virtual bool csHasVFnsBasedonCHA(CallSite cs) override
+    virtual bool csHasVFnsBasedonCHA(const CallICFGNode* cs) override
     {
         return csHasVtblsBasedonCHA(cs);
     }
 
-    virtual const VFunSet &getCSVFsBasedonCHA(CallSite cs) override;
+    virtual const VFunSet &getCSVFsBasedonCHA(const CallICFGNode* cs) override;
 
     virtual bool csHasVtblsBasedonCHA(CallBase* cs)
     {
@@ -268,14 +266,14 @@ public:
         return getNode(type)->getVTable() != nullptr;
     }
 
-    virtual bool csHasVtblsBasedonCHA(CallSite cs) override
+    virtual bool csHasVtblsBasedonCHA(const CallICFGNode* cs) override
     {
         assert(false && "not supported!");
         abort();
     }
 
-    virtual const VTableSet &getCSVtblsBasedonCHA(CallSite cs) override;
-    virtual void getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &virtualFunctions) override;
+    virtual const VTableSet &getCSVtblsBasedonCHA(const CallICFGNode* cs) override;
+    virtual void getVFnsFromVtbls(const CallICFGNode* cs, const VTableSet &vtbls, VFunSet &virtualFunctions) override;
 
     /// Returns true if a is a transitive base of b. firstField determines
     /// whether to consider first-field edges.
@@ -358,14 +356,12 @@ public:
     bool isFirstField(const DIType* f, const DIType* b);
 
 protected:
-    /// SVF Module this CHG is built from.
-    const SVFModule* svfModule;
     /// Whether this CHG is an extended CHG (first-field). Set by buildCHG.
     bool extended = false;
     /// Maps DITypes to their nodes.
     Map<const DIType*, DCHNode*> diTypeToNodeMap;
     /// Maps VTables to the DIType associated with them.
-    Map<const SVFGlobalValue*, const DIType*> vtblToTypeMap;
+    Map<const GlobalObjVar*, const DIType*> vtblToTypeMap;
     /// Maps types to all children (i.e. CHA).
     Map<const DIType*, NodeBS> chaMap;
     /// Maps types to all children but also considering first field.
@@ -373,7 +369,7 @@ protected:
     /// Maps types to a set with their vtable and all their children's.
     Map<const DIType*, VTableSet> vtblCHAMap;
     /// Maps callsites to a set of potential virtual functions based on CHA.
-    Map<CallSite, VFunSet> csCHAMap;
+    Map<const CallICFGNode*, VFunSet> csCHAMap;
     /// Maps types to their canonical type (many-to-one).
     Map<const DIType*, const DIType*> canonicalTypeMap;
     /// Set of all possible canonical types (i.e. values of canonicalTypeMap).
@@ -394,7 +390,7 @@ private:
     void handleDISubroutineType(const DISubroutineType* subroutineType);
 
     /// Finds all defined virtual functions and attaches them to nodes.
-    void buildVTables(const SVFModule& module);
+    void buildVTables();
 
     /// Returns a set of all children of type (CHA). Also gradually builds chaMap.
     const NodeBS& cha(const DIType* type, bool firstField);
@@ -414,7 +410,7 @@ private:
     /// Retrieves the metadata associated with a *virtual* callsite.
     const DIType* getCSStaticType(CallBase* cs) const;
 
-    const DIType *getCSStaticType(CallSite cs) const
+    const DIType *getCSStaticType(const CallICFGNode* cs) const
     {
         assert(false && "not supported!");
         abort();

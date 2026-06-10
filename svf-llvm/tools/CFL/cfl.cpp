@@ -47,20 +47,14 @@ int main(int argc, char ** argv)
                         argc, argv, "CFL Reachability Analysis", "[options] <input-bitcode...>"
                     );
 
-    // If the WriteAnder option is set to "ir_annotator", pre-processes the bytecodes of the modules
-    if (Options::WriteAnder() == "ir_annotator")
-    {
-        LLVMModuleSet::preProcessBCs(moduleNameVec);
-    }
-
     // Pointer to the SVF Intermediate Representation (IR) of the module
     SVFIR* svfir = nullptr;
 
     // If no CFLGraph option is specified, the SVFIR is built from the .bc (bytecode) files of the modules
     if (Options::CFLGraph().empty())
     {
-        SVFModule* svfModule = LLVMModuleSet::buildSVFModule(moduleNameVec);
-        SVFIRBuilder builder(svfModule);
+        LLVMModuleSet::buildSVFModule(moduleNameVec);
+        SVFIRBuilder builder;
         svfir = builder.build();
     }  // if no dot form CFLGraph is specified, we use svfir from .bc.
 

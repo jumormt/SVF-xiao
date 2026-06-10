@@ -31,98 +31,90 @@
 #include "Util/SVFUtil.h"
 #include "Util/CallGraphBuilder.h"
 #include "Graphs/ICFG.h"
+#include "SVFIR/SVFIR.h"
+#include "Graphs/CallGraph.h"
+#include "Graphs/ThreadCallGraph.h"
 
 using namespace SVF;
 using namespace SVFUtil;
 
-PTACallGraph* CallGraphBuilder::buildCallGraph(SVFModule* svfModule)
+CallGraph* CallGraphBuilder::buildSVFIRCallGraph(const std::vector<const FunObjVar*>& funset)
 {
-    /// create nodes
-    for (SVFModule::const_iterator F = svfModule->begin(), E = svfModule->end(); F != E; ++F)
+    CallGraph* callgraph = new CallGraph();
+    for (const FunObjVar* svfFunc: funset)
     {
-        callgraph->addCallGraphNode(*F);
+        callgraph->addCallGraphNode(svfFunc);
     }
 
-    /// create edges
-    for (SVFModule::const_iterator F = svfModule->begin(), E = svfModule->end(); F != E; ++F)
+    for (const auto& item : *callgraph)
     {
-        for (const SVFBasicBlock* svfbb : (*F)->getBasicBlockList())
+        for (auto it : *(item.second)->getFunction())
         {
-            for (const SVFInstruction* inst : svfbb->getInstructionList())
+            const SVFBasicBlock* svfbb = it.second;
+            for (const ICFGNode* inst : svfbb->getICFGNodeList())
             {
                 if (SVFUtil::isNonInstricCallSite(inst))
                 {
-                    if(const SVFFunction* callee = getCallee(inst))
+                    const CallICFGNode* callBlockNode = cast<CallICFGNode>(inst);
+                    if(const FunObjVar* callee = callBlockNode->getCalledFunction())
                     {
-                        const CallICFGNode* callBlockNode = icfg->getCallICFGNode(inst);
-                        callgraph->addDirectCallGraphEdge(callBlockNode,*F,callee);
+                        callgraph->addDirectCallGraphEdge(callBlockNode,(item.second)->getFunction(),callee);
                     }
                 }
             }
         }
     }
-
     return callgraph;
 }
 
-PTACallGraph* ThreadCallGraphBuilder::buildThreadCallGraph(SVFModule* svfModule)
+CallGraph* CallGraphBuilder::buildPTACallGraph()
 {
+    const CallGraph* svfirCallGraph = PAG::getPAG()->getCallGraph();
+    return new CallGraph(*svfirCallGraph);
+}
 
-    buildCallGraph(svfModule);
-
-    ThreadCallGraph* cg = dyn_cast<ThreadCallGraph>(callgraph);
-    assert(cg && "not a thread callgraph?");
+ThreadCallGraph* CallGraphBuilder::buildThreadCallGraph()
+{
+    const CallGraph* svfirCallGraph = PAG::getPAG()->getCallGraph();
+    ThreadCallGraph* cg = new ThreadCallGraph(*svfirCallGraph);
 
     ThreadAPI* tdAPI = ThreadAPI::getThreadAPI();
-    for (SVFModule::const_iterator F = svfModule->begin(), E = svfModule->end(); F != E; ++F)
+    for (const auto& item: *svfirCallGraph)
     {
-        for (const SVFBasicBlock* svfbb : (*F)->getBasicBlockList())
+        for (auto it : *(item.second)->getFunction())
         {
-            for (const SVFInstruction* inst : svfbb->getInstructionList())
+            const SVFBasicBlock* svfbb = it.second;
+            for (const ICFGNode* inst : svfbb->getICFGNodeList())
             {
-                if (tdAPI->isTDFork(inst))
+                if (SVFUtil::isa<CallICFGNode>(inst) && tdAPI->isTDFork(SVFUtil::cast<CallICFGNode>(inst)))
                 {
-                    const CallICFGNode* cs = icfg->getCallICFGNode(inst);
+                    const CallICFGNode* cs = cast<CallICFGNode>(inst);
                     cg->addForksite(cs);
-                    const SVFFunction* forkee = SVFUtil::dyn_cast<SVFFunction>(tdAPI->getForkedFun(inst));
-                    if (forkee)
+                    const ValVar* svfVar = tdAPI->getForkedFun(cs);
+                    if (SVFUtil::isa<FunValVar>(svfVar))
                     {
                         cg->addDirectForkEdge(cs);
                     }
                     // indirect call to the start routine function
                     else
                     {
-                        cg->addThreadForkEdgeSetMap(cs,nullptr);
-                    }
-                }
-                else if (tdAPI->isHareParFor(inst))
-                {
-                    const CallICFGNode* cs = icfg->getCallICFGNode(inst);
-                    cg->addParForSite(cs);
-                    const SVFFunction* taskFunc = SVFUtil::dyn_cast<SVFFunction>(tdAPI->getTaskFuncAtHareParForSite(inst));
-                    if (taskFunc)
-                    {
-                        cg->addDirectParForEdge(cs);
-                    }
-                    // indirect call to the start routine function
-                    else
-                    {
-                        cg->addHareParForEdgeSetMap(cs,nullptr);
+                        cg->addThreadForkEdgeSetMap(cs, nullptr);
                     }
                 }
             }
         }
     }
     // record join sites
-    for (SVFModule::const_iterator F = svfModule->begin(), E = svfModule->end(); F != E; ++F)
+    for (const auto& item: *svfirCallGraph)
     {
-        for (const SVFBasicBlock* svfbb : (*F)->getBasicBlockList())
+        for (auto it : *(item.second)->getFunction())
         {
-            for (const SVFInstruction* inst : svfbb->getInstructionList())
+            const SVFBasicBlock* svfbb = it.second;
+            for (const ICFGNode* node : svfbb->getICFGNodeList())
             {
-                if (tdAPI->isTDJoin(inst))
+                if (SVFUtil::isa<CallICFGNode>(node) && tdAPI->isTDJoin(SVFUtil::cast<CallICFGNode>(node)))
                 {
-                    const CallICFGNode* cs = icfg->getCallICFGNode(inst);
+                    const CallICFGNode* cs = SVFUtil::cast<CallICFGNode>(node);
                     cg->addJoinsite(cs);
                 }
             }
@@ -131,7 +123,3 @@ PTACallGraph* ThreadCallGraphBuilder::buildThreadCallGraph(SVFModule* svfModule)
 
     return cg;
 }
-
-
-
-

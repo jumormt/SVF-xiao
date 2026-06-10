@@ -30,8 +30,8 @@
 #ifndef CPPUtil_H_
 #define CPPUtil_H_
 
-#include "SVFIR/SVFValue.h"
 #include "SVF-LLVM/BasicTypes.h"
+#include "Util/GeneralType.h"
 
 namespace SVF
 {
@@ -52,6 +52,9 @@ struct DemangledName
 };
 
 struct DemangledName demangle(const std::string& name);
+
+
+Set<std::string> getClsNamesInBrackets(const std::string& name);
 
 std::string getBeforeBrackets(const std::string& name);
 std::string getClassNameFromVtblObj(const std::string& vtblName);

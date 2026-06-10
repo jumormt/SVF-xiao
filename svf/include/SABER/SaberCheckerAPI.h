@@ -32,6 +32,7 @@
 
 #include "Util/SVFUtil.h"
 #include "Graphs/ICFGNode.h"
+#include "SVFIR/SVFVariables.h" // add header
 
 namespace SVF
 {
@@ -73,7 +74,7 @@ private:
     static SaberCheckerAPI* ckAPI;
 
     /// Get the function type of a function
-    inline CHECKER_TYPE getType(const SVFFunction* F) const
+    inline CHECKER_TYPE getType(const FunObjVar* F) const
     {
         if(F)
         {
@@ -97,65 +98,49 @@ public:
 
     /// Return true if this call is a memory allocation
     //@{
-    inline bool isMemAlloc(const SVFFunction* fun) const
+    inline bool isMemAlloc(const FunObjVar* fun) const
     {
         return getType(fun) == CK_ALLOC;
     }
-    inline bool isMemAlloc(const SVFInstruction* inst) const
-    {
-        return getType(SVFUtil::getCallee(inst)) == CK_ALLOC;
-    }
     inline bool isMemAlloc(const CallICFGNode* cs) const
     {
-        return isMemAlloc(cs->getCallSite());
+        return isMemAlloc(cs->getCalledFunction());
     }
     //@}
 
     /// Return true if this call is a memory deallocation
     //@{
-    inline bool isMemDealloc(const SVFFunction* fun) const
+    inline bool isMemDealloc(const FunObjVar* fun) const
     {
         return getType(fun) == CK_FREE;
     }
-    inline bool isMemDealloc(const SVFInstruction *inst) const
-    {
-        return getType(SVFUtil::getCallee(inst)) == CK_FREE;
-    }
     inline bool isMemDealloc(const CallICFGNode* cs) const
     {
-        return isMemDealloc(cs->getCallSite());
+        return isMemDealloc(cs->getCalledFunction());
     }
     //@}
 
     /// Return true if this call is a file open
     //@{
-    inline bool isFOpen(const SVFFunction* fun) const
+    inline bool isFOpen(const FunObjVar* fun) const
     {
         return getType(fun) == CK_FOPEN;
     }
-    inline bool isFOpen(const SVFInstruction* inst) const
-    {
-        return getType(SVFUtil::getCallee(inst)) == CK_FOPEN;
-    }
     inline bool isFOpen(const CallICFGNode* cs) const
     {
-        return isFOpen(cs->getCallSite());
+        return isFOpen(cs->getCalledFunction());
     }
     //@}
 
     /// Return true if this call is a file close
     //@{
-    inline bool isFClose(const SVFFunction* fun) const
+    inline bool isFClose(const FunObjVar* fun) const
     {
         return getType(fun) == CK_FCLOSE;
     }
-    inline bool isFClose(const SVFInstruction* inst) const
-    {
-        return getType(SVFUtil::getCallee(inst)) == CK_FCLOSE;
-    }
     inline bool isFClose(const CallICFGNode* cs) const
     {
-        return isFClose(cs->getCallSite());
+        return isFClose(cs->getCalledFunction());
     }
     //@}
 

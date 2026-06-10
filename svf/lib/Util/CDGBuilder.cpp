@@ -27,6 +27,7 @@
  *      Author: Xiao Cheng
  */
 #include "Util/CDGBuilder.h"
+#include "Graphs/CallGraph.h"
 
 using namespace SVF;
 using namespace SVFUtil;
@@ -66,7 +67,7 @@ CDGBuilder::extractNodesBetweenPdomNodes(const SVFBasicBlock *succ, const SVFBas
 {
     if (succ == LCA) return;
     std::vector<const SVFBasicBlock *> path;
-    SVFLoopAndDomInfo *ld = const_cast<SVFFunction *>(LCA->getFunction())->getLoopAndDomInfo();
+    SVFLoopAndDomInfo *ld = const_cast<FunObjVar *>(LCA->getFunction())->getLoopAndDomInfo();
     dfsNodesBetweenPdomNodes(LCA, succ, path, tgtNodes, ld);
 }
 
@@ -77,8 +78,7 @@ void CDGBuilder::build()
 {
     if (_controlDG->getTotalNodeNum() > 0)
         return;
-    PAG *pag = PAG::getPAG();
-    buildControlDependence(pag->getModule());
+    buildControlDependence();
     buildICFGNodeControlMap();
 }
 
@@ -86,16 +86,16 @@ void CDGBuilder::build()
 s64_t CDGBuilder::getBBSuccessorBranchID(const SVFBasicBlock *BB, const SVFBasicBlock *Succ)
 {
     ICFG *icfg = PAG::getPAG()->getICFG();
-    const ICFGNode *pred = icfg->getICFGNode(BB->getTerminator());
-    const ICFGEdge *edge = nullptr;
-    for (const auto &inst: Succ->getInstructionList())
+    assert(!BB->getICFGNodeList().empty() && "empty bb?");
+    const ICFGNode *pred = BB->back();
+    if (const CallICFGNode* callNode = dyn_cast<CallICFGNode>(pred))
     {
-        if (const ICFGEdge *e = icfg->getICFGEdge(pred, icfg->getICFGNode(inst), ICFGEdge::ICFGEdgeK::IntraCF))
-        {
-            edge = e;
-            break;
-        }
+        // not a branch statement:
+        //  invoke void %3(ptr noundef nonnull align 8 dereferenceable(8) %1, ptr noundef %2)
+        //          to label %invoke.cont1 unwind label %lpad
+        pred = callNode->getRetICFGNode();
     }
+    const ICFGEdge *edge = icfg->getICFGEdge(pred, Succ->front(), ICFGEdge::ICFGEdgeK::IntraCF);
     if (const IntraCFGEdge *intraEdge = SVFUtil::dyn_cast<IntraCFGEdge>(edge))
     {
         if(intraEdge->getCondition())
@@ -120,10 +120,12 @@ s64_t CDGBuilder::getBBSuccessorBranchID(const SVFBasicBlock *BB, const SVFBasic
  *     including LCA if LCA is pred, excluding LCA if LCA is not pred
  * @param svfgModule
  */
-void CDGBuilder::buildControlDependence(const SVFModule *svfgModule)
+void CDGBuilder::buildControlDependence()
 {
-    for (const auto &svfFun: *svfgModule)
+    const CallGraph* svfirCallGraph = PAG::getPAG()->getCallGraph();
+    for (const auto& item: *svfirCallGraph)
     {
+        const FunObjVar *svfFun = (item.second)->getFunction();
         if (SVFUtil::isExtCall(svfFun)) continue;
         // extract basic block edges to be processed
         Map<const SVFBasicBlock *, std::vector<const SVFBasicBlock *>> BBS;
@@ -135,7 +137,7 @@ void CDGBuilder::buildControlDependence(const SVFModule *svfgModule)
             // for each bb pair
             for (const SVFBasicBlock *succ: item.second)
             {
-                const SVFBasicBlock *SVFLCA = const_cast<SVFFunction *>(svfFun)->
+                const SVFBasicBlock *SVFLCA = const_cast<FunObjVar *>(svfFun)->
                                               getLoopAndDomInfo()->findNearestCommonPDominator(pred, succ);
                 std::vector<const SVFBasicBlock *> tgtNodes;
                 // no common ancestor, may be exit()
@@ -165,11 +167,12 @@ void CDGBuilder::buildControlDependence(const SVFModule *svfgModule)
  * @param func
  * @param res
  */
-void CDGBuilder::extractBBS(const SVF::SVFFunction *func,
+void CDGBuilder::extractBBS(const SVF::FunObjVar *func,
                             Map<const SVF::SVFBasicBlock *, std::vector<const SVFBasicBlock *>> &res)
 {
-    for (const auto &bb: *func)
+    for (const auto &it: *func)
     {
+        const SVFBasicBlock* bb = it.second;
         for (const auto &succ: bb->getSuccessors())
         {
             if (func->postDominate(succ, bb))
@@ -184,29 +187,52 @@ void CDGBuilder::extractBBS(const SVF::SVFFunction *func,
  */
 void CDGBuilder::buildICFGNodeControlMap()
 {
-    ICFG *icfg = PAG::getPAG()->getICFG();
     for (const auto &it: _svfcontrolMap)
     {
         for (const auto &it2: it.second)
         {
             const SVFBasicBlock *controllingBB = it2.first;
-            //            const ICFGNode *controlNode = _bbToNode[it.first].first;
-            //            if(!controlNode) continue;
-            const SVFInstruction *terminator = it.first->getInstructionList().back();
-            if (!terminator) continue;
-            const ICFGNode *controlNode = icfg->getICFGNode(terminator);
+            const ICFGNode *controlNode = it.first->getICFGNodeList().back();
+            if (const CallICFGNode* callNode =
+                        SVFUtil::dyn_cast<CallICFGNode>(controlNode))
+            {
+                // not a branch statement:
+                //  invoke void %3(ptr noundef nonnull align 8 dereferenceable(8) %1, ptr noundef %2)
+                //          to label %invoke.cont1 unwind label %lpad
+                controlNode = callNode->getRetICFGNode();
+            }
             if (!controlNode) continue;
             // controlNode control at pos
-            for (const auto &inst: *controllingBB)
+            for (const auto &controllee: controllingBB->getICFGNodeList())
             {
-                const ICFGNode *controllee = icfg->getICFGNode(inst);
                 _nodeControlMap[controlNode][controllee].insert(it2.second.begin(), it2.second.end());
                 _nodeDependentOnMap[controllee][controlNode].insert(it2.second.begin(), it2.second.end());
                 for (s32_t pos: it2.second)
                 {
-                    _controlDG->addCDGEdgeFromSrcDst(controlNode, controllee,
-                                                     SVFUtil::dyn_cast<IntraICFGNode>(controlNode)->getInst(),
-                                                     pos);
+                    if (const IntraICFGNode* intraNode =
+                                dyn_cast<IntraICFGNode>(controlNode))
+                    {
+                        assert(intraNode->getSVFStmts().size() == 1 &&
+                               "not a branch stmt?");
+                        const SVFVar* condition =
+                            SVFUtil::cast<BranchStmt>(
+                                intraNode->getSVFStmts().front())
+                            ->getCondition();
+                        _controlDG->addCDGEdgeFromSrcDst(controlNode, controllee,
+                                                         condition,
+                                                         pos);
+                    }
+                    else
+                    {
+                        // not a branch statement:
+                        //  invoke void %3(ptr noundef nonnull align 8 dereferenceable(8) %1, ptr noundef %2)
+                        //          to label %invoke.cont1 unwind label %lpad
+                        SVFIR* pag = PAG::getPAG();
+                        _controlDG->addCDGEdgeFromSrcDst(
+                            controlNode, controllee,
+                            pag->getSVFVar(pag->getNullPtr()), pos);
+                    }
+
                 }
             }
         }

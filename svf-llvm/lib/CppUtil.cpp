@@ -236,6 +236,71 @@ struct cppUtil::DemangledName cppUtil::demangle(const std::string& name)
 
     return dname;
 }
+
+// Extract class name in parameters
+// e.g., given "WithSemaphore::WithSemaphore(AP_HAL::Semaphore&)", return "AP_HAL::Semaphore"
+Set<std::string> cppUtil::getClsNamesInBrackets(const std::string& name)
+{
+    Set<std::string> res;
+    // Lambda to trim whitespace from both ends of a string
+    auto trim = [](std::string& s)
+    {
+        size_t first = s.find_first_not_of(' ');
+        size_t last = s.find_last_not_of(' ');
+        if (first != std::string::npos && last != std::string::npos)
+        {
+            s = s.substr(first, (last - first + 1));
+        }
+        else
+        {
+            s.clear();
+        }
+    };
+
+    // Lambda to remove trailing '*' and '&' characters
+    auto removePointerAndReference = [](std::string& s)
+    {
+        while (!s.empty() && (s.back() == '*' || s.back() == '&'))
+        {
+            s.pop_back();
+        }
+    };
+
+    s32_t status;
+    char* realname = abi::__cxa_demangle(name.c_str(), 0, 0, &status);
+    if (realname == nullptr)
+    {
+        // do nothing
+    }
+    else
+    {
+        std::string realnameStr = std::string(realname);
+
+        // Find the start and end of the parameter list
+        size_t start = realnameStr.find('(');
+        size_t end = realnameStr.find(')');
+        if (start == std::string::npos || end == std::string::npos || start >= end)
+        {
+            return res; // Return empty set if the format is incorrect
+        }
+
+        // Extract the parameter list
+        std::string paramList = realnameStr.substr(start + 1, end - start - 1);
+
+        // Split the parameter list by commas
+        std::istringstream ss(paramList);
+        std::string param;
+        while (std::getline(ss, param, ','))
+        {
+            trim(param);
+            removePointerAndReference(param);
+            res.insert(param);
+        }
+        std::free(realname);
+    }
+    return res;
+}
+
 std::string cppUtil::getClassNameFromVtblObj(const std::string& vtblName)
 {
     std::string className = "";
@@ -355,25 +420,92 @@ const Value* cppUtil::getVCallThisPtr(const CallBase* cs)
     }
 }
 
+/// Check if V is derived from thisPtr
+/// Handles O0 pattern: %this1 = load ptr, ptr %this.addr
+static bool isDerivedFromThisPtr(const Argument* thisPtr, const Value* V)
+{
+    V = V->stripPointerCasts();
+    if (V == thisPtr)
+        return true;
+
+    if (const LoadInst* load = SVFUtil::dyn_cast<LoadInst>(V))
+    {
+        if (const AllocaInst* alloca =
+                    SVFUtil::dyn_cast<AllocaInst>(load->getPointerOperand()))
+        {
+            for (const User* U : alloca->users())
+            {
+                if (const StoreInst* store = SVFUtil::dyn_cast<StoreInst>(U))
+                {
+                    if (store->getPointerOperand() == alloca &&
+                            store->getValueOperand()->stripPointerCasts() == thisPtr)
+                        return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 /*!
- * Given a inheritance relation B is a child of A
+ * Given an inheritance relation B is a child of A
  * We assume B::B(thisPtr1){ A::A(thisPtr2) } such that thisPtr1 == thisPtr2
- * In the following code thisPtr1 is "%class.B1* %this" and thisPtr2 is
- * "%class.A* %0".
  *
+ * === Typed pointer mode ===
+ * %this.addr = alloca %class.B1*
+ * store %class.B1* %this, %class.B1** %this.addr
+ * %this1 = load %class.B1*, %class.B1** %this.addr
+ * %0 = bitcast %class.B1* %this1 to %class.A*
+ * call void @A::A()(%class.A* %0)
  *
- * define linkonce_odr dso_local void @B1::B1()(%class.B1* %this) unnamed_addr #6 comdat
- *   %this.addr = alloca %class.B1*, align 8
- *   store %class.B1* %this, %class.B1** %this.addr, align 8
- *   %this1 = load %class.B1*, %class.B1** %this.addr, align 8
- *   %0 = bitcast %class.B1* %this1 to %class.A*
- *   call void @A::A()(%class.A* %0)
+ * === Opaque pointer mode ===
+ *
+ * Case 1: Primary base class (offset 0) at O1+
+ *   call ptr @Base::Base(ptr %this)
+ *   → thisPtr2 == thisPtr1, return true
+ *
+ * Case 2: Primary base class (offset 0) at O0
+ *   %this.addr = alloca ptr
+ *   store ptr %this, ptr %this.addr
+ *   %this1 = load ptr, ptr %this.addr
+ *   call void @Base::Base(ptr %this1)
+ *   → thisPtr2 is LoadInst from alloca storing thisPtr1, return true
+ *
+ * Case 3: Non-primary base class (multiple inheritance, offset > 0)
+ *   %0 = getelementptr inbounds i8, ptr %this1, i64 4
+ *   call void @Base2::Base2(ptr %0)
+ *   → i8 GEP from this, return true
+ *
+ * Case 4: Member field initialization (NOT base class)
+ *   %mem = getelementptr inbounds %struct.Derived, ptr %this1, i32 0, i32 1
+ *   call void @Member::Member(ptr %mem)
+ *   → struct GEP from this, return false
  */
 bool cppUtil::isSameThisPtrInConstructor(const Argument* thisPtr1,
         const Value* thisPtr2)
 {
     if (thisPtr1 == thisPtr2)
         return true;
+
+    const Value* stripped = thisPtr2->stripPointerCasts();
+    if (stripped == thisPtr1)
+        return true;
+
+    // === Opaque pointer: Load from this.addr (Case 2: primary base at O0) ===
+    if (isDerivedFromThisPtr(thisPtr1, stripped))
+        return true;
+
+    // === Opaque pointer: GEP check (Case 3 & 4) ===
+    if (const GetElementPtrInst* GEP = SVFUtil::dyn_cast<GetElementPtrInst>(stripped))
+    {
+        if (!isDerivedFromThisPtr(thisPtr1, GEP->getPointerOperand()))
+            return false;
+        // i8 GEP = non-primary base class (Case 3)
+        // struct GEP = member field (Case 4)
+        return GEP->getSourceElementType()->isIntegerTy(8);
+    }
+
+    // === Typed pointer (legacy): store -> load -> bitcast ===
     for (const Value* thisU : thisPtr1->users())
     {
         if (const StoreInst* store = SVFUtil::dyn_cast<StoreInst>(thisU))
@@ -397,8 +529,16 @@ const Argument* cppUtil::getConstructorThisPtr(const Function* fun)
 {
     assert((isConstructor(fun) || isDestructor(fun)) &&
            "not a constructor?");
-    assert(fun->arg_size() >= 1 && "argument size >= 1?");
-    const Argument* thisPtr = &*(fun->arg_begin());
+    // We always need at least one argument to return something meaningful.
+    assert(fun->arg_size() >= 1 && "expected at least one argument");
+
+    // If param 0 is sret, 'this' is typically param 1, but be defensive.
+    const bool isStructRet = fun->hasParamAttribute(0, llvm::Attribute::StructRet);
+
+    // Prefer arg1 when sret is present and available; otherwise fall back to arg0.
+    const u32_t thisIdx = (isStructRet && fun->arg_size() >= 2) ? 1 : 0;
+    const Argument* thisPtr = fun->getArg(thisIdx);
+
     return thisPtr;
 }
 
@@ -596,7 +736,7 @@ s32_t cppUtil::getVCallIdx(const CallBase* cs)
     }
     else
     {
-        idx_value = (s32_t)idx->getSExtValue();
+        idx_value = LLVMUtil::getIntegerValue(idx).first;
     }
     return idx_value;
 }
@@ -640,13 +780,15 @@ bool LLVMUtil::isConstantObjSym(const Value* val)
  */
 Set<std::string> cppUtil::extractClsNamesFromFunc(const Function *foo)
 {
-    assert(foo->hasName() && "foo does not have a name? possible indirect call");
     const std::string &name = foo->getName().str();
     if (isConstructor(foo) || isDestructor(foo))
     {
         // c++ constructor or destructor
         DemangledName demangledName = cppUtil::demangle(name);
-        return {demangledName.className};
+        Set<std::string> clsNameInBrackets =
+            cppUtil::getClsNamesInBrackets(name);
+        clsNameInBrackets.insert(demangledName.className);
+        return clsNameInBrackets;
     }
     else if (isTemplateFunc(foo))
     {
@@ -825,7 +967,6 @@ bool cppUtil::matchesLabel(const std::string &foo, const std::string &label)
  */
 bool cppUtil::isTemplateFunc(const Function *foo)
 {
-    assert(foo->hasName() && "foo does not have a name? possible indirect call");
     const std::string &name = foo->getName().str();
     bool matchedLabel = matchesLabel(name, znstLabel) || matchesLabel(name, znkstLabel) ||
                         matchesLabel(name, znkLabel);
@@ -841,7 +982,6 @@ bool cppUtil::isTemplateFunc(const Function *foo)
  */
 bool cppUtil::isDynCast(const Function *foo)
 {
-    assert(foo->hasName() && "foo does not have a name? possible indirect call");
     return foo->getName().str() == dyncast;
 }
 

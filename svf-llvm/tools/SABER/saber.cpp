@@ -47,13 +47,8 @@ int main(int argc, char ** argv)
                         argc, argv, "Source-Sink Bug Detector", "[options] <input-bitcode...>"
                     );
 
-    if (Options::WriteAnder() == "ir_annotator")
-    {
-        LLVMModuleSet::preProcessBCs(moduleNameVec);
-    }
-
-    SVFModule* svfModule = LLVMModuleSet::buildSVFModule(moduleNameVec);
-    SVFIRBuilder builder(svfModule);
+    LLVMModuleSet::buildSVFModule(moduleNameVec);
+    SVFIRBuilder builder;
     SVFIR* pag = builder.build();
 
 
@@ -75,3 +70,4 @@ int main(int argc, char ** argv)
     return 0;
 
 }
+

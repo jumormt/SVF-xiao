@@ -73,10 +73,10 @@ void AndersenStat::collectCycleInfo(ConstraintGraph* consCG)
         for (NodeBS::iterator it = subNodes.begin(), eit = subNodes.end(); it != eit; ++it)
         {
             NodeID nodeId = *it;
-            PAGNode* pagNode = pta->getPAG()->getGNode(nodeId);
+            const SVFVar* pagNode = pta->getPAG()->getSVFVar(nodeId);
             if (SVFUtil::isa<ObjVar>(pagNode) && pta->isFieldInsensitive(nodeId))
             {
-                NodeID baseId = consCG->getBaseObjVar(nodeId);
+                NodeID baseId = consCG->getBaseObjVarID(nodeId);
                 clone.reset(nodeId);
                 clone.set(baseId);
             }
@@ -141,7 +141,7 @@ void AndersenStat::constraintGraphStat()
         if(nodeIt->second->getInEdges().empty() && nodeIt->second->getOutEdges().empty())
             continue;
         cgNodeNumber++;
-        if(SVFUtil::isa<ObjVar>(pta->getPAG()->getGNode(nodeIt->first)))
+        if(SVFUtil::isa<ObjVar>(pta->getPAG()->getSVFVar(nodeIt->first)))
             objNodeNumber++;
 
         u32_t nCopyIn = nodeIt->second->getDirectInEdges().size();
@@ -237,11 +237,11 @@ void AndersenStat::statNullPtr()
                 if (!SVFUtil::isa<DummyValVar>(pagNode) && !SVFUtil::isa<DummyObjVar>(pagNode) )
                 {
                     // if a pointer is in dead function, we do not care
-                    if(pagNode->getValue()->ptrInUncalledFunction() == false)
+                    if(pagNode->ptrInUncalledFunction() == false)
                     {
                         _NumOfNullPtr++;
                         rawstr << "##Null Pointer : (NodeID " << pagNode->getId()
-                               << ") PtrName:" << pagNode->getValue()->getName();
+                               << ") PtrName:" << pagNode->getName();
                         writeWrnMsg(rawstr.str());
                         //pagNode->getValue()->dump();
                     }
@@ -289,7 +289,7 @@ void AndersenStat::performStat()
         totalPointers++;
         totalPtsSize+=size;
 
-        if(pta->getPAG()->isValidTopLevelPtr(pta->getPAG()->getGNode(node)))
+        if(pta->getPAG()->isValidTopLevelPtr(pta->getPAG()->getSVFVar(node)))
         {
             totalTopLevPointers++;
             totalTopLevPtsSize+=size;
@@ -313,8 +313,8 @@ void AndersenStat::performStat()
     timeStatMap["CopyGepTime"] =  Andersen::timeOfProcessCopyGep;
     timeStatMap["UpdateCGTime"] =  Andersen::timeOfUpdateCallGraph;
 
-    PTNumStatMap["TotalPointers"] = pag->getValueNodeNum() + pag->getFieldValNodeNum();
-    PTNumStatMap["TotalObjects"] = pag->getObjectNodeNum() + pag->getFieldObjNodeNum();
+    PTNumStatMap["TotalPointers"] = pag->getValueNodeNum();
+    PTNumStatMap["TotalObjects"] = pag->getObjectNodeNum();
 
 
     PTNumStatMap["AddrProcessed"] = Andersen::numOfProcessedAddr;

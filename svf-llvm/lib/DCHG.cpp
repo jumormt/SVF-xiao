@@ -163,7 +163,7 @@ void DCHGraph::handleTypedef(const DIType *typedefType)
     }
 }
 
-void DCHGraph::buildVTables(const SVFModule &module)
+void DCHGraph::buildVTables()
 {
     for (Module &M : LLVMModuleSet::getLLVMModuleSet()->getLLVMModules())
     {
@@ -177,9 +177,11 @@ void DCHGraph::buildVTables(const SVFModule &module)
                 DIType *type = SVFUtil::dyn_cast<DIType>(gv->getMetadata(cppUtil::ctir::vtMDName));
                 assert(type && "DCHG::buildVTables: bad metadata for ctir.vt");
                 DCHNode *node = getOrCreateNode(type);
-                const SVFGlobalValue* svfgv = LLVMModuleSet::getLLVMModuleSet()->getSVFGlobalValue(gv);
-                node->setVTable(svfgv);
-                vtblToTypeMap[svfgv] = getCanonicalType(type);
+                NodeID i = LLVMModuleSet::getLLVMModuleSet()->getObjectNode(gv);
+                GlobalObjVar* globalObjVar =
+                    SVFUtil::cast<GlobalObjVar>(PAG::getPAG()->getGNode(i));
+                node->setVTable(globalObjVar);
+                vtblToTypeMap[globalObjVar] = getCanonicalType(type);
 
                 const ConstantStruct *vtbls = cppUtil::getVtblStruct(gv);
                 for (unsigned nthVtbl = 0; nthVtbl < vtbls->getNumOperands(); ++nthVtbl)
@@ -251,7 +253,7 @@ const NodeBS &DCHGraph::cha(const DIType *type, bool firstField)
             continue;
         }
 
-        const NodeBS &cchildren = cha(edge->getSrcNode()->getType(), firstField);
+        const NodeBS &cchildren = cha(edge->getSrcNode()->getDIType(), firstField);
         // Children's children are my children.
         for (NodeID cchild : cchildren)
         {
@@ -519,7 +521,7 @@ void DCHGraph::buildCHG(bool extend)
         }
     }
 
-    buildVTables(*(LLVMModuleSet::getLLVMModuleSet()->getSVFModule()));
+    buildVTables();
 
     // Build the void/char/everything else relation.
     if (extended && charType != nullptr)
@@ -530,10 +532,10 @@ void DCHGraph::buildCHG(bool extend)
         for (iterator nodeI = begin(); nodeI != end(); ++nodeI)
         {
             // Everything without a parent gets char as a parent.
-            if (nodeI->second->getType() != nullptr
+            if (nodeI->second->getDIType() != nullptr
                     && nodeI->second->getOutEdges().size() == 0)
             {
-                addEdge(nodeI->second->getType(), charType, DCHEdge::STD_DEF);
+                addEdge(nodeI->second->getDIType(), charType, DCHEdge::STD_DEF);
             }
         }
     }
@@ -544,7 +546,7 @@ void DCHGraph::buildCHG(bool extend)
     }
 }
 
-const VFunSet &DCHGraph::getCSVFsBasedonCHA(CallSite cs)
+const VFunSet &DCHGraph::getCSVFsBasedonCHA(const CallICFGNode* cs)
 {
     if (csCHAMap.find(cs) != csCHAMap.end())
     {
@@ -561,7 +563,7 @@ const VFunSet &DCHGraph::getCSVFsBasedonCHA(CallSite cs)
     return csCHAMap[cs];
 }
 
-const VTableSet &DCHGraph::getCSVtblsBasedonCHA(CallSite cs)
+const VTableSet &DCHGraph::getCSVtblsBasedonCHA(const CallICFGNode* cs)
 {
     const DIType *type = getCanonicalType(getCSStaticType(cs));
     // Check if we've already computed.
@@ -575,7 +577,7 @@ const VTableSet &DCHGraph::getCSVtblsBasedonCHA(CallSite cs)
     for (NodeID childId : children)
     {
         DCHNode *child = getGNode(childId);
-        const SVFGlobalValue *vtbl = child->getVTable();
+        const GlobalObjVar *vtbl = child->getVTable();
         // TODO: what if it is null?
         if (vtbl != nullptr)
         {
@@ -589,11 +591,11 @@ const VTableSet &DCHGraph::getCSVtblsBasedonCHA(CallSite cs)
     return vtblCHAMap[type];
 }
 
-void DCHGraph::getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &virtualFunctions)
+void DCHGraph::getVFnsFromVtbls(const CallICFGNode* callsite, const VTableSet &vtbls, VFunSet &virtualFunctions)
 {
-    size_t idx = cs.getFunIdxInVtable();
-    std::string funName = cs.getFunNameOfVirtualCall();
-    for (const SVFGlobalValue *vtbl : vtbls)
+    size_t idx = callsite->getFunIdxInVtable();
+    std::string funName = callsite->getFunNameOfVirtualCall();
+    for (const GlobalObjVar *vtbl : vtbls)
     {
         assert(vtblToTypeMap.find(vtbl) != vtblToTypeMap.end() && "floating vtbl");
         const DIType *type = vtblToTypeMap[vtbl];
@@ -610,7 +612,7 @@ void DCHGraph::getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &vi
 
             const Function* callee = vfnV[idx];
             // Practically a copy of that in lib/MemoryModel/CHA.cpp
-            if (cs.arg_size() == callee->arg_size() || (cs.isVarArg() && callee->isVarArg()))
+            if (callsite->arg_size() == callee->arg_size() || (callsite->isVarArg() && callee->isVarArg()))
             {
                 cppUtil::DemangledName dname = cppUtil::demangle(callee->getName().str());
                 std::string calleeName = dname.funcName;
@@ -637,7 +639,7 @@ void DCHGraph::getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &vi
                  */
                 if (funName.size() == 0)
                 {
-                    virtualFunctions.insert(LLVMUtil::getFunction(callee->getName().str()));
+                    virtualFunctions.insert(LLVMUtil::getFunObjVar(callee->getName().str()));
                 }
                 else if (funName[0] == '~')
                 {
@@ -653,7 +655,7 @@ void DCHGraph::getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &vi
                      */
                     if (calleeName[0] == '~')
                     {
-                        virtualFunctions.insert(LLVMUtil::getFunction(callee->getName().str()));
+                        virtualFunctions.insert(LLVMUtil::getFunObjVar(callee->getName().str()));
                     }
                 }
                 else
@@ -664,7 +666,7 @@ void DCHGraph::getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &vi
                      */
                     if (funName.compare(calleeName) == 0)
                     {
-                        virtualFunctions.insert(LLVMUtil::getFunction(callee->getName().str()));
+                        virtualFunctions.insert(LLVMUtil::getFunObjVar(callee->getName().str()));
                     }
                 }
             }
@@ -956,8 +958,8 @@ bool DCHGraph::isFirstField(const DIType *f, const DIType *b)
         // Only care about first-field edges.
         if (edge->getEdgeKind() == DCHEdge::FIRST_FIELD)
         {
-            if (edge->getSrcNode()->getType() == b) return true;
-            if (isFirstField(edge->getSrcNode()->getType(), b)) return true;
+            if (edge->getSrcNode()->getDIType() == b) return true;
+            if (isFirstField(edge->getSrcNode()->getDIType(), b)) return true;
         }
     }
 
@@ -1087,7 +1089,7 @@ std::string DCHGraph::diTypeToStr(const DIType *t)
                 int64_t count = -1;
                 if (const ConstantInt* ci = sr->getCount().dyn_cast<ConstantInt* >())
                 {
-                    count = ci->getSExtValue();
+                    count = LLVMUtil::getIntegerValue(ci).first;
                 }
 
                 ss << "[" << count << "]";
@@ -1162,13 +1164,14 @@ void DCHGraph::print(void)
 
         const DCHNode *node = getGNode(id);
 
-        SVFUtil::outs() << indent(currIndent) << id << ": " << diTypeToStr(node->getType()) << " [" << node->getType() << "]" << "\n";
-        if (node->getType() != nullptr
-                && (node->getType()->getTag() == dwarf::DW_TAG_class_type
-                    || node->getType()->getTag() == dwarf::DW_TAG_structure_type))
+        SVFUtil::outs() << indent(currIndent) << id << ": " << diTypeToStr(node->getDIType()) << " [" << node->getDIType() << "]" << "\n";
+        if (node->getDIType() != nullptr
+                && (node->getDIType()->getTag() == dwarf::DW_TAG_class_type
+                    ||
+                    node->getDIType()->getTag() == dwarf::DW_TAG_structure_type))
         {
             ++numStructs;
-            unsigned numFields = getFieldTypes(node->getType()).size();
+            unsigned numFields = getFieldTypes(node->getDIType()).size();
             largestStruct = numFields > largestStruct ? numFields : largestStruct;
         }
 
@@ -1224,8 +1227,8 @@ void DCHGraph::print(void)
                 arrow = "----unknown---->";
             }
 
-            SVFUtil::outs() << indent(currIndent) << "[ " << diTypeToStr(node->getType()) << " ] "
-                            << arrow << " [ " << diTypeToStr(edge->getDstNode()->getType()) << " ]\n";
+            SVFUtil::outs() << indent(currIndent) << "[ " << diTypeToStr(node->getDIType()) << " ] "
+                            << arrow << " [ " << diTypeToStr(edge->getDstNode()->getDIType()) << " ]\n";
         }
 
         if (node->getOutEdges().size() == 0)

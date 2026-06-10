@@ -199,6 +199,10 @@ protected:
     /// On the fly call graph construction
     virtual void onTheFlyCallGraphSolve(const CallSiteToFunPtrMap& callsites, CallEdgeMap& newEdges);
 
+    /// On the fly thread call graph construction respecting forksite
+    virtual void onTheFlyThreadCallGraphSolve(const CallSiteToFunPtrMap& callsites,
+            CallEdgeMap& newForkEdges);
+
     /// Normalize points-to information for field-sensitive analysis,
     /// i.e., replace fieldObj with baseObj if it is field-insensitive
     virtual void normalizePointsTo();
@@ -211,8 +215,11 @@ private:
 
 public:
     /// Interface expose to users of our pointer analysis, given Value infos
-    AliasResult alias(const SVFValue* V1,
-                      const SVFValue* V2) override;
+    AliasResult alias(const SVFVar* V1,
+                      const SVFVar* V2) override
+    {
+        return alias(V1->getId(), V2->getId());
+    }
 
     /// Interface expose to users of our pointer analysis, given PAGNodeID
     AliasResult alias(NodeID node1, NodeID node2) override;
@@ -341,7 +348,7 @@ public:
         expandedCpts = cpts;;
         for(typename CPtSet::const_iterator cit = cpts.begin(), ecit=cpts.end(); cit!=ecit; ++cit)
         {
-            if(pag->getBaseObjVar(cit->get_id())==cit->get_id())
+            if(pag->getBaseObjVarID(cit->get_id())==cit->get_id())
             {
                 NodeBS& fields = pag->getAllFieldsObjVars(cit->get_id());
                 for(NodeBS::iterator it = fields.begin(), eit = fields.end(); it!=eit; ++it)
@@ -497,9 +504,9 @@ public:
     }
 
     /// Interface expose to users of our pointer analysis, given Value infos
-    virtual inline AliasResult alias(const SVFValue* V1, const SVFValue* V2)
+    virtual inline AliasResult alias(const SVFVar* V1, const SVFVar* V2)
     {
-        return  alias(pag->getValueNode(V1),pag->getValueNode(V2));
+        return  alias(V1->getId(), V2->getId());
     }
     /// Interface expose to users of our pointer analysis, given two pointers
     virtual inline AliasResult alias(NodeID node1, NodeID node2)
@@ -557,7 +564,7 @@ public:
     {
         for (OrderedNodeSet::iterator nIter = this->getAllValidPtrs().begin(); nIter != this->getAllValidPtrs().end(); ++nIter)
         {
-            const PAGNode* node = this->getPAG()->getGNode(*nIter);
+            const SVFVar* node = this->getPAG()->getSVFVar(*nIter);
             if (this->getPAG()->isValidTopLevelPtr(node))
             {
                 if (SVFUtil::isa<DummyObjVar>(node))
@@ -566,7 +573,7 @@ public:
                 }
                 else if (!SVFUtil::isa<DummyValVar>(node))
                 {
-                    SVFUtil::outs() << "##<" << node->getValue()->getName() << "> ";
+                    SVFUtil::outs() << "##<" << node->toString() << "> ";
                     //SVFUtil::outs() << "Source Loc: " << SVFUtil::getSourceLoc(node->getValue());
                 }
 

@@ -28,7 +28,9 @@
  */
 
 #include "AE/Core/AbstractState.h"
+#include "SVFIR/SVFIR.h"
 #include "Util/SVFUtil.h"
+#include "Util/Options.h"
 
 using namespace SVF;
 using namespace SVFUtil;
@@ -97,25 +99,6 @@ AbstractState AbstractState::narrowing(const AbstractState& other)
 
 }
 
-/// domain widen with other, important! other widen this.
-void AbstractState::widenWith(const AbstractState& other)
-{
-    for (auto it = _varToAbsVal.begin(); it != _varToAbsVal.end(); ++it)
-    {
-        auto key = it->first;
-        if (other.getVarToVal().find(key) != other.getVarToVal().end())
-            if (it->second.isInterval() && other._varToAbsVal.at(key).isInterval())
-                it->second.getInterval().widen_with(other._varToAbsVal.at(key).getInterval());
-    }
-    for (auto it = _addrToAbsVal.begin(); it != _addrToAbsVal.end(); ++it)
-    {
-        auto key = it->first;
-        if (other._addrToAbsVal.find(key) != other._addrToAbsVal.end())
-            if (it->second.isInterval() && other._varToAbsVal.at(key).isInterval())
-                it->second.getInterval().widen_with(other._addrToAbsVal.at(key).getInterval());
-    }
-}
-
 /// domain join with other, important! other widen this.
 void AbstractState::joinWith(const AbstractState& other)
 {
@@ -145,27 +128,7 @@ void AbstractState::joinWith(const AbstractState& other)
             _addrToAbsVal.emplace(key, it->second);
         }
     }
-}
-
-/// domain narrow with other, important! other widen this.
-void AbstractState::narrowWith(const AbstractState& other)
-{
-    for (auto it = _varToAbsVal.begin(); it != _varToAbsVal.end(); ++it)
-    {
-        auto key = it->first;
-        auto oit = other.getVarToVal().find(key);
-        if (oit != other.getVarToVal().end())
-            if (it->second.isInterval() && oit->second.isInterval())
-                it->second.getInterval().narrow_with(oit->second.getInterval());
-    }
-    for (auto it = _addrToAbsVal.begin(); it != _addrToAbsVal.end(); ++it)
-    {
-        auto key = it->first;
-        auto oit = other._addrToAbsVal.find(key);
-        if (oit != other._addrToAbsVal.end())
-            if (it->second.isInterval() && oit->second.isInterval())
-                it->second.getInterval().narrow_with(oit->second.getInterval());
-    }
+    _freedAddrs.insert(other._freedAddrs.begin(), other._freedAddrs.end());
 }
 
 /// domain meet with other, important! other widen this.
@@ -189,28 +152,193 @@ void AbstractState::meetWith(const AbstractState& other)
             oit->second.meet_with(it->second);
         }
     }
+    Set<NodeID> intersection;
+    std::set_intersection(_freedAddrs.begin(), _freedAddrs.end(),
+                          other._freedAddrs.begin(), other._freedAddrs.end(),
+                          std::inserter(intersection, intersection.begin()));
+    _freedAddrs = std::move(intersection);
 }
 
-/// Print values of all expressions
-void AbstractState::printExprValues(std::ostream &oss) const
+// initObjVar
+void AbstractState::initObjVar(const ObjVar* objVar)
 {
-    oss << "-----------Var and Value-----------\n";
-    printTable(_varToAbsVal, oss);
-    printTable(_addrToAbsVal, oss);
-    oss << "-----------------------------------------\n";
+    NodeID varId = objVar->getId();
+
+    // Check if the object variable has an associated value
+
+    const BaseObjVar* obj = PAG::getPAG()->getBaseObject(objVar->getId());
+
+    // Handle constant data, arrays, and structures
+    if (obj->isConstDataOrConstGlobal() || obj->isConstantArray() || obj->isConstantStruct())
+    {
+        if (const ConstIntObjVar* consInt = SVFUtil::dyn_cast<ConstIntObjVar>(objVar))
+        {
+            s64_t numeral = consInt->getSExtValue();
+            (*this)[varId] = IntervalValue(numeral, numeral);
+        }
+        else if (const ConstFPObjVar* consFP = SVFUtil::dyn_cast<ConstFPObjVar>(objVar))
+        {
+            (*this)[varId] = IntervalValue(consFP->getFPValue(), consFP->getFPValue());
+        }
+        else if (SVFUtil::isa<ConstNullPtrObjVar>(objVar))
+        {
+            (*this)[varId] = IntervalValue(0, 0);
+        }
+        else if (SVFUtil::isa<GlobalObjVar>(objVar))
+        {
+            (*this)[varId] = AddressValue(AbstractState::getVirtualMemAddress(varId));
+        }
+        else if (obj->isConstantArray() || obj->isConstantStruct())
+        {
+            (*this)[varId] = IntervalValue::top();
+        }
+        else
+        {
+            (*this)[varId] = IntervalValue::top();
+        }
+    }
+    // Handle non-constant memory objects
+    else
+    {
+        (*this)[varId] = AddressValue(AbstractState::getVirtualMemAddress(varId));
+    }
+    return;
 }
 
-void AbstractState::printTable(const VarToAbsValMap&table, std::ostream &oss) const
+void AbstractState::printAbstractState() const
 {
-    oss.flags(std::ios::left);
-    std::set<NodeID> ordered;
-    for (const auto &item: table)
+    SVFUtil::outs() << "-----------Var and Value-----------\n";
+    u32_t fieldWidth = 20;
+    SVFUtil::outs().flags(std::ios::left);
+    std::vector<std::pair<u32_t, AbstractValue>> varToAbsValVec(_varToAbsVal.begin(), _varToAbsVal.end());
+    std::sort(varToAbsValVec.begin(), varToAbsValVec.end(), [](const auto &a, const auto &b)
     {
-        ordered.insert(item.first);
-    }
-    for (const auto &item: ordered)
+        return a.first < b.first;
+    });
+    for (const auto &item: varToAbsValVec)
     {
-        oss << "Var" << std::to_string(item);
-        oss << "\t Value: " << table.at(item).toString() << "\n";
+        SVFUtil::outs() << std::left << std::setw(fieldWidth) << ("Var" + std::to_string(item.first));
+        if (item.second.isInterval())
+        {
+            SVFUtil::outs() << " Value: " << item.second.getInterval().toString() << "\n";
+        }
+        else if (item.second.isAddr())
+        {
+            SVFUtil::outs() << " Value: {";
+            u32_t i = 0;
+            for (const auto& addr: item.second.getAddrs())
+            {
+                ++i;
+                if (i < item.second.getAddrs().size())
+                {
+                    SVFUtil::outs() << "0x" << std::hex << addr << ", ";
+                }
+                else
+                {
+                    SVFUtil::outs() << "0x" << std::hex << addr;
+                }
+            }
+            SVFUtil::outs() << "}\n";
+        }
+        else
+        {
+            SVFUtil::outs() << " Value: ⊥\n";
+        }
     }
+
+    std::vector<std::pair<u32_t, AbstractValue>> addrToAbsValVec(_addrToAbsVal.begin(), _addrToAbsVal.end());
+    std::sort(addrToAbsValVec.begin(), addrToAbsValVec.end(), [](const auto &a, const auto &b)
+    {
+        return a.first < b.first;
+    });
+
+    for (const auto& item: addrToAbsValVec)
+    {
+        std::ostringstream oss;
+        oss << "0x" << std::hex << AbstractState::getVirtualMemAddress(item.first);
+        SVFUtil::outs() << std::left << std::setw(fieldWidth) << oss.str();
+        if (item.second.isInterval())
+        {
+            SVFUtil::outs() << " Value: " << item.second.getInterval().toString() << "\n";
+        }
+        else if (item.second.isAddr())
+        {
+            SVFUtil::outs() << " Value: {";
+            u32_t i = 0;
+            for (const auto& addr: item.second.getAddrs())
+            {
+                ++i;
+                if (i < item.second.getAddrs().size())
+                {
+                    SVFUtil::outs() << "0x" << std::hex << addr << ", ";
+                }
+                else
+                {
+                    SVFUtil::outs() << "0x" << std::hex << addr;
+                }
+            }
+            SVFUtil::outs() << "}\n";
+        }
+        else
+        {
+            SVFUtil::outs() << " Value: ⊥\n";
+        }
+    }
+    SVFUtil::outs() << "-----------------------------------------\n";
+}
+
+std::string AbstractState::toString() const
+{
+    u32_t varIntervals = 0, varAddrs = 0, varBottom = 0;
+    for (const auto& item : _varToAbsVal)
+    {
+        if (item.second.isInterval()) ++varIntervals;
+        else if (item.second.isAddr()) ++varAddrs;
+        else ++varBottom;
+    }
+    u32_t addrIntervals = 0, addrAddrs = 0, addrBottom = 0;
+    for (const auto& item : _addrToAbsVal)
+    {
+        if (item.second.isInterval()) ++addrIntervals;
+        else if (item.second.isAddr()) ++addrAddrs;
+        else ++addrBottom;
+    }
+    std::ostringstream oss;
+    oss << "AbstractState {\n"
+        << "  VarToAbsVal: " << _varToAbsVal.size() << " entries ("
+        << varIntervals << " intervals, " << varAddrs << " addresses, " << varBottom << " bottom)\n"
+        << "  AddrToAbsVal: " << _addrToAbsVal.size() << " entries ("
+        << addrIntervals << " intervals, " << addrAddrs << " addresses, " << addrBottom << " bottom)\n"
+        << "  FreedAddrs: " << _freedAddrs.size() << "\n"
+        << "}";
+    return oss.str();
+}
+
+
+bool AbstractState::eqVarToValMap(const VarToAbsValMap&lhs, const VarToAbsValMap&rhs) const
+{
+    if (lhs.size() != rhs.size()) return false;
+    for (const auto &item: lhs)
+    {
+        auto it = rhs.find(item.first);
+        if (it == rhs.end())
+            return false;
+        if (!item.second.equals(it->second))
+            return false;
+    }
+    return true;
+}
+
+bool AbstractState::geqVarToValMap(const VarToAbsValMap&lhs, const VarToAbsValMap&rhs) const
+{
+    if (rhs.empty()) return true;
+    for (const auto &item: rhs)
+    {
+        auto it = lhs.find(item.first);
+        if (it == lhs.end()) return false;
+        if (!it->second.getInterval().contain(
+                    item.second.getInterval()))
+            return false;
+    }
+    return true;
 }

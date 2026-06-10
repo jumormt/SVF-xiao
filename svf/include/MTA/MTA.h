@@ -48,7 +48,6 @@ class MTAStat;
 class TCT;
 class MHP;
 class LockAnalysis;
-class SVFModule;
 
 /*!
  * Base data race detector
@@ -57,9 +56,6 @@ class MTA
 {
 
 public:
-    typedef Set<const SVFInstruction*> LoadSet;
-    typedef Set<const SVFInstruction*> StoreSet;
-
     /// Constructor
     MTA();
 
@@ -70,11 +66,11 @@ public:
     /// We start the pass here
     virtual bool runOnModule(SVFIR* module);
     /// Compute MHP
-    virtual MHP* computeMHP(SVFModule* module);
+    virtual MHP* computeMHP(TCT* tct);
     /// Compute locksets
     virtual LockAnalysis* computeLocksets(TCT* tct);
     /// Perform detection
-    virtual void detect(SVFModule* module);
+    virtual void detect();
 
     // Not implemented for now
     // void dump(Module &module, MHP *mhp, LockAnalysis *lsa);

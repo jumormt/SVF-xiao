@@ -35,7 +35,6 @@
 #include "MTA/LockAnalysis.h"
 #include "MTA/MTAStat.h"
 #include "WPA/Andersen.h"
-#include "MTA/FSMPTA.h"
 #include "Util/SVFUtil.h"
 
 using namespace SVF;
@@ -50,8 +49,7 @@ MTA::~MTA()
 {
     if (tcg)
         delete tcg;
-    //if (tct)
-    //    delete tct;
+
     delete mhp;
     delete lsa;
 }
@@ -61,70 +59,12 @@ MTA::~MTA()
  */
 bool MTA::runOnModule(SVFIR* pag)
 {
-    mhp = computeMHP(pag->getModule());
-    lsa = computeLocksets(mhp->getTCT());
-
-    if(Options::RaceCheck())
-        detect(pag->getModule());
-    /*
-    if (Options::AndersenAnno()) {
-        pta = mhp->getTCT()->getPTA();
-        if (pta->printStat())
-            stat->performMHPPairStat(mhp,lsa);
-        AndersenWaveDiff::releaseAndersenWaveDiff();
-    } else if (Options::FSAnno()) {
-
-        reportMemoryUsageKB("Mem before analysis");
-        DBOUT(DGENERAL, outs() << pasMsg("FSMPTA analysis\n"));
-        DBOUT(DMTA, outs() << pasMsg("FSMPTA analysis\n"));
-
-        DOTIMESTAT(double ptStart = stat->getClk());
-        pta = FSMPTA::createFSMPTA(module, mhp,lsa);
-        DOTIMESTAT(double ptEnd = stat->getClk());
-        DOTIMESTAT(stat->FSMPTATime += (ptEnd - ptStart) / TIMEINTERVAL);
-
-        reportMemoryUsageKB("Mem after analysis");
-
-        if (pta->printStat())
-            stat->performMHPPairStat(mhp,lsa);
-
-        FSMPTA::releaseFSMPTA();
-    }
-
-    if (DoInstrumentation) {
-        DBOUT(DGENERAL, outs() << pasMsg("ThreadSanitizer Instrumentation\n"));
-        DBOUT(DMTA, outs() << pasMsg("ThreadSanitizer Instrumentation\n"));
-        TSan tsan;
-        tsan.doInitialization(*pta->getModule());
-        for (Module::iterator it = pta->getModule()->begin(), eit = pta->getModule()->end(); it != eit; ++it) {
-            tsan.runOnFunction(*it);
-        }
-        if (pta->printStat())
-            PrintStatistics();
-    }
-    */
-
-    return false;
-}
-
-/*!
- * Compute lock sets
- */
-LockAnalysis* MTA::computeLocksets(TCT* tct)
-{
-    LockAnalysis* lsa = new LockAnalysis(tct);
-    lsa->analyze();
-    return lsa;
-}
-
-MHP* MTA::computeMHP(SVFModule* module)
-{
-
     DBOUT(DGENERAL, outs() << pasMsg("MTA analysis\n"));
     DBOUT(DMTA, outs() << pasMsg("MTA analysis\n"));
-    SVFIR* pag = PAG::getPAG();
+
     PointerAnalysis* pta = AndersenWaveDiff::createAndersenWaveDiff(pag);
-    pta->getPTACallGraph()->dump("ptacg");
+    pta->getCallGraph()->dump("ptacg");
+    pag->getICFG()->updateCallGraph(pta->getCallGraph());
 
     DBOUT(DGENERAL, outs() << pasMsg("Build TCT\n"));
     DBOUT(DMTA, outs() << pasMsg("Build TCT\n"));
@@ -142,11 +82,32 @@ MHP* MTA::computeMHP(SVFModule* module)
 
     tcg->dump("tcg");
 
+    mhp = computeMHP(tct.get());
+    lsa = computeLocksets(tct.get());
+
+    if(Options::RaceCheck())
+        detect();
+
+    return false;
+}
+
+/*!
+ * Compute lock sets
+ */
+LockAnalysis* MTA::computeLocksets(TCT* tct)
+{
+    LockAnalysis* lsa = new LockAnalysis(tct);
+    lsa->analyze();
+    return lsa;
+}
+
+MHP* MTA::computeMHP(TCT* tct)
+{
     DBOUT(DGENERAL, outs() << pasMsg("MHP analysis\n"));
     DBOUT(DMTA, outs() << pasMsg("MHP analysis\n"));
 
     DOTIMESTAT(double mhpStart = stat->getClk());
-    MHP* mhp = new MHP(tct.get());
+    MHP* mhp = new MHP(tct);
     mhp->analyze();
     DOTIMESTAT(double mhpEnd = stat->getClk());
     DOTIMESTAT(stat->MHPTime += (mhpEnd - mhpStart) / TIMEINTERVAL);
@@ -163,7 +124,7 @@ MHP* MTA::computeMHP(SVFModule* module)
 // * when two memory access may-happen in parallel and are not protected by the same lock
 // * (excluding global constraints because they are initialized before running the main function)
 // */
-void MTA::detect(SVFModule* module)
+void MTA::detect()
 {
 
     DBOUT(DGENERAL, outs() << pasMsg("Starting Race Detection\n"));
@@ -173,16 +134,17 @@ void MTA::detect(SVFModule* module)
     SVFIR* pag = SVFIR::getPAG();
     PointerAnalysis* pta = AndersenWaveDiff::createAndersenWaveDiff(pag);
 
-    Set<const SVFInstruction*> needcheckinst;
     // Add symbols for all of the functions and the instructions in them.
-    for (const SVFFunction* F : module->getFunctionSet())
+    for (const auto& item : *PAG::getPAG()->getCallGraph())
     {
+        const FunObjVar* F = item.second->getFunction();
         // collect and create symbols inside the function body
-        for (const SVFBasicBlock* svfbb : F->getBasicBlockList())
+        for (auto it : *F)
         {
-            for (const SVFInstruction* svfInst : svfbb->getInstructionList())
+            const SVFBasicBlock* svfbb = it.second;
+            for (const ICFGNode* icfgNode : svfbb->getICFGNodeList())
             {
-                for(const SVFStmt* stmt : pag->getSVFStmtList(pag->getICFG()->getICFGNode(svfInst)))
+                for(const SVFStmt* stmt : pag->getSVFStmtList(icfgNode))
                 {
                     if (const LoadStmt* l = SVFUtil::dyn_cast<LoadStmt>(stmt))
                     {
@@ -203,10 +165,10 @@ void MTA::detect(SVFModule* module)
         for (Set<const StoreStmt*>::const_iterator sit = stores.begin(), esit = stores.end(); sit != esit; ++sit)
         {
             const StoreStmt* store = *sit;
-            if(load->getInst()==nullptr || store->getInst()==nullptr)
+            if(SVFUtil::isa<GlobalICFGNode>(load->getICFGNode()) || SVFUtil::isa<GlobalICFGNode>(store->getICFGNode()))
                 continue;
-            if(mhp->mayHappenInParallelInst(load->getInst(),store->getInst()) && pta->alias(load->getRHSVarID(),store->getLHSVarID()))
-                if(lsa->isProtectedByCommonLock(load->getInst(),store->getInst()) == false)
+            if(mhp->mayHappenInParallelInst(load->getICFGNode(),store->getICFGNode()) && pta->alias(load->getRHSVarID(),store->getLHSVarID()))
+                if(lsa->isProtectedByCommonLock(load->getICFGNode(),store->getICFGNode()) == false)
                     outs() << SVFUtil::bugMsg1("race pair(") << " store: " << store->toString() << ", load: " << load->toString() << SVFUtil::bugMsg1(")") << "\n";
         }
     }

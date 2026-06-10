@@ -30,24 +30,23 @@
 #ifndef RCG_H_
 #define RCG_H_
 
-#include "Graphs/PTACallGraph.h"
-#include "MemoryModel/PointerAnalysisImpl.h"
+#include "Graphs/CallGraph.h"
 
 namespace SVF
 {
 
-class SVFModule;
 class ThreadAPI;
+class PointerAnalysis;
 /*!
  * PTA thread fork edge from fork site to the entry of a start routine function
  */
-class ThreadForkEdge: public PTACallGraphEdge
+class ThreadForkEdge: public CallGraphEdge
 {
 
 public:
     /// Constructor
-    ThreadForkEdge(PTACallGraphNode* s, PTACallGraphNode* d, CallSiteID csId) :
-        PTACallGraphEdge(s, d, PTACallGraphEdge::TDForkEdge, csId)
+    ThreadForkEdge(CallGraphNode* s, CallGraphNode* d, CallSiteID csId) :
+        CallGraphEdge(s, d, CallGraphEdge::TDForkEdge, csId)
     {
     }
     /// Destructor
@@ -61,36 +60,27 @@ public:
     {
         return true;
     }
-    static inline bool classof(const PTACallGraphEdge *edge)
+    static inline bool classof(const CallGraphEdge*edge)
     {
-        return edge->getEdgeKind() == PTACallGraphEdge::TDForkEdge;
+        return edge->getEdgeKind() == CallGraphEdge::TDForkEdge;
     }
     //@}
 
-    virtual const std::string toString() const
-    {
-        std::string str;
-        std::stringstream rawstr(str);
-        rawstr << "ThreadForkEdge ";
-        rawstr << "CallSite ID: " << getCallSiteID();
-        rawstr << " srcNode ID " << getSrcID() << " (fun: " << getSrcNode()->getFunction()->getName() << ")";
-        rawstr << " dstNode ID " << getDstID() << " (fun: " << getDstNode()->getFunction()->getName() << ")";
-        return rawstr.str();
-    }
+    virtual const std::string toString() const;
 
-    typedef GenericNode<PTACallGraphNode, ThreadForkEdge>::GEdgeSetTy ForkEdgeSet;
+    typedef GenericNode<CallGraphNode, ThreadForkEdge>::GEdgeSetTy ForkEdgeSet;
 };
 
 /*!
  * PTA thread join edge from the exit of a start routine function to a join point of the thread
  */
-class ThreadJoinEdge: public PTACallGraphEdge
+class ThreadJoinEdge: public CallGraphEdge
 {
 
 public:
     /// Constructor
-    ThreadJoinEdge(PTACallGraphNode* s, PTACallGraphNode* d, CallSiteID csId) :
-        PTACallGraphEdge(s, d, PTACallGraphEdge::TDJoinEdge, csId)
+    ThreadJoinEdge(CallGraphNode* s, CallGraphNode* d, CallSiteID csId) :
+        CallGraphEdge(s, d, CallGraphEdge::TDJoinEdge, csId)
     {
     }
     /// Destructor
@@ -102,35 +92,26 @@ public:
     {
         return true;
     }
-    static inline bool classof(const PTACallGraphEdge *edge)
+    static inline bool classof(const CallGraphEdge*edge)
     {
-        return edge->getEdgeKind() == PTACallGraphEdge::TDJoinEdge;
+        return edge->getEdgeKind() == CallGraphEdge::TDJoinEdge;
     }
 
-    virtual const std::string toString() const
-    {
-        std::string str;
-        std::stringstream rawstr(str);
-        rawstr << "ThreadJoinEdge ";
-        rawstr << "CallSite ID: " << getCallSiteID();
-        rawstr << " srcNode ID " << getSrcID() << " (fun: " << getSrcNode()->getFunction()->getName() << ")";
-        rawstr << " dstNode ID " << getDstID() << " (fun: " << getDstNode()->getFunction()->getName() << ")";
-        return rawstr.str();
-    }
+    virtual const std::string toString() const;
 
-    typedef GenericNode<PTACallGraphNode, ThreadJoinEdge>::GEdgeSetTy JoinEdgeSet;
+    typedef GenericNode<CallGraphNode, ThreadJoinEdge>::GEdgeSetTy JoinEdgeSet;
 };
 
 /*!
  * hare_parallel_for edge from fork site to the entry of a start routine function
  */
-class HareParForEdge: public PTACallGraphEdge
+class HareParForEdge: public CallGraphEdge
 {
 
 public:
     /// Constructor
-    HareParForEdge(PTACallGraphNode* s, PTACallGraphNode* d, CallSiteID csId) :
-        PTACallGraphEdge(s, d, PTACallGraphEdge::HareParForEdge, csId)
+    HareParForEdge(CallGraphNode* s, CallGraphNode* d, CallSiteID csId) :
+        CallGraphEdge(s, d, CallGraphEdge::HareParForEdge, csId)
     {
     }
     /// Destructor
@@ -144,27 +125,25 @@ public:
     {
         return true;
     }
-    static inline bool classof(const PTACallGraphEdge *edge)
+    static inline bool classof(const CallGraphEdge*edge)
     {
-        return edge->getEdgeKind() == PTACallGraphEdge::HareParForEdge;
+        return edge->getEdgeKind() == CallGraphEdge::HareParForEdge;
     }
     //@}
 
-    typedef GenericNode<PTACallGraphNode, HareParForEdge>::GEdgeSetTy ParForEdgeSet;
+    typedef GenericNode<CallGraphNode, HareParForEdge>::GEdgeSetTy ParForEdgeSet;
 };
 
 
 /*!
  * Thread sensitive call graph
  */
-class ThreadCallGraph: public PTACallGraph
+class ThreadCallGraph: public CallGraph
 {
 
 public:
     typedef Set<const CallICFGNode*> InstSet;
     typedef InstSet CallSiteSet;
-    typedef std::vector<const SVFInstruction*> InstVector;
-    typedef Map<const SVFInstruction*, InstSet> CallToInstMap;
     typedef Set<CallSiteSet*> CtxSet;
     typedef ThreadForkEdge::ForkEdgeSet ForkEdgeSet;
     typedef Map<const CallICFGNode*, ForkEdgeSet> CallInstToForkEdgesMap;
@@ -174,7 +153,10 @@ public:
     typedef Map<const CallICFGNode*, ParForEdgeSet> CallInstToParForEdgesMap;
 
     /// Constructor
-    ThreadCallGraph();
+    ThreadCallGraph(const CallGraph& cg);
+
+    ThreadCallGraph(ThreadCallGraph& cg) = delete;
+
     /// Destructor
     virtual ~ThreadCallGraph()
     {
@@ -186,9 +168,9 @@ public:
     {
         return true;
     }
-    static inline bool classof(const PTACallGraph *g)
+    static inline bool classof(const CallGraph*g)
     {
-        return g->getKind() == PTACallGraph::ThdCallGraph;
+        return g->getKind() == CallGraph::ThdCallGraph;
     }
     //@}
 
@@ -203,7 +185,8 @@ public:
     /// whether this call instruction has a valid call graph edge
     inline bool hasThreadForkEdge(const CallICFGNode* cs) const
     {
-        return callinstToThreadForkEdgesMap.find(cs) != callinstToThreadForkEdgesMap.end();
+        return callinstToThreadForkEdgesMap.find(cs) !=
+               callinstToThreadForkEdgesMap.end();
     }
     inline ForkEdgeSet::const_iterator getForkEdgeBegin(const CallICFGNode* cs) const
     {
@@ -237,7 +220,7 @@ public:
         assert(it != callinstToThreadJoinEdgesMap.end() && "call instruction does not have a valid callee");
         return it->second.end();
     }
-    inline void getJoinSites(const PTACallGraphNode* routine, InstSet& csSet)
+    inline void getJoinSites(const CallGraphNode* routine, InstSet& csSet)
     {
         for(CallInstToJoinEdgesMap::const_iterator it = callinstToThreadJoinEdgesMap.begin(), eit = callinstToThreadJoinEdgesMap.end(); it!=eit; ++it)
         {
@@ -347,8 +330,8 @@ public:
 
     /// Add direct/indirect thread fork edges
     //@{
-    void addDirectForkEdge(const CallICFGNode* cs);
-    void addIndirectForkEdge(const CallICFGNode* cs, const SVFFunction* callee);
+    bool addDirectForkEdge(const CallICFGNode* cs);
+    bool addIndirectForkEdge(const CallICFGNode* cs, const FunObjVar* callee);
     //@}
 
     /// Add thread join edges
@@ -356,14 +339,8 @@ public:
     void addDirectJoinEdge(const CallICFGNode* cs,const CallSiteSet& forksite);
     //@}
 
-    /// Add direct/indirect parallel for edges
-    //@{
-    void addDirectParForEdge(const CallICFGNode* cs);
-    void addIndirectParForEdge(const CallICFGNode* cs, const SVFFunction* callee);
-    //@}
 
-
-    /// map call instruction to its CallGraphEdge map
+    /// map call instruction to its PTACallGraphEdge map
     inline void addThreadForkEdgeSetMap(const CallICFGNode* cs, ThreadForkEdge* edge)
     {
         if(edge!=nullptr)
@@ -373,7 +350,7 @@ public:
         }
     }
 
-    /// map call instruction to its CallGraphEdge map
+    /// map call instruction to its PTACallGraphEdge map
     inline void addThreadJoinEdgeSetMap(const CallICFGNode* cs, ThreadJoinEdge* edge)
     {
         if(edge!=nullptr)
@@ -383,7 +360,7 @@ public:
         }
     }
 
-    /// map call instruction to its CallGraphEdge map
+    /// map call instruction to its PTACallGraphEdge map
     inline void addHareParForEdgeSetMap(const CallICFGNode* cs, HareParForEdge* edge)
     {
         if(edge!=nullptr)
@@ -394,7 +371,7 @@ public:
     }
 
     /// has thread join edge
-    inline ThreadJoinEdge* hasThreadJoinEdge(const CallICFGNode* call, PTACallGraphNode* joinFunNode, PTACallGraphNode* threadRoutineFunNode, CallSiteID csId) const
+    inline ThreadJoinEdge* hasThreadJoinEdge(const CallICFGNode* call, CallGraphNode* joinFunNode, CallGraphNode* threadRoutineFunNode, CallSiteID csId) const
     {
         ThreadJoinEdge joinEdge(joinFunNode,threadRoutineFunNode, csId);
         CallInstToJoinEdgesMap::const_iterator it = callinstToThreadJoinEdgesMap.find(call);

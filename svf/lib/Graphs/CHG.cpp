@@ -29,6 +29,8 @@
 
 #include "Graphs/CHG.h"
 #include "Util/SVFUtil.h"
+#include "Graphs/ICFG.h"
+#include "SVFIR/SVFIR.h"
 
 using namespace SVF;
 using namespace SVFUtil;
@@ -48,16 +50,16 @@ static bool hasEdge(const CHNode *src, const CHNode *dst,
     return false;
 }
 
-static bool checkArgTypes(CallSite cs, const SVFFunction* fn)
+static bool checkArgTypes(const CallICFGNode* cs, const FunObjVar* fn)
 {
 
     // here we skip the first argument (i.e., this pointer)
-    u32_t arg_size = (fn->arg_size() > cs.arg_size()) ? cs.arg_size(): fn->arg_size();
+    u32_t arg_size = (fn->arg_size() > cs->arg_size()) ? cs->arg_size(): fn->arg_size();
     if(arg_size > 1)
     {
         for (unsigned i = 1; i < arg_size; i++)
         {
-            auto cs_arg = cs.getArgOperand(i);
+            auto cs_arg = cs->getArgument(i);
             auto fn_arg = fn->getArg(i);
             if (cs_arg->getType() != fn_arg->getType())
             {
@@ -67,6 +69,29 @@ static bool checkArgTypes(CallSite cs, const SVFFunction* fn)
     }
 
     return true;
+}
+
+bool CHGraph::csHasVtblsBasedonCHA(const CallICFGNode* cs)
+{
+    CallNodeToVTableSetMap::const_iterator it = callNodeToCHAVtblsMap.find(cs);
+    return it != callNodeToCHAVtblsMap.end();
+}
+bool CHGraph::csHasVFnsBasedonCHA(const CallICFGNode* cs)
+{
+    CallNodeToVFunSetMap::const_iterator it = callNodeToCHAVFnsMap.find(cs);
+    return it != callNodeToCHAVFnsMap.end();
+}
+const VTableSet& CHGraph::getCSVtblsBasedonCHA(const CallICFGNode* cs)
+{
+    CallNodeToVTableSetMap::const_iterator it = callNodeToCHAVtblsMap.find(cs);
+    assert(it != callNodeToCHAVtblsMap.end() && "cs does not have vtabls based on CHA.");
+    return it->second;
+}
+const VFunSet& CHGraph::getCSVFsBasedonCHA(const CallICFGNode* cs)
+{
+    CallNodeToVFunSetMap::const_iterator it = callNodeToCHAVFnsMap.find(cs);
+    assert(it != callNodeToCHAVFnsMap.end() && "cs does not have vfns based on CHA.");
+    return it->second;
 }
 
 void CHGraph::addEdge(const string className, const string baseClassName,
@@ -96,14 +121,13 @@ CHNode *CHGraph::getNode(const string name) const
  * Get virtual functions for callsite "cs" based on vtbls (calculated
  * based on pointsto set)
  */
-void CHGraph::getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &virtualFunctions)
+void CHGraph::getVFnsFromVtbls(const CallICFGNode* callsite, const VTableSet &vtbls, VFunSet &virtualFunctions)
 {
-
     /// get target virtual functions
-    size_t idx = cs.getFunIdxInVtable();
+    size_t idx = callsite->getFunIdxInVtable();
     /// get the function name of the virtual callsite
-    string funName = cs.getFunNameOfVirtualCall();
-    for (const SVFGlobalValue *vt : vtbls)
+    string funName = callsite->getFunNameOfVirtualCall();
+    for (const GlobalObjVar *vt : vtbls)
     {
         const CHNode *child = getNode(vt->getName());
         if (child == nullptr)
@@ -113,14 +137,14 @@ void CHGraph::getVFnsFromVtbls(CallSite cs, const VTableSet &vtbls, VFunSet &vir
         for (CHNode::FuncVector::const_iterator fit = vfns.begin(),
                 feit = vfns.end(); fit != feit; ++fit)
         {
-            const SVFFunction* callee = *fit;
-            if (cs.arg_size() == callee->arg_size() ||
-                    (cs.isVarArg() && callee->isVarArg()))
+            const FunObjVar* callee = *fit;
+            if (callsite->arg_size() == callee->arg_size() ||
+                    (callsite->isVarArg() && callee->isVarArg()))
             {
 
                 // if argument types do not match
                 // skip this one
-                if (!checkArgTypes(cs, callee))
+                if (!checkArgTypes(callsite, callee))
                     continue;
 
                 string calleeName = callee->getName();

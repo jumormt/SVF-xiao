@@ -77,12 +77,11 @@ void TypeAnalysis::callGraphSolveBasedOnCHA(const CallSiteToFunPtrMap& callsites
     for(CallSiteToFunPtrMap::const_iterator iter = callsites.begin(), eiter = callsites.end(); iter!=eiter; ++iter)
     {
         const CallICFGNode* cbn = iter->first;
-        CallSite cs = SVFUtil::getSVFCallSite(cbn->getCallSite());
-        if (cs.isVirtualCall())
+        if (cbn->isVirtualCall())
         {
-            const SVFValue* vtbl = cs.getVtablePtr();
+            const SVFVar* vtbl = cbn->getVtablePtr();
             (void)vtbl; // Suppress warning of unused variable under release build
-            assert(pag->hasValueNode(vtbl));
+            assert(vtbl != nullptr);
             VFunSet vfns;
             getVFnsFromCHA(cbn, vfns);
             connectVCallToVFns(cbn, vfns, newEdges);
@@ -128,7 +127,7 @@ void TypeAnalysis::dumpCHAStats()
           vfunc_total = 0,
           vtbl_max = 0,
           pure_abstract = 0;
-    set<const SVFFunction*> allVirtualFunctions;
+    set<const FunObjVar*> allVirtualFunctions;
     for (CHGraph::const_iterator it = chgraph->begin(), eit = chgraph->end();
             it != eit; ++it)
     {
@@ -142,10 +141,10 @@ void TypeAnalysis::dumpCHAStats()
                 veit = vecs.end(); vit != veit; ++vit)
         {
             vfuncs_size += (*vit).size();
-            for (vector<const SVFFunction*>::const_iterator fit = (*vit).begin(),
+            for (vector<const FunObjVar*>::const_iterator fit = (*vit).begin(),
                     feit = (*vit).end(); fit != feit; ++fit)
             {
-                const SVFFunction* func = *fit;
+                const FunObjVar* func = *fit;
                 allVirtualFunctions.insert(func);
             }
         }

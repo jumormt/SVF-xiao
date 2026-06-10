@@ -33,7 +33,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <regex>
 #include "CFL/CFGrammar.h"
 #include "Graphs/GenericGraph.h"
 #include "Graphs/ConsG.h"
@@ -76,7 +75,7 @@ typedef GenericNode<CFLNode,CFLEdge> GenericCFLNodeTy;
 class CFLNode: public GenericCFLNodeTy
 {
 public:
-    CFLNode (NodeID i = 0, GNodeK k = 0):
+    CFLNode (NodeID i = 0, GNodeK k = CFLNodeKd):
         GenericCFLNodeTy(i, k)
     {
     }
@@ -148,6 +147,24 @@ public:
 
         return num1 && num2;
     }
+
+    /// Methods for support type inquiry through isa, cast, and dyn_cast:
+    //@{
+    static inline bool classof(const CFLNode *)
+    {
+        return true;
+    }
+
+    static inline bool classof(const GenericICFGNodeTy* node)
+    {
+        return node->getNodeKind() == CFLNodeKd;
+    }
+
+    static inline bool classof(const SVFValue* node)
+    {
+        return node->getNodeKind() == CFLNodeKd;
+    }
+    //@}
 };
 
 /// Edge-labeled graph for CFL Reachability analysis

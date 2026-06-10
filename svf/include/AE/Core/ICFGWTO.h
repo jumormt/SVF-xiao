@@ -36,6 +36,7 @@
 
 #include "Graphs/ICFG.h"
 #include "Graphs/WTO.h"
+#include "Graphs/CallGraph.h"
 
 namespace SVF
 {
@@ -44,39 +45,62 @@ typedef WTOComponent<ICFG> ICFGWTOComp;
 typedef WTONode<ICFG> ICFGSingletonWTO;
 typedef WTOCycle<ICFG> ICFGCycleWTO;
 
+/// Interprocedural Weak Topological Order
+/// Each IWTO has an entry ICFGNode within an function-level SCC boundary. Here scc is one or more functions.
 class ICFGWTO : public WTO<ICFG>
 {
 public:
     typedef WTO<ICFG> Base;
     typedef WTOComponentVisitor<ICFG>::WTONodeT ICFGWTONode;
+    Set<const FunObjVar*> scc;
 
-    explicit ICFGWTO(ICFG* graph, const ICFGNode* node) : Base(graph, node) {}
+    // 1st argument is the SCC's entry ICFGNode and 2nd argument is the function(s) in this SCC.
+    explicit ICFGWTO(const ICFGNode* node, Set<const FunObjVar*> funcScc = {}) :
+        Base(node), scc(funcScc)
+    {
+        if (scc.empty()) // if funcScc is empty, the scc is the function itself
+            scc.insert(node->getFun());
+    }
 
     virtual ~ICFGWTO()
     {
     }
 
-    inline void forEachSuccessor(
-        const ICFGNode* node,
-        std::function<void(const ICFGNode*)> func) const override
+    inline virtual std::vector<const ICFGNode*> getSuccessors(const ICFGNode* node) override
     {
+        std::vector<const ICFGNode*> successors;
+
         if (const auto* callNode = SVFUtil::dyn_cast<CallICFGNode>(node))
         {
-            const ICFGNode* succ = callNode->getRetICFGNode();
-            func(succ);
+
+            for (const auto &e : callNode->getOutEdges())
+            {
+                ICFGNode *calleeEntryICFGNode = e->getDstNode();
+                const ICFGNode *succ = nullptr;
+
+                if (scc.find(calleeEntryICFGNode->getFun()) != scc.end()) // caller & callee in the same SCC
+                    succ = calleeEntryICFGNode;
+                else
+                    succ = callNode->getRetICFGNode(); // caller & callee in different SCC
+
+                successors.push_back(succ);
+            }
         }
         else
         {
             for (const auto& e : node->getOutEdges())
             {
-                if (!e->isIntraCFGEdge() ||
-                        node->getFun() != e->getDstNode()->getFun())
+                ICFGNode *succ = e->getDstNode();
+                if (scc.find(succ->getFun()) == scc.end()) // if not in the same SCC, skip
                     continue;
-                func(e->getDstNode());
+                successors.push_back(succ);
             }
         }
+
+        return successors;
     }
 };
+
 } // namespace SVF
 
 #endif // SVF_ICFGWTO_H

@@ -1,4 +1,4 @@
-//===----- CHGBuiler.cpp -- Class hierarchy graph builder ---------------------------//
+//===----- CHGBuilder.cpp -- Class hierarchy graph builder ---------------------------//
 //
 //                     SVF: Static Value-Flow Analysis
 //
@@ -21,7 +21,7 @@
 //===----------------------------------------------------------------------===//
 
 /*
- * CHGBuiler.cpp
+ * CHGBuilder.cpp
  *
  *  Created on: Jun 4, 2021
  *      Author: Yulei Sui
@@ -39,10 +39,9 @@
 #include "SVF-LLVM/CHGBuilder.h"
 #include "Util/Options.h"
 #include "SVF-LLVM/CppUtil.h"
-#include "SVFIR/SymbolTableInfo.h"
+#include "SVFIR/ObjTypeInfo.h"
 #include "Util/SVFUtil.h"
 #include "SVF-LLVM/LLVMUtil.h"
-#include "SVFIR/SVFModule.h"
 #include "Util/PTAStat.h"
 #include "SVF-LLVM/LLVMModule.h"
 #include "SVF-LLVM/ObjTypeInference.h"
@@ -57,13 +56,17 @@ const string pureVirtualFunName = "__cxa_pure_virtual";
 
 const string ztiLabel = "_ZTI";
 
+LLVMModuleSet* CHGBuilder::llvmModuleSet()
+{
+    return LLVMModuleSet::getLLVMModuleSet();
+}
 
 void CHGBuilder::buildCHG()
 {
 
     double timeStart, timeEnd;
     timeStart = PTAStat::getClk(true);
-    for (Module &M : LLVMModuleSet::getLLVMModuleSet()->getLLVMModules())
+    for (Module &M : llvmModuleSet()->getLLVMModules())
     {
         DBOUT(DGENERAL, outs() << SVFUtil::pasMsg("construct CHGraph From module "
                 + M.getName().str() + "...\n"));
@@ -71,9 +74,9 @@ void CHGBuilder::buildCHG()
         for (Module::const_global_iterator I = M.global_begin(), E = M.global_end(); I != E; ++I)
             buildCHGNodes(&(*I));
         for (Module::const_iterator F = M.begin(), E = M.end(); F != E; ++F)
-            buildCHGNodes(LLVMUtil::getDefFunForMultipleModule(&(*F)));
+            buildCHGNodes(&(*F));
         for (Module::const_iterator F = M.begin(), E = M.end(); F != E; ++F)
-            buildCHGEdges(LLVMUtil::getDefFunForMultipleModule(&(*F)));
+            buildCHGEdges(&(*F));
 
         analyzeVTables(M);
     }
@@ -170,11 +173,14 @@ void CHGBuilder::connectInheritEdgeViaCall(const Function* caller, const CallBas
     {
         if (cs->arg_size() < 1 || (cs->arg_size() < 2 && cs->paramHasAttr(0, llvm::Attribute::StructRet)))
             return;
+        if(caller->arg_size() == 0)
+        {
+            return;
+        }
         const Value* csThisPtr = cppUtil::getVCallThisPtr(cs);
-        //const Argument* consThisPtr = getConstructorThisPtr(caller);
-        //bool samePtr = isSameThisPtrInConstructor(consThisPtr, csThisPtr);
-        bool samePtrTrue = true;
-        if (csThisPtr != nullptr && samePtrTrue)
+        const Argument* consThisPtr = getConstructorThisPtr(caller);
+        bool samePtr = isSameThisPtrInConstructor(consThisPtr, csThisPtr);
+        if (csThisPtr != nullptr && samePtr)
         {
             struct DemangledName basename = demangle(callee->getName().str());
             if (!LLVMUtil::isCallSite(csThisPtr)  &&
@@ -373,12 +379,11 @@ void CHGBuilder::analyzeVTables(const Module &M)
             string vtblClassName = getClassNameFromVtblObj(globalvalue->getName().str());
             CHNode *node = chg->getNode(vtblClassName);
             assert(node && "node not found?");
-
-            SVFGlobalValue* pValue =
-                LLVMModuleSet::getLLVMModuleSet()->getSVFGlobalValue(
-                    globalvalue);
-            pValue->setName(vtblClassName);
-            node->setVTable(pValue);
+            NodeID i = llvmModuleSet()->getObjectNode(globalvalue);
+            SVFVar* pVar = PAG::getPAG()->getGNode(i);
+            GlobalObjVar* globalObjVar = SVFUtil::cast<GlobalObjVar>(pVar);
+            globalObjVar->setName(vtblClassName);
+            node->setVTable(globalObjVar);
 
             for (unsigned int ei = 0; ei < vtblStruct->getNumOperands(); ++ei)
             {
@@ -536,7 +541,7 @@ void CHGBuilder::analyzeVTables(const Module &M)
                     {
                         for (int i = 0; i < null_ptr_num; ++i)
                         {
-                            const SVFFunction* fun = virtualFunctions[i];
+                            const FunObjVar* fun = virtualFunctions[i];
                             virtualFunctions.insert(virtualFunctions.begin(), fun);
                         }
                     }
@@ -604,7 +609,7 @@ void CHGBuilder::buildVirtualFunctionToIDMap()
         /*
          * get all virtual functions in a specific group
          */
-        set<const SVFFunction*> virtualFunctions;
+        set<const FunObjVar*> virtualFunctions;
         for (CHGraph::CHNodeSetTy::iterator it = group.begin(),
                 eit = group.end(); it != eit; ++it)
         {
@@ -612,7 +617,7 @@ void CHGBuilder::buildVirtualFunctionToIDMap()
             for (vector<CHNode::FuncVector>::const_iterator vit = vecs.begin(),
                     veit = vecs.end(); vit != veit; ++vit)
             {
-                for (vector<const SVFFunction*>::const_iterator fit = (*vit).begin(),
+                for (vector<const FunObjVar*>::const_iterator fit = (*vit).begin(),
                         feit = (*vit).end(); fit != feit; ++fit)
                 {
                     virtualFunctions.insert(*fit);
@@ -635,15 +640,15 @@ void CHGBuilder::buildVirtualFunctionToIDMap()
          * <~C, C::~C>
          * ...
          */
-        set<pair<string, const SVFFunction*> > fNameSet;
-        for (set<const SVFFunction*>::iterator fit = virtualFunctions.begin(),
+        set<pair<string, const FunObjVar*> > fNameSet;
+        for (set<const FunObjVar*>::iterator fit = virtualFunctions.begin(),
                 feit = virtualFunctions.end(); fit != feit; ++fit)
         {
-            const SVFFunction* f = *fit;
+            const FunObjVar* f = *fit;
             struct DemangledName dname = demangle(f->getName());
-            fNameSet.insert(pair<string, const SVFFunction*>(dname.funcName, f));
+            fNameSet.insert(pair<string, const FunObjVar*>(dname.funcName, f));
         }
-        for (set<pair<string, const SVFFunction*>>::iterator it = fNameSet.begin(),
+        for (set<pair<string, const FunObjVar*>>::iterator it = fNameSet.begin(),
                 eit = fNameSet.end(); it != eit; ++it)
         {
             chg->virtualFunctionToIDMap[it->second] = chg->vfID++;
@@ -655,7 +660,7 @@ void CHGBuilder::buildVirtualFunctionToIDMap()
 void CHGBuilder::buildCSToCHAVtblsAndVfnsMap()
 {
 
-    for (Module &M : LLVMModuleSet::getLLVMModuleSet()->getLLVMModules())
+    for (Module &M : llvmModuleSet()->getLLVMModules())
     {
         for (Module::const_iterator F = M.begin(), E = M.end(); F != E; ++F)
         {
@@ -671,7 +676,7 @@ void CHGBuilder::buildCSToCHAVtblsAndVfnsMap()
                     for (CHNodeSetTy::const_iterator it = chClasses.begin(), eit = chClasses.end(); it != eit; ++it)
                     {
                         const CHNode *child = *it;
-                        const SVFGlobalValue *vtbl = child->getVTable();
+                        const GlobalObjVar *vtbl = child->getVTable();
                         if (vtbl != nullptr)
                         {
                             vtbls.insert(vtbl);
@@ -679,12 +684,13 @@ void CHGBuilder::buildCSToCHAVtblsAndVfnsMap()
                     }
                     if (vtbls.size() > 0)
                     {
-                        CallSite cs = SVFUtil::getSVFCallSite(LLVMModuleSet::getLLVMModuleSet()->getSVFInstruction(callInst));
-                        chg->csToCHAVtblsMap[cs] = vtbls;
+                        ICFGNode* icfgNode =
+                            llvmModuleSet()->getICFGNode(callInst);
+                        chg->callNodeToCHAVtblsMap[icfgNode] = vtbls;
                         VFunSet virtualFunctions;
-                        chg->getVFnsFromVtbls(cs, vtbls, virtualFunctions);
+                        chg->getVFnsFromVtbls(SVFUtil::cast<CallICFGNode>(icfgNode), vtbls, virtualFunctions);
                         if (virtualFunctions.size() > 0)
-                            chg->csToCHAVFnsMap[cs] = virtualFunctions;
+                            chg->callNodeToCHAVFnsMap[icfgNode] = virtualFunctions;
                     }
                 }
             }
@@ -696,10 +702,11 @@ void CHGBuilder::buildCSToCHAVtblsAndVfnsMap()
 const CHGraph::CHNodeSetTy& CHGBuilder::getCSClasses(const CallBase* cs)
 {
     assert(cppUtil::isVirtualCallSite(cs) && "not virtual callsite!");
-    const SVFInstruction* svfcall = LLVMModuleSet::getLLVMModuleSet()->getSVFInstruction(cs);
 
-    CHGraph::CallSiteToCHNodesMap::const_iterator it = chg->csToClassesMap.find(svfcall);
-    if (it != chg->csToClassesMap.end())
+    ICFGNode* icfgNode = llvmModuleSet()->getICFGNode(cs);
+
+    CHGraph::CallNodeToCHNodesMap::const_iterator it = chg->callNodeToClassesMap.find(icfgNode);
+    if (it != chg->callNodeToClassesMap.end())
     {
         return it->second;
     }
@@ -712,9 +719,9 @@ const CHGraph::CHNodeSetTy& CHGBuilder::getCSClasses(const CallBase* cs)
             // if we cannot infer classname, conservatively push all class nodes
             for (const auto &node: *chg)
             {
-                chg->csToClassesMap[svfcall].insert(node.second);
+                chg->callNodeToClassesMap[icfgNode].insert(node.second);
             }
-            return chg->csToClassesMap[svfcall];
+            return chg->callNodeToClassesMap[icfgNode];
         }
 
         for (const auto &thisPtrClassName: thisPtrClassNames)
@@ -722,12 +729,12 @@ const CHGraph::CHNodeSetTy& CHGBuilder::getCSClasses(const CallBase* cs)
             if (const CHNode* thisNode = chg->getNode(thisPtrClassName))
             {
                 const CHGraph::CHNodeSetTy& instAndDesces = getInstancesAndDescendants(thisPtrClassName);
-                chg->csToClassesMap[svfcall].insert(thisNode);
+                chg->callNodeToClassesMap[icfgNode].insert(thisNode);
                 for (CHGraph::CHNodeSetTy::const_iterator it2 = instAndDesces.begin(), eit = instAndDesces.end(); it2 != eit; ++it2)
-                    chg->csToClassesMap[svfcall].insert(*it2);
+                    chg->callNodeToClassesMap[icfgNode].insert(*it2);
             }
         }
-        return chg->csToClassesMap[svfcall];
+        return chg->callNodeToClassesMap[icfgNode];
     }
 }
 
@@ -735,23 +742,15 @@ void CHGBuilder::addFuncToFuncVector(CHNode::FuncVector &v, const Function *lf)
 {
     if (cppUtil::isCPPThunkFunction(lf))
     {
-        if (const auto* tf = cppUtil::getThunkTarget(lf))
-        {
-            SVFFunction* pFunction =
-                LLVMModuleSet::getLLVMModuleSet()->getSVFFunction(tf);
-            cppUtil::DemangledName dname = cppUtil::demangle(pFunction->getName());
-            string calleeName = dname.funcName;
-            pFunction->setName(calleeName);
-            v.push_back(pFunction);
-        }
+        const auto* tf = cppUtil::getThunkTarget(lf);
+        const FunObjVar* pFunction =
+            llvmModuleSet()->getFunObjVar(tf ? tf : lf);
+        v.push_back(pFunction);
     }
     else
     {
-        SVFFunction* pFunction =
-            LLVMModuleSet::getLLVMModuleSet()->getSVFFunction(lf);
-        cppUtil::DemangledName dname = cppUtil::demangle(pFunction->getName());
-        string calleeName = dname.funcName;
-        pFunction->setName(calleeName);
+        const FunObjVar* pFunction =
+            llvmModuleSet()->getFunObjVar(lf);
         v.push_back(pFunction);
     }
 }

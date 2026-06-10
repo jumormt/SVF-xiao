@@ -39,7 +39,7 @@ using namespace SVFUtil;
 /*!
  * Add offset value to vector offsetVarAndGepTypePairs
  */
-bool AccessPath::addOffsetVarAndGepTypePair(const SVFVar* var, const SVFType* gepIterType)
+bool AccessPath::addOffsetVarAndGepTypePair(const ValVar* var, const SVFType* gepIterType)
 {
     idxOperandPairs.emplace_back(var, gepIterType);
     return true;
@@ -50,7 +50,7 @@ bool AccessPath::isConstantOffset() const
 {
     for(auto it : idxOperandPairs)
     {
-        if(SVFUtil::isa<SVFConstantInt>(it.first->getValue()) == false)
+        if(SVFUtil::isa<ConstIntValVar>(it.first) == false)
             return false;
     }
     return true;
@@ -64,7 +64,7 @@ u32_t AccessPath::getElementNum(const SVFType* type) const
 {
     if (SVFUtil::isa<SVFArrayType, SVFStructType>(type))
     {
-        return SymbolTableInfo::SymbolInfo()->getNumOfFlattenElements(type);
+        return PAG::getPAG()->getNumOfFlattenElements(type);
     }
     else if (type->isPointerTy())
     {
@@ -89,6 +89,31 @@ u32_t AccessPath::getElementNum(const SVFType* type) const
     }
 }
 
+
+/// Return byte offset from the beginning of the structure to the field where it is located for struct type
+///
+// e.g. idxOperandVar: i32 2  idxOperandType: %struct.Student = type { i32, [i8 x 12], i32 }
+//  we accumulate field 0 (i32) byte size (4 Bytes), and field 1 ([i8x12]) byte size (12 Bytes)
+//  then the return byte offset is 16 Bytes.
+u32_t AccessPath::getStructFieldOffset(const ValVar* idxOperandVar, const SVFStructType* idxOperandType) const
+{
+    u32_t structByteOffset = 0;
+    if (const ConstIntValVar*op = SVFUtil::dyn_cast<ConstIntValVar>(idxOperandVar))
+    {
+        for (u32_t structField = 0; structField < (u32_t) op->getSExtValue(); ++structField)
+        {
+            u32_t flattenIdx = idxOperandType->getTypeInfo()->getFlattenedFieldIdxVec()[structField];
+            structByteOffset += idxOperandType->getTypeInfo()->getOriginalElemType(flattenIdx)->getByteSize();
+        }
+        return structByteOffset;
+    }
+    else
+    {
+        assert(false && "struct type can only pair with constant idx");
+        abort();
+    }
+}
+
 /// Return accumulated constant offset
 ///
 /// "value" is the offset variable (must be a constant)
@@ -106,7 +131,7 @@ APOffset AccessPath::computeConstantByteOffset() const
         /// For example, there is struct DEST{int a, char b[10], int c[5]}
         /// (1) %c = getelementptr inbounds %struct.DEST, %struct.DEST* %arr, i32 0, i32 2
         //  (2) %arrayidx = getelementptr inbounds [10 x i8], [10 x i8]* %b, i64 0, i64 8
-        const SVFValue* value = idxOperandPairs[i].first->getValue();
+        const ValVar* var = idxOperandPairs[i].first;
         /// for (1) offsetVarAndGepTypePairs.size()  = 2
         ///     i = 0, type: %struct.DEST*, PtrType, op = 0
         ///     i = 1, type: %struct.DEST, StructType, op = 2
@@ -131,7 +156,7 @@ APOffset AccessPath::computeConstantByteOffset() const
             type2 = gepSrcPointeeType();
         }
 
-        const SVFConstantInt* op = SVFUtil::dyn_cast<SVFConstantInt>(value);
+        const ConstIntValVar* op = SVFUtil::dyn_cast<ConstIntValVar>(var);
         if (const SVFStructType* structType = SVFUtil::dyn_cast<SVFStructType>(type))
         {
             /// for (1) structType: %struct.DEST
@@ -154,31 +179,6 @@ APOffset AccessPath::computeConstantByteOffset() const
     }
     totalConstOffset = Options::MaxFieldLimit() > totalConstOffset? totalConstOffset: Options::MaxFieldLimit();
     return totalConstOffset;
-}
-
-/// Return byte offset from the beginning of the structure to the field where it is located for struct type
-///
-// e.g. idxOperandVar: i32 2  idxOperandType: %struct.Student = type { i32, [i8 x 12], i32 }
-//  we accumulate field 0 (i32) byte size (4 Bytes), and field 1 ([i8x12]) byte size (12 Bytes)
-//  then the return byte offset is 16 Bytes.
-u32_t AccessPath::getStructFieldOffset(const SVFVar* idxOperandVar, const SVFStructType* idxOperandType) const
-{
-    const SVFValue* idxValue = idxOperandVar->getValue();
-    u32_t structByteOffset = 0;
-    if (const SVFConstantInt *op = SVFUtil::dyn_cast<SVFConstantInt>(idxValue))
-    {
-        for (u32_t structField = 0; structField < (u32_t) op->getSExtValue(); ++structField)
-        {
-            u32_t flattenIdx = idxOperandType->getTypeInfo()->getFlattenedFieldIdxVec()[structField];
-            structByteOffset += idxOperandType->getTypeInfo()->getOriginalElemType(flattenIdx)->getByteSize();
-        }
-        return structByteOffset;
-    }
-    else
-    {
-        assert(false && "struct type can only pair with constant idx");
-        abort();
-    }
 }
 
 /// Return accumulated constant offset
@@ -222,29 +222,30 @@ APOffset AccessPath::computeConstantOffset() const
         return getConstantStructFldIdx();
     for(int i = idxOperandPairs.size() - 1; i >= 0; i--)
     {
-        const SVFValue* value = idxOperandPairs[i].first->getValue();
+        const ValVar* var = idxOperandPairs[i].first;
         const SVFType* type = idxOperandPairs[i].second;
-        const SVFConstantInt* op = SVFUtil::dyn_cast<SVFConstantInt>(value);
-        assert(op && "not a constant offset?");
+        assert(SVFUtil::isa<ConstIntValVar>(var) && "not a constant offset?");
+        s64_t constOffset = SVFUtil::dyn_cast<ConstIntValVar>(var)->getSExtValue();
+
         if(type==nullptr)
         {
-            totalConstOffset += op->getSExtValue();
+            totalConstOffset += constOffset;
             continue;
         }
 
         if(SVFUtil::isa<SVFPointerType>(type))
-            totalConstOffset += op->getSExtValue() * getElementNum(gepPointeeType);
+            totalConstOffset += constOffset * getElementNum(gepPointeeType);
         else
         {
-            APOffset offset = op->getSExtValue();
+            APOffset offset = constOffset;
             if (offset >= 0)
             {
-                const std::vector<u32_t>& so = SymbolTableInfo::SymbolInfo()->getTypeInfo(type)->getFlattenedElemIdxVec();
+                const std::vector<u32_t>& so = PAG::getPAG()->getTypeInfo(type)->getFlattenedElemIdxVec();
                 // if offset is larger than the size of getFlattenedElemIdxVec (overflow)
                 // set offset the last index of getFlattenedElemIdxVec to avoid assertion
                 if (offset >= (APOffset)so.size())
                 {
-                    SVFUtil::errs() << "It is overflow access, we access the last idx\n";
+                    SVFUtil::errs() << "It is an overflow access, hence it is the last idx\n";
                     offset = so.size() - 1;
                 }
                 else
@@ -253,8 +254,8 @@ APOffset AccessPath::computeConstantOffset() const
                 }
 
                 u32_t flattenOffset =
-                    SymbolTableInfo::SymbolInfo()->getFlattenedElemIdx(type,
-                            offset);
+                    PAG::getPAG()->getFlattenedElemIdx(type,
+                                                       offset);
                 totalConstOffset += flattenOffset;
             }
         }

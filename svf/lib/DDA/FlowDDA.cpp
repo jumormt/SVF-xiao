@@ -45,7 +45,7 @@ void FlowDDA::computeDDAPts(NodeID id)
     resetQuery();
     LocDPItem::setMaxBudget(Options::FlowBudget());
 
-    PAGNode* node = getPAG()->getGNode(id);
+    const ValVar* node = getPAG()->getValVar(id);
     LocDPItem dpm = getDPIm(node->getId(),getDefSVFGNode(node));
 
     /// start DDA analysis
@@ -78,16 +78,16 @@ void FlowDDA::handleOutOfBudgetDpm(const LocDPItem& dpm)
     addOutOfBudgetDpm(dpm);
 }
 
-bool FlowDDA::testIndCallReachability(LocDPItem&, const SVFFunction* callee, CallSiteID csId)
+bool FlowDDA::testIndCallReachability(LocDPItem&, const FunObjVar* callee, CallSiteID csId)
 {
 
     const CallICFGNode* cbn = getSVFG()->getCallSite(csId);
 
     if(getPAG()->isIndirectCallSites(cbn))
     {
-        if(getPTACallGraph()->hasIndCSCallees(cbn))
+        if(getCallGraph()->hasIndCSCallees(cbn))
         {
-            const FunctionSet& funset = getPTACallGraph()->getIndCSCallees(cbn);
+            const FunctionSet& funset = getCallGraph()->getIndCSCallees(cbn);
             if(funset.find(callee)!=funset.end())
                 return true;
         }
@@ -111,7 +111,7 @@ bool FlowDDA::handleBKCondition(LocDPItem& dpm, const SVFGEdge* edge)
 //        else
 //            csId = SVFUtil::cast<CallIndSVFGEdge>(edge)->getCallSiteId();
 //
-//        const SVFFunction* callee = edge->getDstNode()->getBB()->getParent();
+//        const FunObjVar* callee = edge->getDstNode()->getBB()->getParent();
 //        if(testIndCallReachability(dpm,callee,csId)==false){
 //            return false;
 //        }
@@ -125,7 +125,7 @@ bool FlowDDA::handleBKCondition(LocDPItem& dpm, const SVFGEdge* edge)
 //        else
 //            csId = SVFUtil::cast<RetIndSVFGEdge>(edge)->getCallSiteId();
 //
-//        const SVFFunction* callee = edge->getSrcNode()->getBB()->getParent();
+//        const FunObjVar* callee = edge->getSrcNode()->getBB()->getParent();
 //        if(testIndCallReachability(dpm,callee,csId)==false){
 //            return false;
 //        }
@@ -148,7 +148,7 @@ PointsTo FlowDDA::processGepPts(const GepSVFGNode* gep, const PointsTo& srcPts)
             tmpDstPts.set(ptd);
         else
         {
-            const GepStmt* gepStmt = SVFUtil::cast<GepStmt>(gep->getPAGEdge());
+            const GepStmt* gepStmt = SVFUtil::cast<GepStmt>(gep->getSVFStmt());
             if (gepStmt->isVariantFieldGep())
             {
                 setObjFieldInsensitive(ptd);
@@ -176,13 +176,12 @@ PointsTo FlowDDA::processGepPts(const GepSVFGNode* gep, const PointsTo& srcPts)
 /// (4) not involved in recursion
 bool FlowDDA::isHeapCondMemObj(const NodeID& var, const StoreSVFGNode*)
 {
-    const MemObj* mem = _pag->getObject(getPtrNodeID(var));
-    assert(mem && "memory object is null??");
-    if(mem->isHeap())
+    const BaseObjVar* pVar = _pag->getBaseObject(getPtrNodeID(var));
+    if(pVar && SVFUtil::isa<HeapObjVar, DummyObjVar>(pVar))
     {
 //        if(const Instruction* mallocSite = SVFUtil::dyn_cast<Instruction>(mem->getValue())) {
-//            const SVFFunction* fun = mallocSite->getParent()->getParent();
-//            const SVFFunction* curFun = store->getBB() ? store->getBB()->getParent() : nullptr;
+//            const FunObjVar* fun = mallocSite->getParent()->getParent();
+//            const FunObjVar* curFun = store->getBB() ? store->getBB()->getParent() : nullptr;
 //            if(fun!=curFun)
 //                return true;
 //            if(_callGraphSCC->isInCycle(_callGraph->getCallGraphNode(fun)->getId()))

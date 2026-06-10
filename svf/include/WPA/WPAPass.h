@@ -42,7 +42,6 @@
 namespace SVF
 {
 
-class SVFModule;
 class SVFG;
 
 /*!
@@ -75,18 +74,14 @@ public:
     /// Destructor
     virtual ~WPAPass();
 
-    /// Interface expose to users of our pointer analysis, given Value infos
-    virtual AliasResult alias(const SVFValue* V1,	const SVFValue* V2);
-
     /// Retrieve points-to set information
-    virtual const PointsTo& getPts(const SVFValue* value);
     virtual const PointsTo& getPts(NodeID var);
 
     /// Print all alias pairs
     virtual void PrintAliasPairs(PointerAnalysis* pta);
 
     /// Interface of mod-ref analysis to determine whether a CallSite instruction can mod or ref any memory location
-    virtual ModRefInfo getModRefInfo(const CallSite callInst);
+    virtual ModRefInfo getModRefInfo(const CallICFGNode* callInst);
 
     /// Interface of mod-ref analysis to determine whether a CallSite instruction can mod or ref a specific memory location, given Location infos
     // virtual inline ModRefInfo getModRefInfo(const CallSite callInst, const MemoryLocation& Loc)
@@ -94,11 +89,8 @@ public:
     //     return getModRefInfo(callInst, Loc.Ptr);
     // }
 
-    /// Interface of mod-ref analysis to determine whether a CallSite instruction can mod or ref a specific memory location, given Value infos
-    virtual ModRefInfo getModRefInfo(const CallSite callInst, const SVFValue* V);
-
     /// Interface of mod-ref analysis between two CallSite instructions
-    virtual ModRefInfo getModRefInfo(const CallSite callInst1, const CallSite callInst2);
+    virtual ModRefInfo getModRefInfo(const CallICFGNode* callInst1, const CallICFGNode* callInst2);
 
     /// Run pointer analysis on SVFModule
     virtual void runOnModule(SVFIR* svfModule);

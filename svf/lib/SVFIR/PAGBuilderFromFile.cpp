@@ -90,11 +90,10 @@ SVFIR* PAGBuilderFromFile::build()
                 ss >> nodetype;
                 outs() << "reading node :" << nodeId << "\n";
                 if (nodetype == "v")
-                    pag->addDummyValNode(nodeId);
+                    pag->addDummyValNode(nodeId, nullptr);
                 else if (nodetype == "o")
                 {
-                    const MemObj* mem = pag->addDummyMemObj(nodeId, nullptr);
-                    pag->addFIObjNode(mem);
+                    pag->addFIObjNode(nodeId, pag->createObjTypeInfo(nullptr), nullptr);
                 }
                 else
                     assert(false && "format not support, pls specify node type");
@@ -232,7 +231,7 @@ void PAGBuilderFromFile::addEdge(NodeID srcID, NodeID dstID,
     else if (edge == "variant-gep")
         pag->addVariantGepStmt(srcID, dstID, AccessPath(offsetOrCSId));
     else if (edge == "call")
-        pag->addEdge(srcNode, dstNode, new CallPE(srcNode, dstNode, nullptr, nullptr));
+        pag->addEdge(srcNode, dstNode, new CallPE(SVFUtil::cast<ValVar>(dstNode), {SVFUtil::cast<ValVar>(srcNode)}, {nullptr}, nullptr));
     else if (edge == "ret")
         pag->addEdge(srcNode, dstNode, new RetPE(srcNode, dstNode, nullptr,nullptr));
     else if (edge == "cmp")

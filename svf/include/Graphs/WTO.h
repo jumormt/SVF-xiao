@@ -341,7 +341,7 @@ public:
     }
 
     /// Return the graph node
-    const NodeT* node() const
+    const NodeT* getICFGNode() const
     {
         return _node;
     }
@@ -457,7 +457,7 @@ public:
         std::string str;
         std::stringstream rawstr(str);
         rawstr << "(";
-        rawstr << _head->node()->getId() << ", ";
+        rawstr << _head->getICFGNode()->getId() << ", ";
         for (auto it = begin(), et = end(); it != et;)
         {
             rawstr << (*it)->toString();
@@ -554,13 +554,12 @@ protected:
     NodeRefToCycleDepthNumber _nodeToCDN;
     CycleDepthNumber _num;
     Stack _stack;
-    GraphT* _graph;
     const NodeT* _entry;
 
 public:
 
     /// Compute the weak topological order of the given graph
-    explicit WTO(GraphT* graph, const NodeT* entry) : _num(0), _graph(graph), _entry(entry)
+    explicit WTO(const NodeT* entry) : _num(0), _entry(entry)
     {
     }
 
@@ -698,7 +697,7 @@ protected:
 
         void visit(const WTOCycleT& cycle) override
         {
-            const NodeT* head = cycle.head()->node();
+            const NodeT* head = cycle.head()->getICFGNode();
             WTOCycleDepthPtr previous_cycleDepth = _wtoCycleDepth;
             _nodeToWTOCycleDepth.insert(std::make_pair(head, _wtoCycleDepth));
             _wtoCycleDepth =
@@ -714,19 +713,21 @@ protected:
         void visit(const WTONodeT& node) override
         {
             _nodeToWTOCycleDepth.insert(
-                std::make_pair(node.node(), _wtoCycleDepth));
+                std::make_pair(node.getICFGNode(), _wtoCycleDepth));
         }
 
     }; // end class WTOCycleDepthBuilder
 
 protected:
-
-    inline virtual void forEachSuccessor(const NodeT* node, std::function<void(const NodeT*)> func) const
+    /// Return the successors of node
+    inline virtual std::vector<const NodeT *> getSuccessors(const NodeT* node)
     {
+        std::vector<const NodeT *> succssors;
         for (const auto& e : node->getOutEdges())
         {
-            func(e->getDstNode());
+            succssors.push_back(e->getDstNode());
         }
+        return succssors;
     }
 
 protected:
@@ -788,13 +789,14 @@ protected:
     virtual const WTOCycleT* component(const NodeT* node)
     {
         WTOComponentRefList partition;
-        forEachSuccessor(node, [&](const NodeT* succ)
+
+        for (auto succ: getSuccessors(node))
         {
             if (getCDN(succ) == 0)
             {
                 visit(succ, partition);
             }
-        });
+        }
         const WTONodeT* head = newNode(node);
         const WTOCycleT* ptr = newCycle(head, partition);
         headRefToCycle.emplace(node, ptr);
@@ -816,7 +818,8 @@ protected:
         head = _num;
         setCDN(node, head);
         loop = false;
-        forEachSuccessor(node, [&](const NodeT* succ)
+
+        for (auto succ: getSuccessors(node))
         {
             CycleDepthNumber succ_dfn = getCDN(succ);
             if (succ_dfn == CycleDepthNumber(0))
@@ -832,7 +835,7 @@ protected:
                 head = min;
                 loop = true;
             }
-        });
+        }
 
         if (head == getCDN(node))
         {

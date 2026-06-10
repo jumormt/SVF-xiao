@@ -42,7 +42,7 @@ class CFLAlias : public CFLBase
 {
 
 public:
-    typedef OrderedMap<CallSite, NodeID> CallSite2DummyValPN;
+    typedef OrderedMap<const CallICFGNode*, NodeID> CallSite2DummyValPN;
 
     CFLAlias(SVFIR* ir) : CFLBase(ir, PointerAnalysis::CFLFICI_WPA)
     {
@@ -60,14 +60,6 @@ public:
 
     /// Solving CFL Reachability
     virtual void solve();
-
-    /// Interface exposed to users of our Alias analysis, given Value infos
-    virtual AliasResult alias(const SVFValue* v1, const SVFValue* v2)
-    {
-        NodeID n1 = svfir->getValueNode(v1);
-        NodeID n2 = svfir->getValueNode(v2);
-        return alias(n1,n2);
-    }
 
     /// Interface exposed to users of our Alias analysis, given PAGNodeID
     virtual AliasResult alias(NodeID node1, NodeID node2)
@@ -143,9 +135,9 @@ public:
     virtual void onTheFlyCallGraphSolve(const CallSiteToFunPtrMap& callsites, CallEdgeMap& newEdges);
 
     /// Connect formal and actual parameters for indirect callsites
-    void connectCaller2CalleeParams(CallSite cs, const SVFFunction* F);
+    void connectCaller2CalleeParams(const CallICFGNode* cs, const FunObjVar* F);
 
-    void heapAllocatorViaIndCall(CallSite cs);
+    void heapAllocatorViaIndCall(const CallICFGNode* cs);
 
 private:
     CallSite2DummyValPN callsite2DummyValPN;        ///< Map an instruction to a dummy obj which created at an indirect callsite, which invokes a heap allocator

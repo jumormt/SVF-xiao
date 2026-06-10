@@ -35,7 +35,12 @@
 namespace SVF
 {
 
-class SVFModule;
+class ICFGNode;
+class CallICFGNode;
+class SVFVar;
+class ValVar;
+class ObjVar;
+class FunObjVar;
 
 /*
  * ThreadAPI class contains interfaces for pthread programs
@@ -86,16 +91,7 @@ private:
     static ThreadAPI* tdAPI;
 
     /// Get the function type if it is a threadAPI function
-    inline TD_TYPE getType(const SVFFunction* F) const
-    {
-        if(F)
-        {
-            TDAPIMap::const_iterator it= tdAPIMap.find(F->getName());
-            if(it != tdAPIMap.end())
-                return it->second;
-        }
-        return TD_DUMMY;
-    }
+    TD_TYPE getType(const FunObjVar* F) const;
 
 public:
     /// Return a static reference
@@ -117,211 +113,73 @@ public:
         }
     }
 
-    /// Return the callee/callsite/func
-    //@{
-    const SVFFunction* getCallee(const SVFInstruction *inst) const;
-    const SVFFunction* getCallee(const CallSite cs) const;
-    const CallSite getSVFCallSite(const SVFInstruction *inst) const;
-    //@}
-
-    /// Return true if this call create a new thread
-    //@{
-    inline bool isTDFork(const SVFInstruction *inst) const
-    {
-        return getType(getCallee(inst)) == TD_FORK;
-    }
-    inline bool isTDFork(CallSite cs) const
-    {
-        return isTDFork(cs.getInstruction());
-    }
-    //@}
-
-    /// Return true if this call proceeds a hare_parallel_for
-    //@{
-    inline bool isHareParFor(const SVFInstruction *inst) const
-    {
-        return getType(getCallee(inst)) == HARE_PAR_FOR;
-    }
-    inline bool isHareParFor(CallSite cs) const
-    {
-        return isTDFork(cs.getInstruction());
-    }
-    //@}
-
     /// Return arguments/attributes of pthread_create / hare_parallel_for
     //@{
     /// Return the first argument of the call,
     /// Note that, it is the pthread_t pointer
-    inline const SVFValue* getForkedThread(const SVFInstruction *inst) const
-    {
-        assert(isTDFork(inst) && "not a thread fork function!");
-        CallSite cs = getSVFCallSite(inst);
-        return cs.getArgument(0);
-    }
-    inline const SVFValue* getForkedThread(CallSite cs) const
-    {
-        return getForkedThread(cs.getInstruction());
-    }
-
+    const ValVar* getForkedThread(const CallICFGNode *inst) const;
     /// Return the third argument of the call,
     /// Note that, it could be function type or a void* pointer
-    inline const SVFValue* getForkedFun(const SVFInstruction *inst) const
-    {
-        assert(isTDFork(inst) && "not a thread fork function!");
-        CallSite cs = getSVFCallSite(inst);
-        return cs.getArgument(2);
-    }
-    inline const SVFValue* getForkedFun(CallSite cs) const
-    {
-        return getForkedFun(cs.getInstruction());
-    }
+    const ValVar* getForkedFun(const CallICFGNode *inst) const;
 
     /// Return the forth argument of the call,
     /// Note that, it is the sole argument of start routine ( a void* pointer )
-    inline const SVFValue* getActualParmAtForkSite(const SVFInstruction *inst) const
-    {
-        assert(isTDFork(inst) && "not a thread fork function!");
-        CallSite cs = getSVFCallSite(inst);
-        return cs.getArgument(3);
-    }
-    inline const SVFValue* getActualParmAtForkSite(CallSite cs) const
-    {
-        return getActualParmAtForkSite(cs.getInstruction());
-    }
+    const ValVar* getActualParmAtForkSite(const CallICFGNode *inst) const;
+
+    /// Return the formal parm of forked function (the first arg in pthread)
+    const SVFVar* getFormalParmOfForkedFun(const FunObjVar* F) const;
     //@}
 
-    /// Get the task function (i.e., the 5th parameter) of the hare_parallel_for call
-    //@{
-    inline const SVFValue* getTaskFuncAtHareParForSite(const SVFInstruction *inst) const
-    {
-        assert(isHareParFor(inst) && "not a hare_parallel_for function!");
-        CallSite cs = getSVFCallSite(inst);
-        return cs.getArgument(4);
-    }
-    inline const SVFValue* getTaskFuncAtHareParForSite(CallSite cs) const
-    {
-        return getTaskFuncAtHareParForSite(cs.getInstruction());
-    }
-    //@}
 
-    /// Get the task data (i.e., the 6th parameter) of the hare_parallel_for call
+
+    /// Return true if this call create a new thread
     //@{
-    inline const SVFValue* getTaskDataAtHareParForSite(const SVFInstruction *inst) const
-    {
-        assert(isHareParFor(inst) && "not a hare_parallel_for function!");
-        CallSite cs = getSVFCallSite(inst);
-        return cs.getArgument(5);
-    }
-    inline const SVFValue* getTaskDataAtHareParForSite(CallSite cs) const
-    {
-        return getTaskDataAtHareParForSite(cs.getInstruction());
-    }
+    bool isTDFork(const CallICFGNode *inst) const;
     //@}
 
     /// Return true if this call wait for a worker thread
     //@{
-    inline bool isTDJoin(const SVFInstruction *inst) const
-    {
-        return getType(getCallee(inst)) == TD_JOIN;
-    }
-    inline bool isTDJoin(CallSite cs) const
-    {
-        return isTDJoin(cs.getInstruction());
-    }
+    bool isTDJoin(const CallICFGNode *inst) const;
     //@}
 
     /// Return arguments/attributes of pthread_join
     //@{
     /// Return the first argument of the call,
     /// Note that, it is the pthread_t pointer
-    const SVFValue* getJoinedThread(const SVFInstruction *inst) const;
-    inline const SVFValue* getJoinedThread(CallSite cs) const
-    {
-        return getJoinedThread(cs.getInstruction());
-    }
+    const SVFVar* getJoinedThread(const CallICFGNode *inst) const;
     /// Return the send argument of the call,
     /// Note that, it is the pthread_t pointer
-    inline const SVFValue* getRetParmAtJoinedSite(const SVFInstruction *inst) const
-    {
-        assert(isTDJoin(inst) && "not a thread join function!");
-        CallSite cs = getSVFCallSite(inst);
-        return cs.getArgument(1);
-    }
-    inline const SVFValue* getRetParmAtJoinedSite(CallSite cs) const
-    {
-        return getRetParmAtJoinedSite(cs.getInstruction());
-    }
+    const SVFVar* getRetParmAtJoinedSite(const CallICFGNode *inst) const;
     //@}
 
 
     /// Return true if this call exits/terminate a thread
     //@{
-    inline bool isTDExit(const SVFInstruction *inst) const
-    {
-        return getType(getCallee(inst)) == TD_EXIT;
-    }
-
-    inline bool isTDExit(CallSite cs) const
-    {
-        return getType(getCallee(cs)) == TD_EXIT;
-    }
+    bool isTDExit(const CallICFGNode *inst) const;
     //@}
 
     /// Return true if this call acquire a lock
     //@{
-    inline bool isTDAcquire(const SVFInstruction *inst) const
-    {
-        return getType(getCallee(inst)) == TD_ACQUIRE;
-    }
-
-    inline bool isTDAcquire(CallSite cs) const
-    {
-        return getType(getCallee(cs)) == TD_ACQUIRE;
-    }
+    bool isTDAcquire(const CallICFGNode* inst) const;
     //@}
 
     /// Return true if this call release a lock
     //@{
-    inline bool isTDRelease(const SVFInstruction *inst) const
-    {
-        return getType(getCallee(inst)) == TD_RELEASE;
-    }
-
-    inline bool isTDRelease(CallSite cs) const
-    {
-        return getType(getCallee(cs)) == TD_RELEASE;
-    }
+    bool isTDRelease(const CallICFGNode *inst) const;
     //@}
 
     /// Return lock value
     //@{
     /// First argument of pthread_mutex_lock/pthread_mutex_unlock
-    inline const SVFValue* getLockVal(const SVFInstruction *inst) const
-    {
-        assert((isTDAcquire(inst) || isTDRelease(inst)) && "not a lock acquire or release function");
-        CallSite cs = getSVFCallSite(inst);
-        return cs.getArgument(0);
-    }
-    inline const SVFValue* getLockVal(CallSite cs) const
-    {
-        return getLockVal(cs.getInstruction());
-    }
+    const SVFVar* getLockVal(const ICFGNode *inst) const;
     //@}
 
     /// Return true if this call waits for a barrier
     //@{
-    inline bool isTDBarWait(const SVFInstruction *inst) const
-    {
-        return getType(getCallee(inst)) == TD_BAR_WAIT;
-    }
-
-    inline bool isTDBarWait(CallSite cs) const
-    {
-        return getType(getCallee(cs)) == TD_BAR_WAIT;
-    }
+    bool isTDBarWait(const CallICFGNode *inst) const;
     //@}
 
-    void performAPIStat(SVFModule* m);
+    void performAPIStat();
     void statInit(Map<std::string, u32_t>& tdAPIStatMap);
 };
 

@@ -40,7 +40,6 @@ namespace SVF
 {
 
 class AndersenWaveDiff;
-class SVFModule;
 
 /*!
  * Flow sensitive whole program pointer analysis
@@ -93,7 +92,7 @@ public:
     }
 
     /// We start from here
-    virtual bool runOnModule(SVFModule*)
+    virtual bool runOnModule()
     {
         return false;
     }

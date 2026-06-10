@@ -26,7 +26,7 @@
  // Author: Yulei Sui,
  */
 
-#include "AE/Svfexe/SVFIR2AbsState.h"
+#include "AE/Core/AbstractState.h"
 #include "Graphs/SVFG.h"
 #include "SVF-LLVM/LLVMUtil.h"
 #include "SVF-LLVM/SVFIRBuilder.h"
@@ -41,102 +41,33 @@ using namespace SVF;
 /*!
  * An example to query alias results of two SVF values
  */
-SVF::AliasResult aliasQuery(PointerAnalysis* pta, const SVFValue* v1, const SVFValue* v2)
+SVF::AliasResult aliasQuery(PointerAnalysis* pta, const SVFVar* v1, const SVFVar* v2)
 {
-    return pta->alias(v1, v2);
+    return pta->alias(v1->getId(), v2->getId());
 }
 
 /*!
  * An example to print points-to set of an SVF value
  */
-std::string printPts(PointerAnalysis* pta, const SVFValue* svfval)
+std::string printPts(PointerAnalysis* pta, const SVFVar* svfval)
 {
 
     std::string str;
     raw_string_ostream rawstr(str);
 
-    NodeID pNodeId = pta->getPAG()->getValueNode(svfval);
+    NodeID pNodeId = svfval->getId();
     const PointsTo& pts = pta->getPts(pNodeId);
     for (PointsTo::iterator ii = pts.begin(), ie = pts.end();
             ii != ie; ii++)
     {
         rawstr << " " << *ii << " ";
         PAGNode* targetObj = pta->getPAG()->getGNode(*ii);
-        if(targetObj->hasValue())
-        {
-            rawstr << "(" << targetObj->getValue()->toString() << ")\t ";
-        }
+        rawstr << "(" << targetObj->toString() << ")\t ";
     }
 
     return rawstr.str();
 
 }
-
-/*!
- * An example to query/collect all SVFStmt from a ICFGNode (iNode)
- */
-void traverseOnSVFStmt(const ICFGNode* node)
-{
-    AbstractState es;
-    SVFIR2AbsState* svfir2AbsState = new SVFIR2AbsState(SVFIR::getPAG());
-    for (const SVFStmt* stmt: node->getSVFStmts())
-    {
-        if (const AddrStmt *addr = SVFUtil::dyn_cast<AddrStmt>(stmt))
-        {
-            svfir2AbsState->handleAddr(es, addr);
-        }
-        else if (const BinaryOPStmt *binary = SVFUtil::dyn_cast<BinaryOPStmt>(stmt))
-        {
-            svfir2AbsState->handleBinary(es, binary);
-        }
-        else if (const CmpStmt *cmp = SVFUtil::dyn_cast<CmpStmt>(stmt))
-        {
-            svfir2AbsState->handleCmp(es, cmp);
-        }
-        else if (const LoadStmt *load = SVFUtil::dyn_cast<LoadStmt>(stmt))
-        {
-            svfir2AbsState->handleLoad(es, load);
-        }
-        else if (const StoreStmt *store = SVFUtil::dyn_cast<StoreStmt>(stmt))
-        {
-            svfir2AbsState->handleStore(es, store);
-        }
-        else if (const CopyStmt *copy = SVFUtil::dyn_cast<CopyStmt>(stmt))
-        {
-            svfir2AbsState->handleCopy(es, copy);
-        }
-        else if (const GepStmt *gep = SVFUtil::dyn_cast<GepStmt>(stmt))
-        {
-            if (gep->isConstantOffset())
-            {
-                gep->accumulateConstantByteOffset();
-                gep->accumulateConstantOffset();
-            }
-            svfir2AbsState->handleGep(es, gep);
-        }
-        else if (const SelectStmt *select = SVFUtil::dyn_cast<SelectStmt>(stmt))
-        {
-            svfir2AbsState->handleSelect(es, select);
-        }
-        else if (const PhiStmt *phi = SVFUtil::dyn_cast<PhiStmt>(stmt))
-        {
-            svfir2AbsState->handlePhi(es, phi);
-        }
-        else if (const CallPE *callPE = SVFUtil::dyn_cast<CallPE>(stmt))
-        {
-            // To handle Call Edge
-            svfir2AbsState->handleCall(es, callPE);
-        }
-        else if (const RetPE *retPE = SVFUtil::dyn_cast<RetPE>(stmt))
-        {
-            svfir2AbsState->handleRet(es, retPE);
-        }
-        else
-            assert(false && "implement this part");
-    }
-}
-
-
 /*!
  * An example to query/collect all successor nodes from a ICFGNode (iNode) along control-flow graph (ICFG)
  */
@@ -171,13 +102,11 @@ void dummyVisit(const VFGNode* node)
 /*!
  * An example to query/collect all the uses of a definition of a value along value-flow graph (VFG)
  */
-void traverseOnVFG(const SVFG* vfg, const SVFValue* svfval)
+void traverseOnVFG(const SVFG* vfg, const ValVar* svfval)
 {
-    SVFIR* pag = SVFIR::getPAG();
-    PAGNode* pNode = pag->getGNode(pag->getValueNode(svfval));
-    if (!vfg->hasDefSVFGNode(pNode))
+    if (!vfg->hasDefSVFGNode(svfval))
         return;
-    const VFGNode* vNode = vfg->getDefSVFGNode(pNode);
+    const VFGNode* vNode = vfg->getDefSVFGNode(svfval);
     FIFOWorkList<const VFGNode*> worklist;
     Set<const VFGNode*> visited;
     worklist.push(vNode);
@@ -218,15 +147,11 @@ int main(int argc, char ** argv)
                         argc, argv, "Whole Program Points-to Analysis", "[options] <input-bitcode...>"
                     );
 
-    if (Options::WriteAnder() == "ir_annotator")
-    {
-        LLVMModuleSet::preProcessBCs(moduleNameVec);
-    }
-
-    SVFModule* svfModule = LLVMModuleSet::buildSVFModule(moduleNameVec);
+    LLVMModuleSet::preProcessBCs(moduleNameVec);
+    LLVMModuleSet::buildSVFModule(moduleNameVec);
 
     /// Build Program Assignment Graph (SVFIR)
-    SVFIRBuilder builder(svfModule);
+    SVFIRBuilder builder;
     SVFIR* pag = builder.build();
 
     /// Create Andersen's pointer analysis
@@ -234,7 +159,7 @@ int main(int argc, char ** argv)
 
 
     /// Call Graph
-    PTACallGraph* callgraph = ander->getPTACallGraph();
+    CallGraph* callgraph = ander->getCallGraph();
 
     /// ICFG
     ICFG* icfg = pag->getICFG();
@@ -254,7 +179,10 @@ int main(int argc, char ** argv)
             const SVFGNode* node = it.second;
             if (node->getValue())
             {
-                traverseOnVFG(svfg, node->getValue());
+                if (const ValVar* valVar = SVFUtil::dyn_cast<ValVar>(node->getValue()))
+                {
+                    traverseOnVFG(svfg, valVar);
+                }
                 /// Print points-to information
                 printPts(ander, node->getValue());
                 for (const SVFGEdge* edge : node->getOutEdges())
@@ -284,7 +212,8 @@ int main(int argc, char ** argv)
 
     LLVMModuleSet::getLLVMModuleSet()->dumpModulesToFile(".svf.bc");
     SVF::LLVMModuleSet::releaseLLVMModuleSet();
+#if LLVM_VERSION_MAJOR < 21
     llvm::llvm_shutdown();
+#endif
     return 0;
 }
-

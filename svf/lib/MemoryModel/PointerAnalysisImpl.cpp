@@ -34,6 +34,8 @@
 #include <fstream>
 #include <sstream>
 
+#include "Graphs/CallGraph.h"
+
 using namespace SVF;
 using namespace SVFUtil;
 using namespace std;
@@ -95,7 +97,7 @@ void BVDataPTAImpl::finalize()
 
     if (Options::ptDataBacking() == PTBackingType::Persistent && print_stat)
     {
-        std::string moduleName(pag->getModule()->getModuleIdentifier());
+        std::string moduleName(pag->getModuleIdentifier());
         std::vector<std::string> names = SVFUtil::split(moduleName,'/');
         if (names.size() > 1)
             moduleName = names[names.size() - 1];
@@ -133,7 +135,7 @@ void BVDataPTAImpl::expandFIObjs(const PointsTo& pts, PointsTo& expandedPts)
     expandedPts = pts;;
     for(PointsTo::iterator pit = pts.begin(), epit = pts.end(); pit!=epit; ++pit)
     {
-        if (pag->getBaseObjVar(*pit) == *pit || isFieldInsensitive(*pit))
+        if (pag->getBaseObjVarID(*pit) == *pit || isFieldInsensitive(*pit))
         {
             expandedPts |= pag->getAllFieldsObjVars(*pit);
         }
@@ -145,7 +147,7 @@ void BVDataPTAImpl::expandFIObjs(const NodeBS& pts, NodeBS& expandedPts)
     expandedPts = pts;
     for (const NodeID o : pts)
     {
-        if (pag->getBaseObjVar(o) == o || isFieldInsensitive(o))
+        if (pag->getBaseObjVarID(o) == o || isFieldInsensitive(o))
         {
             expandedPts |= pag->getAllFieldsObjVars(o);
         }
@@ -174,7 +176,7 @@ void BVDataPTAImpl::writeObjVarToFile(const string& filename)
     {
         PAGNode* pagNode = it->second;
         if (!isa<ObjVar>(pagNode)) continue;
-        NodeID n = pag->getBaseObjVar(it->first);
+        NodeID n = pag->getBaseObjVarID(it->first);
         if (NodeIDs.test(n)) continue;
         f << n << " ";
         f << isFieldInsensitive(n) << "\n";
@@ -222,10 +224,10 @@ void BVDataPTAImpl::writePtsResultToFile(std::fstream& f)
 void BVDataPTAImpl::writeGepObjVarMapToFile(std::fstream& f)
 {
     //write gepObjVarMap to file(in form of: baseID offset gepObjNodeId)
-    SVFIR::NodeOffsetMap &gepObjVarMap = pag->getGepObjNodeMap();
-    for(SVFIR::NodeOffsetMap::const_iterator it = gepObjVarMap.begin(), eit = gepObjVarMap.end(); it != eit; it++)
+    SVFIR::OffsetToGepVarMap &gepObjVarMap = pag->getGepObjNodeMap();
+    for(SVFIR::OffsetToGepVarMap::const_iterator it = gepObjVarMap.begin(), eit = gepObjVarMap.end(); it != eit; it++)
     {
-        const SVFIR::NodeOffset offsetPair = it -> first;
+        const SVFIR::GepOffset offsetPair = it -> first;
         //write the base id to file
         f << offsetPair.first << " ";
         //write the offset to file
@@ -268,7 +270,7 @@ void BVDataPTAImpl::writeToFile(const string& filename)
     {
         PAGNode* pagNode = it->second;
         if (!isa<ObjVar>(pagNode)) continue;
-        NodeID n = pag->getBaseObjVar(it->first);
+        NodeID n = pag->getBaseObjVarID(it->first);
         if (NodeIDs.test(n)) continue;
         f << n << " ";
         f << isFieldInsensitive(n) << "\n";
@@ -342,7 +344,7 @@ void BVDataPTAImpl::readGepObjVarMapFromFile(std::ifstream& F)
 {
     string line;
     //read GepObjVarMap from file
-    SVFIR::NodeOffsetMap gepObjVarMap = pag->getGepObjNodeMap();
+    SVFIR::OffsetToGepVarMap gepObjVarMap = pag->getGepObjNodeMap();
     while (F.good())
     {
         getline(F, line);
@@ -353,20 +355,26 @@ void BVDataPTAImpl::readGepObjVarMapFromFile(std::ifstream& F)
         size_t offset;
         NodeID id;
         ss >> base >> offset >>id;
-        SVFIR::NodeOffsetMap::const_iterator iter = gepObjVarMap.find(std::make_pair(base, offset));
+        SVFIR::OffsetToGepVarMap::const_iterator iter = gepObjVarMap.find(std::make_pair(base, offset));
         if (iter == gepObjVarMap.end())
         {
-            SVFVar* node = pag->getGNode(base);
-            const MemObj* obj = nullptr;
-            if (GepObjVar* gepObjVar = SVFUtil::dyn_cast<GepObjVar>(node))
-                obj = gepObjVar->getMemObj();
-            else if (FIObjVar* baseNode = SVFUtil::dyn_cast<FIObjVar>(node))
-                obj = baseNode->getMemObj();
-            else if (DummyObjVar* baseNode = SVFUtil::dyn_cast<DummyObjVar>(node))
-                obj = baseNode->getMemObj();
+            const SVFVar* node = pag->getSVFVar(base);
+            const BaseObjVar* obj = nullptr;
+            if (const GepObjVar* gepObjVar = SVFUtil::dyn_cast<GepObjVar>(node))
+            {
+                obj = gepObjVar->getBaseObj();
+            }
+            else if (const BaseObjVar* baseNode = SVFUtil::dyn_cast<BaseObjVar>(node))
+            {
+                obj = baseNode;
+            }
+            else if (const DummyObjVar* baseNode = SVFUtil::dyn_cast<DummyObjVar>(node))
+            {
+                obj = baseNode;
+            }
             else
                 assert(false && "new gep obj node kind?");
-            pag->addGepObjNode(obj, offset, id);
+            pag->addGepObjNode( obj, offset, id);
             NodeIDAllocator::get()->increaseNumOfObjAndNodes();
         }
 
@@ -438,7 +446,7 @@ void BVDataPTAImpl::dumpTopLevelPtsTo()
     for (OrderedNodeSet::iterator nIter = this->getAllValidPtrs().begin();
             nIter != this->getAllValidPtrs().end(); ++nIter)
     {
-        const PAGNode* node = getPAG()->getGNode(*nIter);
+        const SVFVar* node = getPAG()->getSVFVar(*nIter);
         if (getPAG()->isValidTopLevelPtr(node))
         {
             const PointsTo& pts = this->getPts(node->getId());
@@ -495,15 +503,52 @@ void BVDataPTAImpl::onTheFlyCallGraphSolve(const CallSiteToFunPtrMap& callsites,
     {
         const CallICFGNode* cs = iter->first;
 
-        if (SVFUtil::getSVFCallSite(cs->getCallSite()).isVirtualCall())
+        if (cs->isVirtualCall())
         {
-            const SVFValue* vtbl = SVFUtil::getSVFCallSite(cs->getCallSite()).getVtablePtr();
-            assert(pag->hasValueNode(vtbl));
-            NodeID vtblId = pag->getValueNode(vtbl);
+            const SVFVar* vtbl = cs->getVtablePtr();
+            assert(vtbl != nullptr);
+            NodeID vtblId = vtbl->getId();
             resolveCPPIndCalls(cs, getPts(vtblId), newEdges);
         }
         else
             resolveIndCalls(iter->first,getPts(iter->second),newEdges);
+    }
+}
+
+/*!
+ * On the fly call graph construction respecting forksite
+ * callsites is candidate indirect callsites need to be analyzed based on points-to results
+ * newEdges is the new indirect call edges discovered
+ */
+void BVDataPTAImpl::onTheFlyThreadCallGraphSolve(const CallSiteToFunPtrMap& callsites,
+        CallEdgeMap& newForkEdges)
+{
+    // add indirect fork edges
+    if(ThreadCallGraph *tdCallGraph = SVFUtil::dyn_cast<ThreadCallGraph>(callgraph))
+    {
+        for(CallSiteSet::const_iterator it = tdCallGraph->forksitesBegin(),
+                eit = tdCallGraph->forksitesEnd(); it != eit; ++it)
+        {
+            const ValVar* pVar = tdCallGraph->getThreadAPI()->getForkedFun(*it);
+            if(SVFUtil::dyn_cast<FunValVar>(pVar) == nullptr)
+            {
+                SVFIR *pag = this->getPAG();
+                const NodeBS targets = this->getPts(pVar->getId()).toNodeBS();
+                for(NodeBS::iterator ii = targets.begin(), ie = targets.end(); ii != ie; ++ii)
+                {
+                    if(const ObjVar *objPN = pag->getObjVar(*ii))
+                    {
+                        const BaseObjVar* obj = pag->getBaseObject(objPN->getId());
+                        if(obj->isFunction())
+                        {
+                            const FunObjVar *svfForkedFun = SVFUtil::cast<FunObjVar>(obj)->getFunction();
+                            if(tdCallGraph->addIndirectForkEdge(*it, svfForkedFun))
+                                newForkEdges[*it].insert(svfForkedFun);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -513,20 +558,21 @@ void BVDataPTAImpl::onTheFlyCallGraphSolve(const CallSiteToFunPtrMap& callsites,
 void BVDataPTAImpl::normalizePointsTo()
 {
     SVFIR::MemObjToFieldsMap &memToFieldsMap = pag->getMemToFieldsMap();
-    SVFIR::NodeOffsetMap &GepObjVarMap = pag->getGepObjNodeMap();
+    SVFIR::OffsetToGepVarMap &GepObjVarMap = pag->getGepObjNodeMap();
 
     // collect each gep node whose base node has been set as field-insensitive
     NodeBS dropNodes;
     for (auto t: memToFieldsMap)
     {
         NodeID base = t.first;
-        const MemObj* memObj = pag->getObject(base);
-        assert(memObj && "Invalid memobj in memToFieldsMap");
-        if (memObj->isFieldInsensitive())
+        const BaseObjVar* obj = pag->getBaseObject(base);
+        assert(obj && "Invalid baseObj in memToFieldsMap");
+        assert(obj->isFieldInsensitive() == obj->isFieldInsensitive());
+        if (obj->isFieldInsensitive())
         {
             for (NodeID id : t.second)
             {
-                if (SVFUtil::isa<GepObjVar>(pag->getGNode(id)))
+                if (SVFUtil::isa<GepObjVar>(pag->getSVFVar(id)))
                 {
                     dropNodes.set(id);
                 }
@@ -546,7 +592,7 @@ void BVDataPTAImpl::normalizePointsTo()
         {
             if (!dropNodes.test(obj))
                 continue;
-            NodeID baseObj = pag->getBaseObjVar(obj);
+            NodeID baseObj = pag->getBaseObjVarID(obj);
             clearPts(n, obj);
             addPts(n, baseObj);
         }
@@ -556,7 +602,7 @@ void BVDataPTAImpl::normalizePointsTo()
     // and remove those nodes from pag
     for (NodeID n: dropNodes)
     {
-        NodeID base = pag->getBaseObjVar(n);
+        NodeID base = pag->getBaseObjVarID(n);
         GepObjVar *gepNode = SVFUtil::dyn_cast<GepObjVar>(pag->getGNode(n));
         const APOffset apOffset = gepNode->getConstantFieldIdx();
         GepObjVarMap.erase(std::make_pair(base, apOffset));
@@ -566,14 +612,6 @@ void BVDataPTAImpl::normalizePointsTo()
     }
 }
 
-/*!
- * Return alias results based on our points-to/alias analysis
- */
-AliasResult BVDataPTAImpl::alias(const SVFValue* V1,
-                                 const SVFValue* V2)
-{
-    return alias(pag->getValueNode(V1),pag->getValueNode(V2));
-}
 
 /*!
  * Return alias results based on our points-to/alias analysis

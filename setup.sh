@@ -18,7 +18,7 @@ function set_llvm {
     [[ -n "$LLVM_DIR" ]] && return 0
 
     # use local download directory
-    LLVM_DIR="$SVF_DIR/llvm-16.0.0.obj"
+    LLVM_DIR="$SVF_DIR/llvm-21.1.0.obj"
     [[ -d "$LLVM_DIR" ]] && return 0
 
     # ... otherwise don't set LLVM_DIR
@@ -27,7 +27,6 @@ function set_llvm {
 
 if set_llvm; then
     export LLVM_DIR
-    export PATH="$LLVM_DIR/bin:$PATH"
     echo "LLVM_DIR=$LLVM_DIR"
 else
     echo "- LLVM_DIR not set, probably system-wide installation"

@@ -43,8 +43,6 @@ class RetPE;
 typedef GenericEdge<ICFGNode> GenericICFGEdgeTy;
 class ICFGEdge : public GenericICFGEdgeTy
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
 
 public:
     /// ten types of ICFG edge
@@ -112,8 +110,9 @@ public:
  */
 class IntraCFGEdge : public ICFGEdge
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
+    friend class ICFG;
+    friend class SVFIRBuilder;
+    friend class GraphDBClient;
 
 public:
     /// Constructor
@@ -137,7 +136,7 @@ public:
     }
     //@}
 
-    const SVFValue* getCondition() const
+    const SVFVar* getCondition() const
     {
         return conditionVar;
     }
@@ -146,12 +145,6 @@ public:
     {
         assert(getCondition() && "this is not a conditional branch edge");
         return branchCondVal;
-    }
-
-    void setBranchCondition(const SVFValue* c, s64_t bVal)
-    {
-        conditionVar = c;
-        branchCondVal = bVal;
     }
 
     virtual const std::string toString() const;
@@ -166,8 +159,18 @@ private:
     ///       Inst3: label 1;
     /// for edge between Inst1 and Inst 2, the first element is %cmp and
     /// the second element is 0
-    const SVFValue* conditionVar;
+    const SVFVar* conditionVar;
     s64_t branchCondVal;
+
+    inline void setConditionVar(const SVFVar* c)
+    {
+        conditionVar = c;
+    }
+
+    inline void setBranchCondVal(s64_t bVal)
+    {
+        branchCondVal = bVal;
+    }
 };
 
 /*!
@@ -175,28 +178,26 @@ private:
  */
 class CallCFGEdge : public ICFGEdge
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
 
 private:
-    const SVFInstruction* cs;
     std::vector<const CallPE*> callPEs;
 
 public:
     /// Constructor
-    CallCFGEdge(ICFGNode* s, ICFGNode* d, const SVFInstruction* c)
-        : ICFGEdge(s, d, CallCF), cs(c)
+    CallCFGEdge(ICFGNode* s, ICFGNode* d)
+        : ICFGEdge(s, d, CallCF)
     {
-    }
-    /// Return callsite ID
-    inline const SVFInstruction* getCallSite() const
-    {
-        return cs;
     }
     /// Add call parameter edge to this CallCFGEdge
     inline void addCallPE(const CallPE* callPE)
     {
         callPEs.push_back(callPE);
+    }
+    /// Return call ICFGNode at the callsite
+    inline const CallICFGNode* getCallSite() const
+    {
+        assert(SVFUtil::isa<CallICFGNode>(getSrcNode()) && "not a CallICFGNode?");
+        return SVFUtil::cast<CallICFGNode>(getSrcNode());
     }
     /// Add get parameter edge to this CallCFGEdge
     inline const std::vector<const CallPE*>& getCallPEs() const
@@ -226,23 +227,15 @@ public:
  */
 class RetCFGEdge : public ICFGEdge
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
 
 private:
-    const SVFInstruction* cs;
     const RetPE* retPE;
 
 public:
     /// Constructor
-    RetCFGEdge(ICFGNode* s, ICFGNode* d, const SVFInstruction* c)
-        : ICFGEdge(s, d, RetCF), cs(c), retPE(nullptr)
+    RetCFGEdge(ICFGNode* s, ICFGNode* d)
+        : ICFGEdge(s, d, RetCF), retPE(nullptr)
     {
-    }
-    /// Return callsite ID
-    inline const SVFInstruction* getCallSite() const
-    {
-        return cs;
     }
     /// Add call parameter edge to this CallCFGEdge
     inline void addRetPE(const RetPE* ret)
@@ -255,6 +248,9 @@ public:
     {
         return retPE;
     }
+    /// Return call ICFGNode at the callsite
+    const CallICFGNode* getCallSite() const;
+
     /// Methods for support type inquiry through isa, cast, and dyn_cast:
     //@{
     static inline bool classof(const RetCFGEdge*)

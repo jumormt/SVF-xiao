@@ -32,6 +32,7 @@
 
 #include "Util/ThreadAPI.h"
 #include "Util/SVFUtil.h"
+#include "Graphs/CallGraph.h"
 #include "SVFIR/SVFIR.h"
 
 #include <iostream>		/// std output
@@ -129,42 +130,102 @@ void ThreadAPI::init()
     }
 }
 
-/*!
- *
- */
-const SVFFunction* ThreadAPI::getCallee(const SVFInstruction *inst) const
+/// Get the function type if it is a threadAPI function
+ThreadAPI::TD_TYPE ThreadAPI::getType(const FunObjVar* F) const
 {
-    return SVFUtil::getCallee(inst);
+    if(F)
+    {
+        TDAPIMap::const_iterator it= tdAPIMap.find(F->getName());
+        if(it != tdAPIMap.end())
+            return it->second;
+    }
+    return TD_DUMMY;
 }
 
-/*!
- *
- */
-const SVFFunction* ThreadAPI::getCallee(const CallSite cs) const
+bool ThreadAPI::isTDFork(const CallICFGNode *inst) const
 {
-    return SVFUtil::getCallee(cs);
+    return getType(inst->getCalledFunction()) == TD_FORK;
 }
 
-/*!
- *
- */
-const CallSite ThreadAPI::getSVFCallSite(const SVFInstruction *inst) const
+bool ThreadAPI::isTDJoin(const CallICFGNode *inst) const
 {
-    return SVFUtil::getSVFCallSite(inst);
+    return getType(inst->getCalledFunction()) == TD_JOIN;
 }
 
-const SVFValue* ThreadAPI::getJoinedThread(const SVFInstruction *inst) const
+bool ThreadAPI::isTDExit(const CallICFGNode *inst) const
+{
+    return getType(inst->getCalledFunction()) == TD_EXIT;
+}
+
+bool ThreadAPI::isTDAcquire(const CallICFGNode* inst) const
+{
+    return getType(inst->getCalledFunction()) == TD_ACQUIRE;
+}
+
+bool ThreadAPI::isTDRelease(const CallICFGNode *inst) const
+{
+    return getType(inst->getCalledFunction()) == TD_RELEASE;
+}
+
+bool ThreadAPI::isTDBarWait(const CallICFGNode *inst) const
+{
+    return getType(inst->getCalledFunction()) == TD_BAR_WAIT;
+}
+
+
+const ValVar* ThreadAPI::getForkedThread(const CallICFGNode *inst) const
+{
+    assert(isTDFork(inst) && "not a thread fork function!");
+    return inst->getArgument(0);
+}
+
+const ValVar* ThreadAPI::getForkedFun(const CallICFGNode *inst) const
+{
+    assert(isTDFork(inst) && "not a thread fork function!");
+    return inst->getArgument(2);
+}
+
+/// Return the forth argument of the call,
+/// Note that, it is the sole argument of start routine ( a void* pointer )
+const ValVar* ThreadAPI::getActualParmAtForkSite(const CallICFGNode *inst) const
+{
+    assert(isTDFork(inst) && "not a thread fork function!");
+    return inst->getArgument(3);
+}
+
+const SVFVar* ThreadAPI::getFormalParmOfForkedFun(const FunObjVar* F) const
+{
+    assert(PAG::getPAG()->hasFunArgsList(F) && "forked function has no args list!");
+    const SVFIR::ValVarList& funArgList = PAG::getPAG()->getFunArgsList(F);
+    // in pthread, forked functions are of type void *()(void *args)
+    assert(funArgList.size() == 1 && "num of pthread forked function args is not 1!");
+    return funArgList[0];
+}
+
+const SVFVar* ThreadAPI::getRetParmAtJoinedSite(const CallICFGNode *inst) const
 {
     assert(isTDJoin(inst) && "not a thread join function!");
-    CallSite cs = getSVFCallSite(inst);
-    const SVFValue* join = cs.getArgument(0);
-    const SVFVar* var = PAG::getPAG()->getGNode(PAG::getPAG()->getValueNode(join));
-    for(const SVFStmt* stmt : var->getInEdges())
+    return inst->getArgument(1);
+}
+
+const SVFVar* ThreadAPI::getLockVal(const ICFGNode *cs) const
+{
+    const CallICFGNode* call = SVFUtil::dyn_cast<CallICFGNode>(cs);
+    assert(call && "not a call ICFGNode?");
+    assert((isTDAcquire(call) || isTDRelease(call)) && "not a lock acquire or release function");
+    return call->getArgument(0);
+}
+
+const SVFVar* ThreadAPI::getJoinedThread(const CallICFGNode *cs) const
+{
+    assert(isTDJoin(cs) && "not a thread join function!");
+    const ValVar* join = cs->getArgument(0);
+    for(const SVFStmt* stmt : join->getInEdges())
     {
         if(SVFUtil::isa<LoadStmt>(stmt))
-            return stmt->getSrcNode()->getValue();
+            return stmt->getSrcNode();
     }
-    if(SVFUtil::isa<SVFArgument>(join))
+    if(SVFUtil::isa<ArgValVar>(join))
         return join;
 
     assert(false && "the value of the first argument at join is not a load instruction?");
@@ -214,24 +275,25 @@ void ThreadAPI::statInit(Map<std::string, u32_t>& tdAPIStatMap)
     tdAPIStatMap["hare_parallel_for"] = 0;
 }
 
-void ThreadAPI::performAPIStat(SVFModule* module)
+void ThreadAPI::performAPIStat()
 {
 
     Map<std::string, u32_t> tdAPIStatMap;
 
     statInit(tdAPIStatMap);
 
-    for (SVFModule::const_iterator it = module->begin(), eit = module->end(); it != eit; ++it)
+    const CallGraph* svfirCallGraph = PAG::getPAG()->getCallGraph();
+    for (const auto& item: *svfirCallGraph)
     {
-        for (SVFFunction::const_iterator bit = (*it)->begin(), ebit = (*it)->end(); bit != ebit; ++bit)
+        for (FunObjVar::const_bb_iterator bit = (item.second)->getFunction()->begin(), ebit = (item.second)->getFunction()->end(); bit != ebit; ++bit)
         {
-            const SVFBasicBlock* bb = *bit;
-            for (SVFBasicBlock::const_iterator ii = bb->begin(), eii = bb->end(); ii != eii; ++ii)
+            const SVFBasicBlock* bb = bit->second;
+            for (const auto& svfInst: bb->getICFGNodeList())
             {
-                const SVFInstruction* svfInst = *ii;
                 if (!SVFUtil::isCallSite(svfInst))
                     continue;
-                const SVFFunction* fun = getCallee(svfInst);
+
+                const FunObjVar* fun = SVFUtil::cast<CallICFGNode>(svfInst)->getCalledFunction();
                 TD_TYPE type = getType(fun);
                 switch (type)
                 {
@@ -335,7 +397,7 @@ void ThreadAPI::performAPIStat(SVFModule* module)
 
     }
 
-    std::string name(module->getModuleIdentifier());
+    std::string name(PAG::getPAG()->getModuleIdentifier());
     std::vector<std::string> fullNames = SVFUtil::split(name,'/');
     if (fullNames.size() > 1)
     {

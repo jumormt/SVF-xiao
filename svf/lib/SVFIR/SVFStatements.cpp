@@ -55,6 +55,16 @@ SVFStmt::SVFStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, bool real) :
     }
 }
 
+SVFStmt::SVFStmt(SVFVar* s, SVFVar* d, GEdgeFlag k, EdgeID eid, SVFVar* value, ICFGNode* icfgNode, bool real) :
+    GenericPAGEdgeTy(s,d,k),value(value),basicBlock(nullptr),icfgNode(icfgNode),edgeId(eid)
+{
+    if(real)
+    {
+        edgeId = eid;
+        SVFIR::getPAG()->incEdgeNum();
+    }
+}
+
 /*!
  * Whether src and dst nodes are both pointer type
  */
@@ -232,7 +242,14 @@ const std::string CallPE::toString() const
 {
     std::string str;
     std::stringstream rawstr(str);
-    rawstr << "CallPE: [Var" << getLHSVarID() << " <-- Var" << getRHSVarID() << "]\t";
+    rawstr << "CallPE: [Var" << getResID() << " <-- (";
+    for (u32_t i = 0; i < getOpVarNum(); i++)
+    {
+        rawstr << "[Var" << getOpVarID(i) << ", ICFGNode" << getOpCallICFGNode(i)->getId() << "]";
+        if (i + 1 < getOpVarNum())
+            rawstr << ", ";
+    }
+    rawstr << ")]  ";
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
@@ -258,7 +275,14 @@ const std::string TDForkPE::toString() const
 {
     std::string str;
     std::stringstream rawstr(str);
-    rawstr << "TDForkPE: [Var" << getLHSVarID() << " <-- Var" << getRHSVarID() << "]\t";
+    rawstr << "TDForkPE: [Var" << getResID() << " <-- (";
+    for (u32_t i = 0; i < getOpVarNum(); i++)
+    {
+        rawstr << "[Var" << getOpVarID(i) << ", ICFGNode" << getOpCallICFGNode(i)->getId() << "]";
+        if (i + 1 < getOpVarNum())
+            rawstr << ", ";
+    }
+    rawstr << ")]  ";
     if (Options::ShowSVFIRValue())
     {
         rawstr << "\n";
@@ -278,6 +302,127 @@ const std::string TDJoinPE::toString() const
         rawstr << getValue()->toString();
     }
     return rawstr.str();
+}
+
+const ObjVar* AddrStmt::getRHSVar() const
+{
+    return cast<ObjVar>(SVFStmt::getSrcNode());
+}
+const ValVar* AddrStmt::getLHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+const ObjVar* AddrStmt::getSrcNode() const
+{
+    return getRHSVar();
+}
+const ValVar* AddrStmt::getDstNode() const
+{
+    return getLHSVar();
+}
+
+const ValVar* CopyStmt::getRHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getSrcNode());
+}
+const ValVar* CopyStmt::getLHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+const ValVar* CopyStmt::getSrcNode() const
+{
+    return getRHSVar();
+}
+const ValVar* CopyStmt::getDstNode() const
+{
+    return getLHSVar();
+}
+
+const ValVar* StoreStmt::getRHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getSrcNode());
+}
+const ValVar* StoreStmt::getLHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+const ValVar* StoreStmt::getSrcNode() const
+{
+    return getRHSVar();
+}
+const ValVar* StoreStmt::getDstNode() const
+{
+    return getLHSVar();
+}
+
+const ValVar* LoadStmt::getRHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getSrcNode());
+}
+const ValVar* LoadStmt::getLHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+const ValVar* LoadStmt::getSrcNode() const
+{
+    return getRHSVar();
+}
+const ValVar* LoadStmt::getDstNode() const
+{
+    return getLHSVar();
+}
+
+const ValVar* GepStmt::getRHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getSrcNode());
+}
+const ValVar* GepStmt::getLHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+const ValVar* GepStmt::getSrcNode() const
+{
+    return getRHSVar();
+}
+const ValVar* GepStmt::getDstNode() const
+{
+    return getLHSVar();
+}
+
+
+const ValVar* RetPE::getRHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getSrcNode());
+}
+const ValVar* RetPE::getLHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+const ValVar* RetPE::getSrcNode() const
+{
+    return getRHSVar();
+}
+const ValVar* RetPE::getDstNode() const
+{
+    return getLHSVar();
+}
+
+
+const ValVar* TDJoinPE::getRHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getSrcNode());
+}
+const ValVar* TDJoinPE::getLHSVar() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+const ValVar* TDJoinPE::getSrcNode() const
+{
+    return getRHSVar();
+}
+const ValVar* TDJoinPE::getDstNode() const
+{
+    return getLHSVar();
 }
 
 
@@ -300,41 +445,73 @@ NodeID UnaryOPStmt::getResID() const
     return getRes()->getId();
 }
 
+const ValVar* UnaryOPStmt::getOpVar() const
+{
+    return cast<ValVar>(SVFStmt::getSrcNode());
+}
+const ValVar* UnaryOPStmt::getRes() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+
+const ValVar* MultiOpndStmt::getRes() const
+{
+    return cast<ValVar>(SVFStmt::getDstNode());
+}
+
 /// Return true if this is a phi at the function exit
 /// to receive one or multiple return values of this function
 bool PhiStmt::isFunctionRetPhi() const
 {
-    return SVFUtil::isa<RetPN>(getRes());
+    return SVFUtil::isa<RetValPN>(getRes());
 }
 
 
 /// The branch is unconditional if cond is a null value
 bool BranchStmt::isUnconditional() const
 {
-    return cond->getId() == SymbolTableInfo::SymbolInfo()->nullPtrSymID();
+    return cond->getId() == PAG::getPAG()->nullPtrSymID();
 }
 /// The branch is conditional if cond is not a null value
 bool BranchStmt::isConditional() const
 {
-    return cond->getId() != SymbolTableInfo::SymbolInfo()->nullPtrSymID();;
+    return cond->getId() != PAG::getPAG()->nullPtrSymID();;
 }
 /// Return the condition
-const SVFVar* BranchStmt::getCondition() const
+const ValVar* BranchStmt::getCondition() const
 {
     //assert(isConditional() && "this is a unconditional branch");
     return cond;
 }
 
-StoreStmt::StoreStmt(SVFVar* s, SVFVar* d, const IntraICFGNode* st)
+UnaryOPStmt::UnaryOPStmt(ValVar* s, ValVar* d, u32_t oc)
+    : SVFStmt(s, d, SVFStmt::UnaryOp), opcode(oc)
+{
+}
+
+BranchStmt::BranchStmt(ValVar* inst, ValVar* c, const SuccAndCondPairVec& succs)
+    : SVFStmt(c, inst, SVFStmt::Branch), successors(succs), cond(c),
+      brInst(inst)
+{
+}
+
+StoreStmt::StoreStmt(SVFVar* s, SVFVar* d, const ICFGNode* st)
     : AssignStmt(s, d, makeEdgeFlagWithStoreInst(SVFStmt::Store, st))
 {
 }
 
-CallPE::CallPE(SVFVar* s, SVFVar* d, const CallICFGNode* i,
-               const FunEntryICFGNode* e, GEdgeKind k)
-    : AssignStmt(s, d, makeEdgeFlagWithCallInst(k, i)), call(i), entry(e)
+CallPE::CallPE(ValVar* res, const OPVars& opnds,
+               const CallICFGNodeVec& icfgNodes,
+               const FunEntryICFGNode* e,
+               GEdgeKind k)
+    : MultiOpndStmt(res, opnds,
+                    makeEdgeFlagWithAddionalOpnd(k, opnds.at(0))),
+      opCallICFGNodes(icfgNodes), entry(e)
 {
+    assert(opnds.size() == icfgNodes.size() &&
+           "Numbers of operands and their CallICFGNodes are not consistent?");
 }
+
 
 RetPE::RetPE(SVFVar* s, SVFVar* d, const CallICFGNode* i,
              const FunExitICFGNode* e, GEdgeKind k)
@@ -342,12 +519,13 @@ RetPE::RetPE(SVFVar* s, SVFVar* d, const CallICFGNode* i,
 {
 }
 
-MultiOpndStmt::MultiOpndStmt(SVFVar* r, const OPVars& opnds, GEdgeFlag k)
+
+MultiOpndStmt::MultiOpndStmt(ValVar* r, const OPVars& opnds, GEdgeFlag k)
     : SVFStmt(opnds.at(0), r, k), opVars(opnds)
 {
 }
 
-CmpStmt::CmpStmt(SVFVar* s, const OPVars& opnds, u32_t pre)
+CmpStmt::CmpStmt(ValVar* s, const OPVars& opnds, u32_t pre)
     : MultiOpndStmt(s, opnds,
                     makeEdgeFlagWithAddionalOpnd(SVFStmt::Cmp, opnds.at(1))),
       predicate(pre)
@@ -355,7 +533,7 @@ CmpStmt::CmpStmt(SVFVar* s, const OPVars& opnds, u32_t pre)
     assert(opnds.size() == 2 && "CmpStmt can only have two operands!");
 }
 
-SelectStmt::SelectStmt(SVFVar* s, const OPVars& opnds, const SVFVar* cond)
+SelectStmt::SelectStmt(ValVar* s, const OPVars& opnds, const SVFVar* cond)
     : MultiOpndStmt(s, opnds,
                     makeEdgeFlagWithAddionalOpnd(SVFStmt::Select, opnds.at(1))),
       condition(cond)
@@ -363,7 +541,7 @@ SelectStmt::SelectStmt(SVFVar* s, const OPVars& opnds, const SVFVar* cond)
     assert(opnds.size() == 2 && "SelectStmt can only have two operands!");
 }
 
-BinaryOPStmt::BinaryOPStmt(SVFVar* s, const OPVars& opnds, u32_t oc)
+BinaryOPStmt::BinaryOPStmt(ValVar* s, const OPVars& opnds, u32_t oc)
     : MultiOpndStmt(
           s, opnds,
           makeEdgeFlagWithAddionalOpnd(SVFStmt::BinaryOp, opnds.at(1))),

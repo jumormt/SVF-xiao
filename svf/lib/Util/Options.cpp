@@ -2,7 +2,11 @@
 
 #include "Util/Options.h"
 #include "Util/CommandLine.h"
+#include "FastCluster/fastcluster.h"
 #include "Util/ExtAPI.h"
+#include "MSSA/MemSSA.h"
+#include "WPA/WPAPass.h"
+#include "AE/Svfexe/AbstractInterpretation.h"
 
 namespace SVF
 {
@@ -289,7 +293,7 @@ const Option<u32_t> Options::IndirectCallLimit(
     50000
 );
 
-const Option<bool> Options::UsePreCompFieldSensitive(
+Option<bool> Options::UsePreCompFieldSensitive(
     "pre-field-sensitive",
     "Use pre-computed field-sensitivity for later analysis",
     true
@@ -356,7 +360,7 @@ const OptionMap<PointsTo::Type> Options::PtType(
 }
 );
 
-const OptionMap<enum hclust_fast_methods> Options::ClusterMethod(
+const OptionMap<u32_t> Options::ClusterMethod(
     "cluster-method",
     "hierarchical clustering method for objects",
     HCLUST_METHOD_SVF_BEST,
@@ -408,7 +412,7 @@ const Option<std::string> Options::MSSAFun(
     ""
 );
 
-const OptionMap<MemSSA::MemPartition> Options::MemPar(
+const OptionMap<u32_t> Options::MemPar(
     "mem-par",
     "Memory region partition strategies (e.g., for SVFG construction)",
     MemSSA::MemPartition::IntraDisjoint,
@@ -445,29 +449,11 @@ const Option<std::string> Options::ReadSVFG(
     ""
 );
 
-// FSMPTA.cpp
-const Option<bool> Options::UsePCG(
-    "pcg-td-edge",
-    "Use PCG lock for non-sparsely adding SVFG edges",
-    false
-);
 
 const Option<bool> Options::IntraLock(
     "intra-lock-td-edge",
     "Use simple intra-procedural lock for adding SVFG edges",
     true
-);
-
-const Option<bool> Options::ReadPrecisionTDEdge(
-    "rp-td-edge",
-    "perform read precision to refine SVFG edges",
-    false
-);
-
-const Option<u32_t> Options::AddModelFlag(
-    "add-td-edge",
-    "Add thread SVFG edges with models: 0 Non Add Edge; 1 NonSparse; 2 All Optimisation; 3 No MHP; 4 No Alias; 5 No Lock; 6 No Read Precision.",
-    0
 );
 
 
@@ -493,56 +479,12 @@ const Option<bool> Options::DoLockAnalysis(
 );
 
 
-// MTA.cpp
-const Option<bool> Options::AndersenAnno(
-    "tsan-ander",
-    "Add TSan annotation according to Andersen",
-    false
-);
-
-const Option<bool> Options::FSAnno(
-    "tsan-fs",
-    "Add TSan annotation according to flow-sensitive analysis",
-    false
-);
-
-
-// MTAAnnotator.cpp
-const Option<u32_t> Options::AnnoFlag(
-    "anno",
-    "prune annotated instructions: 0001 Thread Local; 0002 Alias; 0004 MHP.",
-    0
-);
-
-
-// MTAResultValidator.cpp
-const Option<bool> Options::PrintValidRes(
-    "mhp-validation",
-    "Print MHP Validation Results",
-    false
-);
-// LockResultValidator.cpp
-const Option<bool> Options::LockValid(
-    "lock-validation",
-    "Print Lock Validation Results",
-    false
-);
-
-
 // MTAStat.cpp
 const Option<bool> Options::AllPairMHP(
     "all-pair-mhp",
     "All pair MHP computation",
     false
 );
-
-
-// PCG.cpp
-//const Option<bool> TDPrint(
-//    "print-td",
-//    "Print Thread Analysis Results",
-//    true
-//);
 
 
 // TCT.cpp
@@ -598,19 +540,19 @@ const Option<std::string> Options::Graphtxt(
     ""
 );
 
-const Option<bool> Options::SVFMain(
+Option<bool> Options::SVFMain(
     "svf-main",
     "add svf.main()",
     false
 );
 
-const Option<bool> Options::ModelConsts(
+Option<bool> Options::ModelConsts(
     "model-consts",
     "Modeling individual constant objects",
     false
 );
 
-const Option<bool> Options::ModelArrays(
+Option<bool> Options::ModelArrays(
     "model-arrays",
     "Modeling Gep offsets for array accesses",
     false
@@ -689,13 +631,13 @@ const Option<bool> Options::PrintCGGraph(
 
 const Option<std::string> Options::WriteAnder(
     "write-ander",
-    "-write-ander=ir_annotator (Annotated IR with Andersen's results) or write Andersen's analysis results to a user-specified text file",
+    "Write Andersen's analysis results to a user-specified text file",
     ""
 );
 
 const Option<std::string> Options::ReadAnder(
     "read-ander",
-    "-read-ander=ir_annotator (Read Andersen's analysis results from the annotated IR, e.g., *.pre.bc) or from a text file",
+    "Read Andersen's analysis results from a text file",
     ""
 );
 
@@ -759,7 +701,7 @@ OptionMultiple<PointerAnalysis::PTATY> Options::PASelected(
 );
 
 
-OptionMultiple<WPAPass::AliasCheckRule> Options::AliasRule(
+OptionMultiple<u32_t> Options::AliasRule(
     "Select alias check rule",
 {
     {WPAPass::Conservative, "conservative", "return MayAlias if any pta says alias"},
@@ -839,14 +781,67 @@ const Option<u32_t> Options::LoopBound(
     1
 );
 
+const OptionMap<u32_t> Options::AESparsity(
+    "ae-sparsity",
+    "Abstract execution mode (Default: dense)",
+    AbstractInterpretation::AESparsity::Dense,
+{
+    {
+        AbstractInterpretation::AESparsity::Dense, "dense",
+        "Dense abstract execution: all variables propagated along ICFG edges."
+    },
+    {
+        AbstractInterpretation::AESparsity::SemiSparse, "semi-sparse",
+        "Semi-sparse abstract execution: ObjVars dense, ValVars sparse."
+    },
+    {
+        AbstractInterpretation::AESparsity::Sparse, "sparse",
+        "Sparse abstract execution via SVFG."
+    }
+});
+const OptionMap<u32_t> Options::AEFunEntry(
+    "ae-fun-entry",
+    "Abstract execution function entry mode (Default: main)",
+    AbstractInterpretation::AEFunEntryMode::MAIN,
+{
+    {
+        AbstractInterpretation::AEFunEntryMode::MAIN, "main",
+        "Analyze from the program entry function only."
+    },
+    {
+        AbstractInterpretation::AEFunEntryMode::NO_MAIN, "no-main",
+        "Analyze from every no-external-caller SCC after Andersen resolves the call graph."
+    }
+});
 const Option<u32_t> Options::WidenDelay(
     "widen-delay", "Loop Widen Delay", 3);
+const OptionMap<u32_t> Options::HandleRecur(
+    "handle-recur",
+    "Recursion handling mode in abstract execution (Default -widen-narrow)",
+    AbstractInterpretation::HandleRecur::WIDEN_NARROW,
+{
+    {
+        AbstractInterpretation::HandleRecur::TOP, "top",
+        "The return value, and any stored object pointed by q at *q = p in recursive functions will be set to the top value."
+    },
+    {
+        AbstractInterpretation::HandleRecur::WIDEN_ONLY, "widen-only",
+        "Only apply widening at the cycle head of recursive functions."
+    },
+    {
+        AbstractInterpretation::HandleRecur::WIDEN_NARROW, "widen-narrow",
+        "Apply both widening and narrowing at the cycle head of recursive functions."
+    }
+}
+);
 const Option<u32_t> Options::Timeout(
     "timeout", "time out (seconds), set -1 (no timeout), default 14400s",14400);
 const Option<std::string> Options::OutputName(
     "output","output db file","output.db");
 const Option<bool> Options::BufferOverflowCheck(
     "overflow","Buffer Overflow Detection",false);
+const Option<bool> Options::NullDerefCheck(
+    "null-deref","Null Pointer Dereference Detection",false);
 const Option<bool> Options::MemoryLeakCheck(
     "leak", "Memory Leak Detection",false);
 const Option<bool> Options::FileCheck(

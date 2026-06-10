@@ -69,24 +69,19 @@ protected:
 
     void clearSolitaries();  // remove nodes that are neither pointers nor connected with any edge
 
-    SVFStmt::SVFStmtSetTy& getPAGEdgeSet(SVFStmt::PEDGEK kind)
+    SVFStmt::SVFStmtSetTy& getSVFStmtSet(SVFStmt::PEDGEK kind)
     {
         return pag->getPTASVFStmtSet(kind);
     }
 
     /// Wrappers used internally, not expose to Andersen Pass
     //@{
-    inline NodeID getValueNode(const SVFValue* value) const
-    {
-        return sccRepNode(pag->getValueNode(value));
-    }
-
-    inline NodeID getReturnNode(const SVFFunction* value) const
+    inline NodeID getReturnNode(const FunObjVar* value) const
     {
         return pag->getReturnNode(value);
     }
 
-    inline NodeID getVarargNode(const SVFFunction* value) const
+    inline NodeID getVarargNode(const FunObjVar* value) const
     {
         return pag->getVarargNode(value);
     }
@@ -317,14 +312,14 @@ public:
     {
         return pag->getAllFieldsObjVars(id);
     }
-    inline NodeID getBaseObjVar(NodeID id)
+    inline NodeID getBaseObjVarID(NodeID id)
     {
-        return pag->getBaseObjVar(id);
+        return pag->getBaseObjVarID(id);
     }
     inline bool isSingleFieldObj(NodeID id) const
     {
-        const MemObj* mem = pag->getBaseObj(id);
-        return (mem->getMaxFieldOffsetLimit() == 1);
+        const BaseObjVar* baseObj = pag->getBaseObject(id);
+        return (baseObj->getMaxFieldOffsetLimit() == 1);
     }
     /// Get a field of a memory object
     inline NodeID getGepObjVar(NodeID id, const APOffset& apOffset)
@@ -382,10 +377,7 @@ public:
     void view();
 };
 
-} // End namespace SVF
 
-namespace SVF
-{
 /* !
  * GenericGraphTraits specializations for the generic graph algorithms.
  * Provide graph traits for traversing from a constraint node using standard graph traversals.
@@ -405,6 +397,6 @@ template<> struct GenericGraphTraits<SVF::ConstraintGraph*> : public GenericGrap
     typedef SVF::ConstraintNode *NodeRef;
 };
 
-} // End namespace llvm
+} // End namespace SVF
 
 #endif /* CONSG_H_ */

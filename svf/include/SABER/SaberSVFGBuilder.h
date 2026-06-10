@@ -60,9 +60,9 @@ public:
     }
 
     /// Add ActualParmVFGNode
-    inline void addActualParmVFGNode(const PAGNode* pagNode, const CallICFGNode* cs)
+    inline void addActualParmVFGNode(const ValVar* svfVar, const CallICFGNode* cs)
     {
-        svfg->addActualParmVFGNode(pagNode, cs);
+        svfg->addActualParmVFGNode(svfVar, cs);
     }
 
     void setSaberCondAllocator(SaberCondAllocator* allocator)
@@ -89,15 +89,15 @@ protected:
 
     /// Add actual parameter SVFGNode for 1st argument of a deallocation like external function
     /// In order to path sensitive leak detection
-    virtual void AddExtActualParmSVFGNodes(PTACallGraph* callgraph);
+    virtual void AddExtActualParmSVFGNodes(CallGraph* callgraph);
 
     /// Collect memory pointed global pointers,
     /// note that this collection is recursively performed, for example gp-->obj-->obj'
     /// obj and obj' are both considered global memory
     void collectGlobals(BVDataPTAImpl* pta);
 
-    /// Whether points-to of a PAGNode points-to global variable
-    bool accessGlobal(BVDataPTAImpl* pta,const PAGNode* pagNode);
+    /// Whether points-to of a SVFVar points-to global variable
+    bool accessGlobal(BVDataPTAImpl* pta,const SVFVar* svfVar);
 
     /// Collect objects along points-to chains
     PointsTo& CollectPtsChain(BVDataPTAImpl* pta,NodeID id, NodeToPTSSMap& cachedPtsMap);

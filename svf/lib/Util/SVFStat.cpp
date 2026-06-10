@@ -29,6 +29,7 @@
 
 #include "Util/Options.h"
 #include "Util/SVFStat.h"
+#include "Graphs/CallGraph.h"
 
 using namespace SVF;
 using namespace std;
@@ -66,7 +67,7 @@ double SVFStat::getClk(bool mark)
 void SVFStat::printStat(string statname)
 {
 
-    std::string moduleName(SVFIR::getPAG()->getModule()->getModuleIdentifier());
+    std::string moduleName(SVFIR::getPAG()->getModuleIdentifier());
     std::vector<std::string> names = SVFUtil::split(moduleName,'/');
     if (names.size() > 1)
     {
@@ -126,13 +127,13 @@ void SVFStat::performStat()
     u32_t numOfConstant = 0;
     u32_t fiObjNumber = 0;
     u32_t fsObjNumber = 0;
-    Set<SymID> memObjSet;
+    Set<NodeID> memObjSet;
     for(SVFIR::iterator it = pag->begin(), eit = pag->end(); it!=eit; ++it)
     {
         PAGNode* node = it->second;
         if(ObjVar* obj = SVFUtil::dyn_cast<ObjVar>(node))
         {
-            const MemObj* mem = obj->getMemObj();
+            const BaseObjVar* mem = pag->getBaseObject(obj->getId());
             if (memObjSet.insert(mem->getId()).second == false)
                 continue;
             if(mem->isBlackHoleObj())
@@ -141,10 +142,16 @@ void SVFStat::performStat()
                 numOfFunction++;
             if(mem->isGlobalObj())
                 numOfGlobal++;
-            if(mem->isStack())
+            if (pag->getBaseObject(obj->getId()) &&
+                    SVFUtil::isa<StackObjVar>(
+                        pag->getBaseObject(obj->getId())))
                 numOfStack++;
-            if(mem->isHeap())
+            if (pag->getBaseObject(obj->getId()) &&
+                    SVFUtil::isa<HeapObjVar, DummyObjVar>(
+                        pag->getBaseObject(obj->getId())))
+            {
                 numOfHeap++;
+            }
             if(mem->isVarArray())
                 numOfHasVarArray++;
             if(mem->isVarStruct())
@@ -167,11 +174,11 @@ void SVFStat::performStat()
 
 
 
-    generalNumMap["TotalPointers"] = pag->getValueNodeNum() + pag->getFieldValNodeNum();
+    generalNumMap["TotalPointers"] = pag->getValueNodeNum();
     generalNumMap["TotalObjects"] = pag->getObjectNodeNum();
     generalNumMap["TotalFieldObjects"] = pag->getFieldObjNodeNum();
-    generalNumMap["MaxStructSize"] = SymbolTableInfo::SymbolInfo()->getMaxStructSize();
-    generalNumMap["TotalSVFStmts"] = pag->getPAGEdgeNum();
+    generalNumMap["MaxStructSize"] = pag->getMaxStructSize();
+    generalNumMap["TotalSVFStmts"] = pag->getSVFStmtNum();
     generalNumMap["TotalPTASVFStmts"] = pag->getPTAPAGEdgeNum();
     generalNumMap["FIObjNum"] = fiObjNumber;
     generalNumMap["FSObjNum"] = fsObjNumber;
@@ -214,17 +221,16 @@ void SVFStat::performStat()
 
 void SVFStat::branchStat()
 {
-    SVFModule* module = SVFIR::getPAG()->getModule();
     u32_t numOfBB_2Succ = 0;
     u32_t numOfBB_3Succ = 0;
-    for (SVFModule::const_iterator funIter = module->begin(), funEiter = module->end();
-            funIter != funEiter; ++funIter)
+    const CallGraph* svfirCallGraph = PAG::getPAG()->getCallGraph();
+    for (const auto& item: *svfirCallGraph)
     {
-        const SVFFunction* func = *funIter;
-        for (SVFFunction::const_iterator bbIt = func->begin(), bbEit = func->end();
+        const FunObjVar* func = item.second->getFunction();
+        for (FunObjVar::const_bb_iterator bbIt = func->begin(), bbEit = func->end();
                 bbIt != bbEit; ++bbIt)
         {
-            const SVFBasicBlock* bb = *bbIt;
+            const SVFBasicBlock* bb = bbIt->second;
             u32_t numOfSucc = bb->getNumSuccessors();
             if (numOfSucc == 2)
                 numOfBB_2Succ++;

@@ -62,10 +62,10 @@ public:
 
 protected:
     u32_t typeAndInfoFlag;
-    const SVFInstruction *eventInst;
+    const ICFGNode *eventInst;
 
 public:
-    SVFBugEvent(u32_t typeAndInfoFlag, const SVFInstruction *eventInst): typeAndInfoFlag(typeAndInfoFlag), eventInst(eventInst) { };
+    SVFBugEvent(u32_t typeAndInfoFlag, const ICFGNode *eventInst): typeAndInfoFlag(typeAndInfoFlag), eventInst(eventInst) { };
     virtual ~SVFBugEvent() = default;
 
     inline u32_t getEventType() const
@@ -209,7 +209,7 @@ class DoubleFreeBug : public GenericBug
 {
 public:
     DoubleFreeBug(const EventStack &bugEventStack):
-        GenericBug(GenericBug::PARTIALLEAK, bugEventStack) { }
+        GenericBug(GenericBug::DOUBLEFREE, bugEventStack) { }
 
     cJSON *getBugDescription() const;
     void printBugToTerminal() const;
@@ -225,7 +225,7 @@ class FileNeverCloseBug : public GenericBug
 {
 public:
     FileNeverCloseBug(const EventStack &bugEventStack):
-        GenericBug(GenericBug::NEVERFREE, bugEventStack) {  };
+        GenericBug(GenericBug::FILENEVERCLOSE, bugEventStack) {  };
 
     cJSON *getBugDescription() const;
     void printBugToTerminal() const;
@@ -241,7 +241,7 @@ class FilePartialCloseBug : public GenericBug
 {
 public:
     FilePartialCloseBug(const EventStack &bugEventStack):
-        GenericBug(GenericBug::PARTIALLEAK, bugEventStack) { }
+        GenericBug(GenericBug::FILEPARTIALCLOSE, bugEventStack) { }
 
     cJSON *getBugDescription() const;
     void printBugToTerminal() const;

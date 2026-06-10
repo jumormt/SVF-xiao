@@ -28,7 +28,6 @@
  */
 
 #include "Util/Options.h"
-#include "SVFIR/SVFModule.h"
 #include "Util/SVFUtil.h"
 
 #include "MemoryModel/PointerAnalysisImpl.h"
@@ -36,6 +35,7 @@
 #include "Util/PTAStat.h"
 #include "Graphs/ThreadCallGraph.h"
 #include "Graphs/ICFG.h"
+#include "Graphs/CallGraph.h"
 #include "Util/CallGraphBuilder.h"
 
 #include <iomanip>
@@ -65,8 +65,9 @@ const std::string PointerAnalysis::aliasTestFailNoAliasMangled  = "_Z20EXPECTEDF
 /*!
  * Constructor
  */
-PointerAnalysis::PointerAnalysis(SVFIR* p, PTATY ty, bool alias_check) :
-    svfMod(nullptr),ptaTy(ty),stat(nullptr),ptaCallGraph(nullptr),callGraphSCC(nullptr),icfg(nullptr),chgraph(nullptr)
+PointerAnalysis::PointerAnalysis(SVFIR *p, PTATY ty, bool alias_check) : ptaTy(ty), stat(nullptr), callgraph(nullptr),
+    callGraphSCC(nullptr), icfg(nullptr),
+    chgraph(nullptr)
 {
     pag = p;
     OnTheFlyIterBudgetForStat = Options::StatBudget();
@@ -88,8 +89,8 @@ PointerAnalysis::~PointerAnalysis()
 
 void PointerAnalysis::destroy()
 {
-    delete ptaCallGraph;
-    ptaCallGraph = nullptr;
+    delete callgraph;
+    callgraph = nullptr;
 
     delete callGraphSCC;
     callGraphSCC = nullptr;
@@ -105,27 +106,24 @@ void PointerAnalysis::initialize()
 {
     assert(pag && "SVFIR has not been built!");
 
-    svfMod = pag->getModule();
     chgraph = pag->getCHG();
 
     /// initialise pta call graph for every pointer analysis instance
     if(Options::EnableThreadCallGraph())
     {
-        ThreadCallGraph* cg = new ThreadCallGraph();
-        ThreadCallGraphBuilder bd(cg, pag->getICFG());
-        ptaCallGraph = bd.buildThreadCallGraph(pag->getModule());
+        CallGraphBuilder bd;
+        callgraph = bd.buildThreadCallGraph();
     }
     else
     {
-        PTACallGraph* cg = new PTACallGraph();
-        CallGraphBuilder bd(cg,pag->getICFG());
-        ptaCallGraph = bd.buildCallGraph(pag->getModule());
+        CallGraphBuilder bd;
+        callgraph = bd.buildPTACallGraph();
     }
     callGraphSCCDetection();
 
     // dump callgraph
     if (Options::CallGraphDotGraph())
-        getPTACallGraph()->dump("callgraph_initial");
+        getCallGraph()->dump("callgraph_initial");
 }
 
 
@@ -134,13 +132,13 @@ void PointerAnalysis::initialize()
  */
 bool PointerAnalysis::isLocalVarInRecursiveFun(NodeID id) const
 {
-    const MemObj* obj = pag->getObject(id);
-    assert(obj && "object not found!!");
-    if(obj->isStack())
+    const BaseObjVar* baseObjVar = pag->getBaseObject(id);
+    assert(baseObjVar && "base object not found!!");
+    if(SVFUtil::isa<StackObjVar>(baseObjVar))
     {
-        if(const SVFFunction* svffun = pag->getGNode(id)->getFunction())
+        if(const FunObjVar* svffun = pag->getSVFVar(id)->getFunction())
         {
-            return callGraphSCC->isInCycle(getPTACallGraph()->getCallGraphNode(svffun)->getId());
+            return callGraphSCC->isInCycle(getCallGraph()->getCallGraphNode(svffun)->getId());
         }
     }
     return false;
@@ -154,7 +152,7 @@ void PointerAnalysis::resetObjFieldSensitive()
     for (SVFIR::iterator nIter = pag->begin(); nIter != pag->end(); ++nIter)
     {
         if(ObjVar* node = SVFUtil::dyn_cast<ObjVar>(nIter->second))
-            const_cast<MemObj*>(node->getMemObj())->setFieldSensitive();
+            const_cast<BaseObjVar*>(pag->getBaseObject(node->getId()))->setFieldSensitive();
     }
 }
 
@@ -198,10 +196,10 @@ void PointerAnalysis::finalize()
     if (Options::FuncPointerPrint())
         printIndCSTargets();
 
-    getPTACallGraph()->verifyCallGraph();
+    getCallGraph()->verifyCallGraph();
 
     if (Options::CallGraphDotGraph())
-        getPTACallGraph()->dump("callgraph_final");
+        getCallGraph()->dump("callgraph_final");
 
     if(!pag->isBuiltFromFile() && alias_validation)
         validateTests();
@@ -236,16 +234,16 @@ void PointerAnalysis::dumpAllTypes()
     for (OrderedNodeSet::iterator nIter = this->getAllValidPtrs().begin();
             nIter != this->getAllValidPtrs().end(); ++nIter)
     {
-        const PAGNode* node = getPAG()->getGNode(*nIter);
+        const SVFVar* node = getPAG()->getSVFVar(*nIter);
         if (SVFUtil::isa<DummyObjVar, DummyValVar>(node))
             continue;
 
-        outs() << "##<" << node->getValue()->getName() << "> ";
-        outs() << "Source Loc: " << node->getValue()->getSourceLoc();
+        outs() << "##<" << node->getName() << "> ";
+        outs() << "Source Loc: " << node->getSourceLoc();
         outs() << "\nNodeID " << node->getId() << "\n";
 
-        const SVFType* type = node->getValue()->getType();
-        pag->getSymbolInfo()->printFlattenFields(type);
+        const SVFType* type = node->getType();
+        pag->printFlattenFields(type);
     }
 }
 
@@ -255,19 +253,16 @@ void PointerAnalysis::dumpAllTypes()
 void PointerAnalysis::dumpPts(NodeID ptr, const PointsTo& pts)
 {
 
-    const PAGNode* node = pag->getGNode(ptr);
+    const SVFVar* node = pag->getSVFVar(ptr);
     /// print the points-to set of node which has the maximum pts size.
     if (SVFUtil::isa<DummyObjVar> (node))
     {
         outs() << "##<Dummy Obj > id:" << node->getId();
     }
-    else if (!SVFUtil::isa<DummyValVar>(node) && !SVFModule::pagReadFromTXT())
+    else if (!SVFUtil::isa<DummyValVar>(node) && !SVFIR::pagReadFromTXT())
     {
-        if (node->hasValue())
-        {
-            outs() << "##<" << node->getValue()->getName() << "> ";
-            outs() << "Source Loc: " << node->getValue()->getSourceLoc();
-        }
+        outs() << "##<" << node->getName() << "> ";
+        outs() << "Source Loc: " << node->getSourceLoc();
     }
     outs() << "\nPtr " << node->getId() << " ";
 
@@ -288,26 +283,23 @@ void PointerAnalysis::dumpPts(NodeID ptr, const PointsTo& pts)
 
     for (PointsTo::iterator it = pts.begin(), eit = pts.end(); it != eit; ++it)
     {
-        const PAGNode* node = pag->getGNode(*it);
+        const SVFVar* node = pag->getSVFVar(*it);
         if(SVFUtil::isa<ObjVar>(node) == false)
             continue;
         NodeID ptd = node->getId();
         outs() << "!!Target NodeID " << ptd << "\t [";
-        const PAGNode* pagNode = pag->getGNode(ptd);
+        const SVFVar* pagNode = pag->getSVFVar(ptd);
         if (SVFUtil::isa<DummyValVar>(node))
             outs() << "DummyVal\n";
         else if (SVFUtil::isa<DummyObjVar>(node))
             outs() << "Dummy Obj id: " << node->getId() << "]\n";
         else
         {
-            if (!SVFModule::pagReadFromTXT())
+            if (!SVFIR::pagReadFromTXT())
             {
-                if (node->hasValue())
-                {
-                    outs() << "<" << pagNode->getValue()->getName() << "> ";
-                    outs() << "Source Loc: "
-                           << pagNode->getValue()->getSourceLoc() << "] \n";
-                }
+                outs() << "<" << pagNode->getName() << "> ";
+                outs() << "Source Loc: "
+                       << pagNode->getSourceLoc() << "] \n";
             }
         }
     }
@@ -320,8 +312,8 @@ void PointerAnalysis::printIndCSTargets(const CallICFGNode* cs, const FunctionSe
 {
     outs() << "\nNodeID: " << getFunPtr(cs);
     outs() << "\nCallSite: ";
-    outs() << cs->getCallSite()->toString();
-    outs() << "\tLocation: " << cs->getCallSite()->getSourceLoc();
+    outs() << cs->toString();
+    outs() << "\tLocation: " << cs->getSourceLoc();
     outs() << "\t with Targets: ";
 
     if (!targets.empty())
@@ -330,7 +322,7 @@ void PointerAnalysis::printIndCSTargets(const CallICFGNode* cs, const FunctionSe
         FunctionSet::const_iterator feit = targets.end();
         for (; fit != feit; ++fit)
         {
-            const SVFFunction* callee = *fit;
+            const FunObjVar* callee = *fit;
             outs() << "\n\t" << callee->getName();
         }
     }
@@ -368,8 +360,8 @@ void PointerAnalysis::printIndCSTargets()
         {
             outs() << "\nNodeID: " << csIt->second;
             outs() << "\nCallSite: ";
-            outs() << cs->getCallSite()->toString();
-            outs() << "\tLocation: " << cs->getCallSite()->getSourceLoc();
+            outs() << cs->toString();
+            outs() << "\tLocation: " << cs->getSourceLoc();
             outs() << "\n\t!!!has no targets!!!\n";
         }
     }
@@ -391,20 +383,20 @@ void PointerAnalysis::resolveIndCalls(const CallICFGNode* cs, const PointsTo& ta
 
         if(getNumOfResolvedIndCallEdge() >= Options::IndirectCallLimit())
         {
-            wrnMsg("Resolved Indirect Call Edges are Out-Of-Budget, please increase the limit");
+            writeWrnMsg("Resolved Indirect Call Edges are Out-Of-Budget, please increase the limit");
             return;
         }
 
-        if(ObjVar* objPN = SVFUtil::dyn_cast<ObjVar>(pag->getGNode(*ii)))
+        if(const ObjVar* objPN = pag->getObjVar(*ii))
         {
-            const MemObj* obj = pag->getObject(objPN);
+            const BaseObjVar* obj = pag->getBaseObject(objPN->getId());
 
             if(obj->isFunction())
             {
-                const SVFFunction* calleefun = SVFUtil::cast<SVFFunction>(obj->getValue());
-                const SVFFunction* callee = calleefun->getDefFunForMultipleModule();
+                const FunObjVar* calleefun = SVFUtil::cast<FunObjVar>(obj)->getFunction();
+                const FunObjVar* callee = calleefun->getDefFunForMultipleModule();
 
-                if(SVFUtil::matchArgs(cs->getCallSite(), callee) == false)
+                if(SVFUtil::matchArgs(cs, callee) == false)
                     continue;
 
                 if(0 == getIndCallMap()[cs].count(callee))
@@ -412,10 +404,10 @@ void PointerAnalysis::resolveIndCalls(const CallICFGNode* cs, const PointsTo& ta
                     newEdges[cs].insert(callee);
                     getIndCallMap()[cs].insert(callee);
 
-                    ptaCallGraph->addIndirectCallGraphEdge(cs, cs->getCaller(), callee);
+                    callgraph->addIndirectCallGraphEdge(cs, cs->getCaller(), callee);
                     // FIXME: do we need to update llvm call graph here?
                     // The indirect call is maintained by ourself, We may update llvm's when we need to
-                    //CallGraphNode* callgraphNode = callgraph->getOrInsertFunction(cs.getCaller());
+                    //PTACallGraphNode* callgraphNode = callgraph->getOrInsertFunction(cs.getCaller());
                     //callgraphNode->addCalledFunction(cs,callgraph->getOrInsertFunction(callee));
                 }
             }
@@ -428,8 +420,8 @@ void PointerAnalysis::resolveIndCalls(const CallICFGNode* cs, const PointsTo& ta
  */
 void PointerAnalysis::getVFnsFromCHA(const CallICFGNode* cs, VFunSet &vfns)
 {
-    if (chgraph->csHasVFnsBasedonCHA(SVFUtil::getSVFCallSite(cs->getCallSite())))
-        vfns = chgraph->getCSVFsBasedonCHA(SVFUtil::getSVFCallSite(cs->getCallSite()));
+    if (chgraph->csHasVFnsBasedonCHA(cs))
+        vfns = chgraph->getCSVFsBasedonCHA(cs);
 }
 
 /*
@@ -438,23 +430,32 @@ void PointerAnalysis::getVFnsFromCHA(const CallICFGNode* cs, VFunSet &vfns)
 void PointerAnalysis::getVFnsFromPts(const CallICFGNode* cs, const PointsTo &target, VFunSet &vfns)
 {
 
-    if (chgraph->csHasVtblsBasedonCHA(SVFUtil::getSVFCallSite(cs->getCallSite())))
+    if (chgraph->csHasVtblsBasedonCHA(cs))
     {
-        Set<const SVFGlobalValue*> vtbls;
-        const VTableSet &chaVtbls = chgraph->getCSVtblsBasedonCHA(SVFUtil::getSVFCallSite(cs->getCallSite()));
+        Set<const GlobalObjVar*> vtbls;
+        const VTableSet &chaVtbls = chgraph->getCSVtblsBasedonCHA(cs);
         for (PointsTo::iterator it = target.begin(), eit = target.end(); it != eit; ++it)
         {
-            const PAGNode *ptdnode = pag->getGNode(*it);
-            if (ptdnode->hasValue())
+            const SVFVar* ptdnode = pag->getSVFVar(*it);
+            const GlobalObjVar* pVar = nullptr;
+            if (isa<ObjVar>(ptdnode) && isa<GlobalObjVar>(pag->getBaseObject(ptdnode->getId())))
             {
-                if (const SVFGlobalValue *vtbl = SVFUtil::dyn_cast<SVFGlobalValue>(ptdnode->getValue()))
-                {
-                    if (chaVtbls.find(vtbl) != chaVtbls.end())
-                        vtbls.insert(vtbl);
-                }
+                pVar = cast<GlobalObjVar>(pag->getBaseObject(ptdnode->getId()));
+
             }
+            else if (isa<ValVar>(ptdnode) &&
+                     isa<GlobalValVar>(
+                         pag->getBaseValVar(ptdnode->getId())))
+            {
+                pVar = cast<GlobalObjVar>(
+                           SVFUtil::getObjVarOfValVar(cast<GlobalValVar>(
+                                   pag->getBaseValVar(ptdnode->getId()))));
+            }
+
+            if (pVar && chaVtbls.find(pVar) != chaVtbls.end())
+                vtbls.insert(pVar);
         }
-        chgraph->getVFnsFromVtbls(SVFUtil::getSVFCallSite(cs->getCallSite()), vtbls, vfns);
+        chgraph->getVFnsFromVtbls(cs, vtbls, vfns);
     }
 }
 
@@ -467,17 +468,17 @@ void PointerAnalysis::connectVCallToVFns(const CallICFGNode* cs, const VFunSet &
     for (VFunSet::const_iterator fit = vfns.begin(),
             feit = vfns.end(); fit != feit; ++fit)
     {
-        const SVFFunction* callee = *fit;
+        const FunObjVar* callee = *fit;
         callee = callee->getDefFunForMultipleModule();
         if (getIndCallMap()[cs].count(callee) > 0)
             continue;
-        if(SVFUtil::getSVFCallSite(cs->getCallSite()).arg_size() == callee->arg_size() ||
-                (SVFUtil::getSVFCallSite(cs->getCallSite()).isVarArg() && callee->isVarArg()))
+        if(cs->arg_size() == callee->arg_size() ||
+                (cs->isVarArg() && callee->isVarArg()))
         {
             newEdges[cs].insert(callee);
             getIndCallMap()[cs].insert(callee);
-            const CallICFGNode* callBlockNode = pag->getICFG()->getCallICFGNode(cs->getCallSite());
-            ptaCallGraph->addIndirectCallGraphEdge(callBlockNode, cs->getCaller(),callee);
+            const CallICFGNode* callBlockNode = cs;
+            callgraph->addIndirectCallGraphEdge(callBlockNode, cs->getCaller(),callee);
         }
     }
 }
@@ -485,7 +486,7 @@ void PointerAnalysis::connectVCallToVFns(const CallICFGNode* cs, const VFunSet &
 /// Resolve cpp indirect call edges
 void PointerAnalysis::resolveCPPIndCalls(const CallICFGNode* cs, const PointsTo& target, CallEdgeMap& newEdges)
 {
-    assert(SVFUtil::getSVFCallSite(cs->getCallSite()).isVirtualCall() && "not cpp virtual call");
+    assert(cs->isVirtualCall() && "not cpp virtual call");
 
     VFunSet vfns;
     if (Options::ConnectVCallOnCHA())
@@ -502,23 +503,20 @@ void PointerAnalysis::resolveCPPIndCalls(const CallICFGNode* cs, const PointsTo&
 void PointerAnalysis::validateSuccessTests(std::string fun)
 {
     // check for must alias cases, whether our alias analysis produce the correct results
-    if (const SVFFunction* checkFun = svfMod->getSVFFunction(fun))
+    if (const FunObjVar* checkFun = pag->getFunObjVar(fun))
     {
         if(!checkFun->isUncalledFunction())
             outs() << "[" << this->PTAName() << "] Checking " << fun << "\n";
 
         for(const CallICFGNode* callNode : pag->getCallSiteSet())
         {
-            const SVFInstruction* svfInst = callNode->getCallSite();
-            if (SVFUtil::getCallee(svfInst) == checkFun)
+            if (callNode->getCalledFunction() == checkFun)
             {
-
-                CallSite cs(svfInst);
-                assert(cs.getNumArgOperands() == 2
+                assert(callNode->getNumArgOperands() == 2
                        && "arguments should be two pointers!!");
-                const SVFValue* V1 = cs.getArgOperand(0);
-                const SVFValue* V2 = cs.getArgOperand(1);
-                AliasResult aliasRes = alias(V1, V2);
+                const SVFVar* V1 = callNode->getArgument(0);
+                const SVFVar* V2 = callNode->getArgument(1);
+                AliasResult aliasRes = alias(V1->getId(), V2->getId());
 
                 bool checkSuccessful = false;
                 if (fun == aliasTestMayAlias || fun == aliasTestMayAliasMangled)
@@ -546,17 +544,17 @@ void PointerAnalysis::validateSuccessTests(std::string fun)
                 else
                     assert(false && "not supported alias check!!");
 
-                NodeID id1 = pag->getValueNode(V1);
-                NodeID id2 = pag->getValueNode(V2);
+                NodeID id1 = V1->getId();
+                NodeID id2 = V2->getId();
 
                 if (checkSuccessful)
                     outs() << sucMsg("\t SUCCESS :") << fun << " check <id:" << id1 << ", id:" << id2 << "> at ("
-                           << svfInst->getSourceLoc() << ")\n";
+                           << callNode->getSourceLoc() << ")\n";
                 else
                 {
                     SVFUtil::errs() << errMsg("\t FAILURE :") << fun
                                     << " check <id:" << id1 << ", id:" << id2
-                                    << "> at (" << svfInst->getSourceLoc() << ")\n";
+                                    << "> at (" << callNode->getSourceLoc() << ")\n";
                     assert(false && "test case failed!");
                 }
             }
@@ -570,22 +568,20 @@ void PointerAnalysis::validateSuccessTests(std::string fun)
 void PointerAnalysis::validateExpectedFailureTests(std::string fun)
 {
 
-    if (const SVFFunction* checkFun = svfMod->getSVFFunction(fun))
+    if (const FunObjVar* checkFun = pag->getFunObjVar(fun))
     {
         if(!checkFun->isUncalledFunction())
             outs() << "[" << this->PTAName() << "] Checking " << fun << "\n";
 
         for(const CallICFGNode* callNode : pag->getCallSiteSet())
         {
-            const SVFInstruction* svfInst = callNode->getCallSite();
-            if (SVFUtil::getCallee(svfInst) == checkFun)
+            if (callNode->getCalledFunction() == checkFun)
             {
-                CallSite call = getSVFCallSite(svfInst);
-                assert(call.arg_size() == 2
+                assert(callNode->arg_size() == 2
                        && "arguments should be two pointers!!");
-                const SVFValue* V1 = call.getArgOperand(0);
-                const SVFValue* V2 = call.getArgOperand(1);
-                AliasResult aliasRes = alias(V1, V2);
+                const SVFVar* V1 = callNode->getArgument(0);
+                const SVFVar* V2 = callNode->getArgument(1);
+                AliasResult aliasRes = alias(V1->getId(), V2->getId());
 
                 bool expectedFailure = false;
                 if (fun == aliasTestFailMayAlias || fun == aliasTestFailMayAliasMangled)
@@ -603,16 +599,16 @@ void PointerAnalysis::validateExpectedFailureTests(std::string fun)
                 else
                     assert(false && "not supported alias check!!");
 
-                NodeID id1 = pag->getValueNode(V1);
-                NodeID id2 = pag->getValueNode(V2);
+                NodeID id1 = V1->getId();
+                NodeID id2 = V2->getId();
 
                 if (expectedFailure)
                     outs() << sucMsg("\t EXPECTED-FAILURE :") << fun << " check <id:" << id1 << ", id:" << id2 << "> at ("
-                           << call.getInstruction()->getSourceLoc() << ")\n";
+                           << callNode->getSourceLoc() << ")\n";
                 else
                 {
                     SVFUtil::errs() << errMsg("\t UNEXPECTED FAILURE :") << fun << " check <id:" << id1 << ", id:" << id2 << "> at ("
-                                    << call.getInstruction()->getSourceLoc() << ")\n";
+                                    << callNode->getSourceLoc() << ")\n";
                     assert(false && "test case failed!");
                 }
             }

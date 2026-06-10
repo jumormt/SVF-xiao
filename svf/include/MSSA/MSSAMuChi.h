@@ -246,7 +246,7 @@ public:
     /// Return basic block
     inline const SVFBasicBlock* getBasicBlock() const
     {
-        return callsite->getCallSite()->getParent();
+        return callsite->getBB();
     }
 
     /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -277,11 +277,11 @@ template<class Cond>
 class RetMU : public MSSAMU<Cond>
 {
 private:
-    const SVFFunction* fun;
+    const FunObjVar* fun;
 public:
     /// Constructor/Destructor for MU
     //@{
-    RetMU(const SVFFunction* f, const MemRegion* m, Cond c = true) :
+    RetMU(const FunObjVar* f, const MemRegion* m, Cond c = true) :
         MSSAMU<Cond>(MSSAMU<Cond>::RetMSSAMU,m,c), fun(f)
     {
     }
@@ -289,7 +289,7 @@ public:
     //@}
 
     /// Return function
-    inline const SVFFunction* getFunction() const
+    inline const FunObjVar* getFunction() const
     {
         return fun;
     }
@@ -515,7 +515,7 @@ public:
 
 /*!
  *
- *  StoreCHI is annotated at each store instruction, representing a memory object is modified here
+ *  CallCHI is annotated at callsite, representing a memory object is indirect modified by callee
  */
 template<class Cond>
 class CallCHI : public MSSACHI<Cond>
@@ -523,7 +523,7 @@ class CallCHI : public MSSACHI<Cond>
 private:
     const CallICFGNode* callsite;
 public:
-    /// Constructors for StoreCHI
+    /// Constructors for CallCHI
     //@{
     CallCHI(const CallICFGNode* cs, const MemRegion* m, Cond c = true) :
         MSSACHI<Cond>(MSSADEF::CallMSSACHI,m,c), callsite(cs)
@@ -537,7 +537,7 @@ public:
     /// Return basic block
     inline const SVFBasicBlock* getBasicBlock() const
     {
-        return callsite->getCallSite()->getParent();
+        return callsite->getBB();
     }
 
     /// Return callsite
@@ -578,11 +578,11 @@ template<class Cond>
 class EntryCHI : public MSSACHI<Cond>
 {
 private:
-    const SVFFunction* fun;
+    const FunObjVar* fun;
 public:
     /// Constructors for EntryCHI
     //@{
-    EntryCHI(const SVFFunction* f, const MemRegion* m, Cond c = true) :
+    EntryCHI(const FunObjVar* f, const MemRegion* m, Cond c = true) :
         MSSACHI<Cond>(MSSADEF::EntryMSSACHI,m,c),fun(f)
     {
     }
@@ -592,7 +592,7 @@ public:
     //@}
 
     /// Return function
-    inline const SVFFunction* getFunction() const
+    inline const FunObjVar* getFunction() const
     {
         return fun;
     }

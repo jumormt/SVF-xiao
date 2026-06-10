@@ -74,7 +74,7 @@ class SVFG : public VFG
 
 public:
     typedef VFGNodeIDToNodeMapTy SVFGNodeIDToNodeMapTy;
-    typedef Map<const PAGNode*, NodeID> PAGNodeToDefMapTy;
+    typedef Map<const ValVar*, NodeID> ValVarToDefMapTy;
     typedef Map<const MRVer*, NodeID> MSSAVarToDefMapTy;
     typedef NodeBS ActualINSVFGNodeSet;
     typedef NodeBS ActualOUTSVFGNodeSet;
@@ -82,8 +82,8 @@ public:
     typedef NodeBS FormalOUTSVFGNodeSet;
     typedef Map<const CallICFGNode*, ActualINSVFGNodeSet>  CallSiteToActualINsMapTy;
     typedef Map<const CallICFGNode*, ActualOUTSVFGNodeSet>  CallSiteToActualOUTsMapTy;
-    typedef Map<const SVFFunction*, FormalINSVFGNodeSet>  FunctionToFormalINsMapTy;
-    typedef Map<const SVFFunction*, FormalOUTSVFGNodeSet>  FunctionToFormalOUTsMapTy;
+    typedef Map<const FunObjVar*, FormalINSVFGNodeSet>  FunctionToFormalINsMapTy;
+    typedef Map<const FunObjVar*, FormalOUTSVFGNodeSet>  FunctionToFormalOUTsMapTy;
     typedef MemSSA::MUSet MUSet;
     typedef MemSSA::CHISet CHISet;
     typedef MemSSA::PHISet PHISet;
@@ -159,25 +159,41 @@ public:
     }
 
     /// Get all inter value flow edges of a indirect call site
-    void getInterVFEdgesForIndirectCallSite(const CallICFGNode* cs, const SVFFunction* callee, SVFGEdgeSetTy& edges);
+    void getInterVFEdgesForIndirectCallSite(const CallICFGNode* cs, const FunObjVar* callee, SVFGEdgeSetTy& edges);
 
     /// Dump graph into dot file
     void dump(const std::string& file, bool simple = false);
 
     /// Connect SVFG nodes between caller and callee for indirect call site
-    virtual void connectCallerAndCallee(const CallICFGNode* cs, const SVFFunction* callee, SVFGEdgeSetTy& edges);
+    virtual void connectCallerAndCallee(const CallICFGNode* cs, const FunObjVar* callee, SVFGEdgeSetTy& edges);
 
-    /// Given a pagNode, return its definition site
-    inline const SVFGNode* getDefSVFGNode(const PAGNode* pagNode) const
+    /// Given a valVar, return its definition site
+    inline const SVFGNode* getDefSVFGNode(const ValVar* valVar) const
     {
-        return getSVFGNode(getDef(pagNode));
+        return getSVFGNode(getDef(valVar));
     }
 
-    /// Given a pagNode, return whether it has definition site
-    inline bool hasDefSVFGNode(const PAGNode* pagNode) const
+    /// Given a valVar, return whether it has definition site
+    inline bool hasDefSVFGNode(const ValVar* valVar) const
     {
-        return hasDef(pagNode) && hasSVFGNode(getDef(pagNode));
+        return hasDef(valVar) && hasSVFGNode(getDef(valVar));
     }
+
+    /// Given a ValVar and its SVFGNode, find the definition-site SVFGNode
+    /// by following incoming direct VFGEdges (asserts unique definition)
+    const SVFGNode* getDefSiteOfValVar(const ValVar* var) const;
+
+    /// Given an ObjVar and its use-site SVFGNode, find the definition-site ICFGNode
+    /// by following incoming IndirectSVFGEdges whose pts contains the ObjVar (asserts unique definition)
+    const Set<const SVFGNode*> getDefSiteOfObjVar(const ObjVar* obj, const SVFGNode* node) const;
+
+    /// Given a ValVar, find all use-site SVFGNodes
+    /// by following outgoing direct VFGEdges from its unique definition SVFGNode
+    const Set<const SVFGNode*> getUseSitesOfValVar(const ValVar* var) const;
+
+    /// Given an ObjVar and its def-site SVFGNodes, find all use-site SVFGNodes
+    /// by following outgoing IndirectSVFGEdges whose pts contains the ObjVar
+    const Set<const SVFGNode*> getUseSitesOfObjVar(const ObjVar* obj, const SVFGNode* node) const;
 
     /// Perform statistics
     void performStat();
@@ -194,12 +210,12 @@ public:
         return callSiteToActualOUTMap.find(cs)!=callSiteToActualOUTMap.end();
     }
 
-    inline bool hasFormalINSVFGNodes(const SVFFunction* fun) const
+    inline bool hasFormalINSVFGNodes(const FunObjVar* fun) const
     {
         return funToFormalINMap.find(fun)!=funToFormalINMap.end();
     }
 
-    inline bool hasFormalOUTSVFGNodes(const SVFFunction* fun) const
+    inline bool hasFormalOUTSVFGNodes(const FunObjVar* fun) const
     {
         return funToFormalOUTMap.find(fun)!=funToFormalOUTMap.end();
     }
@@ -217,19 +233,19 @@ public:
         return callSiteToActualOUTMap[cs];
     }
 
-    inline FormalINSVFGNodeSet& getFormalINSVFGNodes(const SVFFunction* fun)
+    inline FormalINSVFGNodeSet& getFormalINSVFGNodes(const FunObjVar* fun)
     {
         return funToFormalINMap[fun];
     }
 
-    inline FormalOUTSVFGNodeSet& getFormalOUTSVFGNodes(const SVFFunction* fun)
+    inline FormalOUTSVFGNodeSet& getFormalOUTSVFGNodes(const FunObjVar* fun)
     {
         return funToFormalOUTMap[fun];
     }
     //@}
 
     /// Whether a node is function entry SVFGNode
-    const SVFFunction* isFunEntrySVFGNode(const SVFGNode* node) const;
+    const FunObjVar* isFunEntrySVFGNode(const SVFGNode* node) const;
 
     /// Whether a node is callsite return SVFGNode
     const CallICFGNode* isCallSiteRetSVFGNode(const SVFGNode* node) const;
@@ -307,7 +323,7 @@ protected:
 
     /// Get inter value flow edges between indirect call site and callee.
     //@{
-    virtual inline void getInterVFEdgeAtIndCSFromAPToFP(const PAGNode* cs_arg, const PAGNode* fun_arg, const CallICFGNode*, CallSiteID csId, SVFGEdgeSetTy& edges)
+    virtual inline void getInterVFEdgeAtIndCSFromAPToFP(const ValVar* cs_arg, const ValVar* fun_arg, const CallICFGNode*, CallSiteID csId, SVFGEdgeSetTy& edges)
     {
         SVFGNode* actualParam = getSVFGNode(getDef(cs_arg));
         SVFGNode* formalParam = getSVFGNode(getDef(fun_arg));
@@ -316,7 +332,7 @@ protected:
         edges.insert(edge);
     }
 
-    virtual inline void getInterVFEdgeAtIndCSFromFRToAR(const PAGNode* fun_ret, const PAGNode* cs_ret, CallSiteID csId, SVFGEdgeSetTy& edges)
+    virtual inline void getInterVFEdgeAtIndCSFromFRToAR(const ValVar* fun_ret, const ValVar* cs_ret, CallSiteID csId, SVFGEdgeSetTy& edges)
     {
         SVFGNode* formalRet = getSVFGNode(getDef(fun_ret));
         SVFGNode* actualRet = getSVFGNode(getDef(cs_ret));
@@ -325,7 +341,7 @@ protected:
         edges.insert(edge);
     }
 
-    virtual inline void getInterVFEdgeAtIndCSFromAInToFIn(ActualINSVFGNode* actualIn, const SVFFunction* callee, SVFGEdgeSetTy& edges)
+    virtual inline void getInterVFEdgeAtIndCSFromAInToFIn(ActualINSVFGNode* actualIn, const FunObjVar* callee, SVFGEdgeSetTy& edges)
     {
         for (SVFGNode::const_iterator outIt = actualIn->OutEdgeBegin(), outEit = actualIn->OutEdgeEnd(); outIt != outEit; ++outIt)
         {
@@ -335,7 +351,7 @@ protected:
         }
     }
 
-    virtual inline void getInterVFEdgeAtIndCSFromFOutToAOut(ActualOUTSVFGNode* actualOut, const SVFFunction* callee, SVFGEdgeSetTy& edges)
+    virtual inline void getInterVFEdgeAtIndCSFromFOutToAOut(ActualOUTSVFGNode* actualOut, const FunObjVar* callee, SVFGEdgeSetTy& edges)
     {
         for (SVFGNode::const_iterator inIt = actualOut->InEdgeBegin(), inEit = actualOut->InEdgeEnd(); inIt != inEit; ++inIt)
         {
@@ -347,19 +363,19 @@ protected:
     //@}
 
 
-    /// Given a PAGNode, set/get its def SVFG node (definition of top level pointers)
+    /// Given a ValVar, set/get its def SVFG node (definition of top level pointers)
     //@{
-    inline void setDef(const PAGNode* pagNode, const SVFGNode* node)
+    inline void setDef(const ValVar* valVar, const SVFGNode* node)
     {
-        VFG::setDef(pagNode, node);
+        VFG::setDef(valVar, node);
     }
-    inline NodeID getDef(const PAGNode* pagNode) const
+    inline NodeID getDef(const ValVar* valVar) const
     {
-        return VFG::getDef(pagNode);
+        return VFG::getDef(valVar);
     }
-    inline bool hasDef(const PAGNode* pagNode) const
+    inline bool hasDef(const ValVar* valVar) const
     {
-        return VFG::hasDef(pagNode);
+        return VFG::hasDef(valVar);
     }
     //@}
 
@@ -420,7 +436,7 @@ protected:
     inline void addActualINSVFGNode(const CallICFGNode* callsite, const MRVer* ver, const NodeID nodeId)
     {
         ActualINSVFGNode* sNode = new ActualINSVFGNode(nodeId, callsite, ver);
-        addSVFGNode(sNode,pag->getICFG()->getCallICFGNode(callsite->getCallSite()));
+        addSVFGNode(sNode, const_cast<CallICFGNode*>(callsite));
         callSiteToActualINMap[callsite].set(sNode->getId());
     }
 
@@ -428,7 +444,7 @@ protected:
     inline void addActualOUTSVFGNode(const CallICFGNode* callsite, const MRVer* resVer, const NodeID nodeId)
     {
         ActualOUTSVFGNode* sNode = new ActualOUTSVFGNode(nodeId, callsite, resVer);
-        addSVFGNode(sNode, pag->getICFG()->getRetICFGNode(callsite->getCallSite()));
+        addSVFGNode(sNode,const_cast<RetICFGNode*>(callsite->getRetICFGNode()));
         setDef(resVer,sNode);
         callSiteToActualOUTMap[callsite].set(sNode->getId());
     }
@@ -446,11 +462,11 @@ protected:
 
     /// Has function for EntryCHI/RetMU/CallCHI/CallMU
     //@{
-    inline bool hasFuncEntryChi(const SVFFunction*  func) const
+    inline bool hasFuncEntryChi(const FunObjVar*  func) const
     {
         return (funToFormalINMap.find(func) != funToFormalINMap.end());
     }
-    inline bool hasFuncRetMu(const SVFFunction*  func) const
+    inline bool hasFuncRetMu(const FunObjVar*  func) const
     {
         return (funToFormalOUTMap.find(func) != funToFormalOUTMap.end());
     }

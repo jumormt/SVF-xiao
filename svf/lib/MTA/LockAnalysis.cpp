@@ -69,19 +69,22 @@ void LockAnalysis::analyze()
 void LockAnalysis::collectLockUnlocksites()
 {
     ThreadCallGraph* tcg=tct->getThreadCallGraph();
-    for (const SVFFunction* F : tct->getSVFModule()->getFunctionSet())
+
+    for (const auto& item : *PAG::getPAG()->getCallGraph())
     {
-        for (const SVFBasicBlock* bb : F->getBasicBlockList())
+        const FunObjVar* F = item.second->getFunction();
+        for (auto it : *F)
         {
-            for (const SVFInstruction* inst : bb->getInstructionList())
+            const SVFBasicBlock* bb = it.second;
+            for (const ICFGNode* icfgNode : bb->getICFGNodeList())
             {
-                if (tcg->getThreadAPI()->isTDRelease(inst))
+                if (isa<CallICFGNode>(icfgNode) && tcg->getThreadAPI()->isTDRelease(cast<CallICFGNode>(icfgNode)))
                 {
-                    unlocksites.insert(inst);
+                    unlocksites.insert(icfgNode);
                 }
-                if (tcg->getThreadAPI()->isTDAcquire(inst))
+                if (isa<CallICFGNode>(icfgNode) && tcg->getThreadAPI()->isTDAcquire(cast<CallICFGNode>(icfgNode)))
                 {
-                    locksites.insert(inst);
+                    locksites.insert(icfgNode);
                 }
             }
         }
@@ -97,12 +100,12 @@ void LockAnalysis::buildCandidateFuncSetforLock()
     ThreadCallGraph* tcg=tct->getThreadCallGraph();
 
     TCT::PTACGNodeSet visited;
-    FIFOWorkList<const PTACallGraphNode*> worklist;
+    FIFOWorkList<const CallGraphNode*> worklist;
 
     for (InstSet::iterator it = locksites.begin(), eit = locksites.end(); it != eit; ++it)
     {
-        const SVFFunction* fun=(*it)->getParent()->getParent();
-        PTACallGraphNode* cgnode = tcg->getCallGraphNode(fun);
+        const FunObjVar* fun=(*it)->getFun();
+        CallGraphNode* cgnode = tcg->getCallGraphNode(fun);
         if (visited.find(cgnode) == visited.end())
         {
             worklist.push(cgnode);
@@ -111,8 +114,8 @@ void LockAnalysis::buildCandidateFuncSetforLock()
     }
     for (InstSet::iterator it = unlocksites.begin(), eit = unlocksites.end(); it != eit; ++it)
     {
-        const SVFFunction* fun = (*it)->getParent()->getParent();
-        PTACallGraphNode* cgnode = tcg->getCallGraphNode(fun);
+        const FunObjVar* fun = (*it)->getFun();
+        CallGraphNode* cgnode = tcg->getCallGraphNode(fun);
         if (visited.find(cgnode) == visited.end())
         {
             worklist.push(cgnode);
@@ -121,11 +124,11 @@ void LockAnalysis::buildCandidateFuncSetforLock()
     }
     while (!worklist.empty())
     {
-        const PTACallGraphNode* node = worklist.pop();
+        const CallGraphNode* node = worklist.pop();
         lockcandidateFuncSet.insert(node->getFunction());
-        for (PTACallGraphNode::const_iterator nit = node->InEdgeBegin(), neit = node->InEdgeEnd(); nit != neit; nit++)
+        for (CallGraphNode::const_iterator nit = node->InEdgeBegin(), neit = node->InEdgeEnd(); nit != neit; nit++)
         {
-            const PTACallGraphNode* srcNode = (*nit)->getSrcNode();
+            const CallGraphNode* srcNode = (*nit)->getSrcNode();
             if (visited.find(srcNode) == visited.end())
             {
                 visited.insert(srcNode);
@@ -145,8 +148,8 @@ void LockAnalysis::analyzeIntraProcedualLock()
     // Identify the protected Instructions.
     for (InstSet::const_iterator it = locksites.begin(), ie = locksites.end(); it != ie; ++it)
     {
-        const SVFInstruction* lockSite = *it;
-        assert(SVFUtil::isCallSite(lockSite) && "Lock acquire instruction must be a CallSite");
+        const ICFGNode* lockSite = *it;
+        assert(isCallSite(lockSite) && "Lock acquire instruction must be a CallSite");
 
         // Perform forward traversal
         InstSet forwardInsts;
@@ -167,18 +170,18 @@ void LockAnalysis::analyzeIntraProcedualLock()
 /*!
  * Intra-procedural forward traversal
  */
-bool LockAnalysis::intraForwardTraverse(const SVFInstruction* lockSite, InstSet& unlockSet, InstSet& forwardInsts)
+bool LockAnalysis::intraForwardTraverse(const ICFGNode* lockSite, InstSet& unlockSet, InstSet& forwardInsts)
 {
 
-    const SVFFunction* svfFun = lockSite->getFunction();
+    const FunObjVar* svfFun = lockSite->getFun();
 
     InstVec worklist;
     worklist.push_back(lockSite);
     while (!worklist.empty())
     {
-        const SVFInstruction *I = worklist.back();
+        const ICFGNode *I = worklist.back();
         worklist.pop_back();
-        const SVFInstruction* exitInst = svfFun->getExitBB()->back();
+        const ICFGNode* exitInst = svfFun->getExitBB()->back();
         if(exitInst == I)
             return false;
 
@@ -195,10 +198,12 @@ bool LockAnalysis::intraForwardTraverse(const SVFInstruction* lockSite, InstSet&
             continue;
         }
 
-        const InstVec& nextInsts = I->getSuccInstructions();
-        for (InstVec::const_iterator nit = nextInsts.begin(), enit = nextInsts.end(); nit != enit; ++nit)
+        for(const ICFGEdge* outEdge : I->getOutEdges())
         {
-            worklist.push_back(*nit);
+            if(outEdge->getDstNode()->getFun() == I->getFun())
+            {
+                worklist.push_back(outEdge->getDstNode());
+            }
         }
     }
 
@@ -215,13 +220,13 @@ bool LockAnalysis::intraBackwardTraverse(const InstSet& unlockSet, InstSet& back
     InstVec worklist;
     for(InstSet::const_iterator it = unlockSet.begin(), eit = unlockSet.end(); it!=eit; ++it)
     {
-        const SVFInstruction* unlockSite = *it;
-        const SVFInstruction* entryInst = unlockSite->getFunction()->getEntryBlock()->back();
+        const ICFGNode* unlockSite = *it;
+        const ICFGNode* entryInst = unlockSite->getFun()->getEntryBlock()->back();
         worklist.push_back(*it);
 
         while (!worklist.empty())
         {
-            const SVFInstruction *I = worklist.back();
+            const ICFGNode *I = worklist.back();
             worklist.pop_back();
 
             if(entryInst == I)
@@ -239,10 +244,12 @@ bool LockAnalysis::intraBackwardTraverse(const InstSet& unlockSet, InstSet& back
                 continue;
             }
 
-            const InstVec& nextInsts = I->getPredInstructions();
-            for (InstVec::const_iterator nit = nextInsts.begin(), enit = nextInsts.end(); nit != enit; ++nit)
+            for(const ICFGEdge* inEdge : I->getInEdges())
             {
-                worklist.push_back(*nit);
+                if(inEdge->getSrcNode()->getFun() == I->getFun())
+                {
+                    worklist.push_back(inEdge->getSrcNode());
+                }
             }
         }
     }
@@ -266,31 +273,31 @@ void LockAnalysis::collectCxtLock()
     while (!clpList.empty())
     {
         CxtLockProc clp = popFromCTPWorkList();
-        PTACallGraphNode* cgNode = getTCG()->getCallGraphNode(clp.getProc());
+        CallGraphNode* cgNode = getTCG()->getCallGraphNode(clp.getProc());
         // lzh TODO.
         if (!isLockCandidateFun(cgNode->getFunction()))
             continue;
 
-        for (PTACallGraphNode::const_iterator nit = cgNode->OutEdgeBegin(), neit = cgNode->OutEdgeEnd(); nit != neit; nit++)
+        for (CallGraphNode::const_iterator nit = cgNode->OutEdgeBegin(), neit = cgNode->OutEdgeEnd(); nit != neit; nit++)
         {
-            const PTACallGraphEdge* cgEdge = (*nit);
+            const CallGraphEdge* cgEdge = (*nit);
 
-            for (PTACallGraphEdge::CallInstSet::const_iterator cit = cgEdge->directCallsBegin(), ecit = cgEdge->directCallsEnd();
+            for (CallGraphEdge::CallInstSet::const_iterator cit = cgEdge->directCallsBegin(), ecit = cgEdge->directCallsEnd();
                     cit != ecit; ++cit)
             {
                 DBOUT(DMTA,
                       outs() << "\nCollecting CxtLocks: handling direct call:" << **cit << "\t" << cgEdge->getSrcNode()->getFunction()->getName()
                       << "-->" << cgEdge->getDstNode()->getFunction()->getName() << "\n");
-                handleCallRelation(clp, cgEdge, getSVFCallSite((*cit)->getCallSite()));
+                handleCallRelation(clp, cgEdge, *cit);
             }
-            for (PTACallGraphEdge::CallInstSet::const_iterator ind = cgEdge->indirectCallsBegin(), eind = cgEdge->indirectCallsEnd();
+            for (CallGraphEdge::CallInstSet::const_iterator ind = cgEdge->indirectCallsBegin(), eind = cgEdge->indirectCallsEnd();
                     ind != eind; ++ind)
             {
                 DBOUT(DMTA,
                       outs() << "\nCollecting CxtLocks: handling indirect call:" << **ind << "\t"
                       << cgEdge->getSrcNode()->getFunction()->getName() << "-->" << cgEdge->getDstNode()->getFunction()->getName()
                       << "\n");
-                handleCallRelation(clp, cgEdge, getSVFCallSite((*ind)->getCallSite()));
+                handleCallRelation(clp, cgEdge, *ind);
             }
         }
     }
@@ -300,18 +307,18 @@ void LockAnalysis::collectCxtLock()
 /*!
  * Handling call relations when collecting context-sensitive locks
  */
-void LockAnalysis::handleCallRelation(CxtLockProc& clp, const PTACallGraphEdge* cgEdge, CallSite cs)
+void LockAnalysis::handleCallRelation(CxtLockProc& clp, const CallGraphEdge* cgEdge, const CallICFGNode* cs)
 {
 
     CallStrCxt cxt(clp.getContext());
-
-    if (isTDAcquire(cs.getInstruction()))
+    const ICFGNode* curNode = cs;
+    if (isTDAcquire(curNode))
     {
-        addCxtLock(cxt,cs.getInstruction());
+        addCxtLock(cxt,curNode);
         return;
     }
-    const SVFFunction* svfcallee = cgEdge->getDstNode()->getFunction();
-    pushCxt(cxt, cs.getInstruction(), svfcallee);
+    const FunObjVar* svfcallee = cgEdge->getDstNode()->getFunction();
+    pushCxt(cxt, SVFUtil::cast<CallICFGNode>(curNode), svfcallee);
 
     CxtLockProc newclp(cxt, svfcallee);
     if (pushToCTPWorkList(newclp))
@@ -331,7 +338,7 @@ void LockAnalysis::analyzeLockSpanCxtStmt()
         if (!isLockCandidateFun(*it))
             continue;
         CallStrCxt cxt;
-        const SVFInstruction* frontInst = (*it)->getEntryBlock()->front();
+        const ICFGNode* frontInst = (*it)->getEntryBlock()->front();
         CxtStmt cxtstmt(cxt, frontInst);
         pushToCTSWorkList(cxtstmt);
     }
@@ -341,7 +348,7 @@ void LockAnalysis::analyzeLockSpanCxtStmt()
         CxtStmt cts = popFromCTSWorkList();
 
         touchCxtStmt(cts);
-        const SVFInstruction* curInst = cts.getStmt();
+        const ICFGNode* curInst = cts.getStmt();
         instToCxtStmtSet[curInst].insert(cts);
 
         DBOUT(DMTA, outs() << "\nVisit cxtStmt: ");
@@ -365,11 +372,11 @@ void LockAnalysis::analyzeLockSpanCxtStmt()
             if(removeCxtStmtToSpan(cts,cts))
                 handleIntra(cts);
         }
-        else if (SVFUtil::isCallSite(curInst) && !isExtCall(curInst))
+        else if (isCallSite(curInst) && !isExtCall(curInst))
         {
             handleCall(cts);
         }
-        else if (curInst->isRetInst())
+        else if (SVFUtil::dyn_cast<FunExitICFGNode>(curInst))
         {
             handleRet(cts);
         }
@@ -401,18 +408,17 @@ void LockAnalysis::printLocks(const CxtStmt& cts)
 /// Handle fork
 void LockAnalysis::handleFork(const CxtStmt& cts)
 {
-    const SVFInstruction* call = cts.getStmt();
     const CallStrCxt& curCxt = cts.getContext();
-    CallICFGNode* cbn = tct->getCallICFGNode(call);
-    if(getTCG()->hasThreadForkEdge(cbn))
+    const CallICFGNode* call = SVFUtil::dyn_cast<CallICFGNode>(cts.getStmt());
+    if(getTCG()->hasThreadForkEdge(call))
     {
-        for (ThreadCallGraph::ForkEdgeSet::const_iterator cgIt = getTCG()->getForkEdgeBegin(cbn),
-                ecgIt = getTCG()->getForkEdgeEnd(cbn); cgIt != ecgIt; ++cgIt)
+        for (ThreadCallGraph::ForkEdgeSet::const_iterator cgIt = getTCG()->getForkEdgeBegin(call),
+                ecgIt = getTCG()->getForkEdgeEnd(call); cgIt != ecgIt; ++cgIt)
         {
-            const SVFFunction* svfcallee = (*cgIt)->getDstNode()->getFunction();
+            const FunObjVar* svfcallee = (*cgIt)->getDstNode()->getFunction();
             CallStrCxt newCxt = curCxt;
             pushCxt(newCxt,call,svfcallee);
-            const SVFInstruction* svfInst = svfcallee->getEntryBlock()->front();
+            const ICFGNode* svfInst = svfcallee->getEntryBlock()->front();
             CxtStmt newCts(newCxt, svfInst);
             markCxtStmtFlag(newCts, cts);
         }
@@ -424,20 +430,19 @@ void LockAnalysis::handleFork(const CxtStmt& cts)
 void LockAnalysis::handleCall(const CxtStmt& cts)
 {
 
-    const SVFInstruction* call = cts.getStmt();
     const CallStrCxt& curCxt = cts.getContext();
-    CallICFGNode* cbn = tct->getCallICFGNode(call);
-    if (getTCG()->hasCallGraphEdge(cbn))
+    const CallICFGNode* call = SVFUtil::dyn_cast<CallICFGNode>(cts.getStmt());
+    if (getTCG()->hasCallGraphEdge(call))
     {
-        for (PTACallGraph::CallGraphEdgeSet::const_iterator cgIt = getTCG()->getCallEdgeBegin(cbn), ecgIt = getTCG()->getCallEdgeEnd(cbn);
+        for (CallGraph::CallGraphEdgeSet::const_iterator cgIt = getTCG()->getCallEdgeBegin(call), ecgIt = getTCG()->getCallEdgeEnd(call);
                 cgIt != ecgIt; ++cgIt)
         {
-            const SVFFunction* svfcallee = (*cgIt)->getDstNode()->getFunction();
-            if (isExtCall(svfcallee))
+            const FunObjVar* svfcallee = (*cgIt)->getDstNode()->getFunction();
+            if (SVFUtil::isExtCall(svfcallee))
                 continue;
             CallStrCxt newCxt = curCxt;
             pushCxt(newCxt, call, svfcallee);
-            const SVFInstruction* svfInst = svfcallee->getEntryBlock()->front();
+            const ICFGNode* svfInst = svfcallee->getEntryBlock()->front();
             CxtStmt newCts(newCxt, svfInst);
             markCxtStmtFlag(newCts, cts);
         }
@@ -448,43 +453,69 @@ void LockAnalysis::handleCall(const CxtStmt& cts)
 void LockAnalysis::handleRet(const CxtStmt& cts)
 {
 
-    const SVFInstruction* curInst = cts.getStmt();
+    const ICFGNode* curInst = cts.getStmt();
     const CallStrCxt& curCxt = cts.getContext();
-    const SVFFunction* svffun = curInst->getFunction();
-    PTACallGraphNode* curFunNode = getTCG()->getCallGraphNode(svffun);
+    const FunObjVar* svffun = curInst->getFun();
+    CallGraphNode* curFunNode = getTCG()->getCallGraphNode(svffun);
 
-    for (PTACallGraphNode::const_iterator it = curFunNode->getInEdges().begin(), eit = curFunNode->getInEdges().end(); it != eit; ++it)
+    for (CallGraphNode::const_iterator it = curFunNode->getInEdges().begin(), eit = curFunNode->getInEdges().end(); it != eit; ++it)
     {
-        PTACallGraphEdge* edge = *it;
+        CallGraphEdge* edge = *it;
         if (SVFUtil::isa<ThreadForkEdge, ThreadJoinEdge>(edge))
             continue;
-        for (PTACallGraphEdge::CallInstSet::const_iterator cit = (edge)->directCallsBegin(), ecit = (edge)->directCallsEnd(); cit != ecit;
+        for (CallGraphEdge::CallInstSet::const_iterator cit = (edge)->directCallsBegin(), ecit = (edge)->directCallsEnd(); cit != ecit;
                 ++cit)
         {
             CallStrCxt newCxt = curCxt;
-            const SVFInstruction* inst = (*cit)->getCallSite();
-            if (matchCxt(newCxt, inst, curFunNode->getFunction()))
+            const ICFGNode* inst = *cit;
+            if (matchCxt(newCxt, SVFUtil::cast<CallICFGNode>(inst), curFunNode->getFunction()))
             {
-                const InstVec& nextInsts = inst->getSuccInstructions();
-                for (InstVec::const_iterator nit = nextInsts.begin(), enit = nextInsts.end(); nit != enit; ++nit)
+                for(const ICFGEdge* outEdge : curInst->getOutEdges())
                 {
-                    CxtStmt newCts(newCxt, *nit);
-                    markCxtStmtFlag(newCts, cts);
+                    if(outEdge->getDstNode()->getFun() == inst->getFun())
+                    {
+                        // Iterate over callSite's call string context and use as the successor's context
+                        if (!hasCxtStmtFromInst(*cit))
+                            continue;
+                        for (const CxtStmt& cxtStmt: getCxtStmtsFromInst(*cit))
+                        {
+                            CallStrCxt callSiteCxt = cxtStmt.getContext();
+                            // If new context is a suffix of the call site context
+                            if (isContextSuffix(newCxt, callSiteCxt))
+                            {
+                                CxtStmt newCts(callSiteCxt, outEdge->getDstNode());
+                                markCxtStmtFlag(newCts, cts);
+                            }
+                        }
+                    }
                 }
             }
         }
-        for (PTACallGraphEdge::CallInstSet::const_iterator cit = (edge)->indirectCallsBegin(), ecit = (edge)->indirectCallsEnd();
+        for (CallGraphEdge::CallInstSet::const_iterator cit = (edge)->indirectCallsBegin(), ecit = (edge)->indirectCallsEnd();
                 cit != ecit; ++cit)
         {
             CallStrCxt newCxt = curCxt;
-            const SVFInstruction* inst = (*cit)->getCallSite();
-            if (matchCxt(newCxt, inst, curFunNode->getFunction()))
+            const ICFGNode* inst = *cit;
+            if (matchCxt(newCxt, SVFUtil::cast<CallICFGNode>(inst), curFunNode->getFunction()))
             {
-                const InstVec& nextInsts = inst->getSuccInstructions();
-                for (InstVec::const_iterator nit = nextInsts.begin(), enit = nextInsts.end(); nit != enit; ++nit)
+                for(const ICFGEdge* outEdge : curInst->getOutEdges())
                 {
-                    CxtStmt newCts(newCxt, *nit);
-                    markCxtStmtFlag(newCts, cts);
+                    if(outEdge->getDstNode()->getFun() == inst->getFun())
+                    {
+                        // Iterate over callSite's call string context and use as the successor's context
+                        if (!hasCxtStmtFromInst(*cit))
+                            continue;
+                        for (const CxtStmt& cxtStmt: getCxtStmtsFromInst(*cit))
+                        {
+                            CallStrCxt callSiteCxt = cxtStmt.getContext();
+                            // If new context is a suffix of the call site context
+                            if (isContextSuffix(newCxt, callSiteCxt))
+                            {
+                                CxtStmt newCts(callSiteCxt, outEdge->getDstNode());
+                                markCxtStmtFlag(newCts, cts);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -495,40 +526,28 @@ void LockAnalysis::handleRet(const CxtStmt& cts)
 void LockAnalysis::handleIntra(const CxtStmt& cts)
 {
 
-    const SVFInstruction* curInst = cts.getStmt();
+    const ICFGNode* curInst = cts.getStmt();
     const CallStrCxt& curCxt = cts.getContext();
 
-    const InstVec& nextInsts = curInst->getSuccInstructions();
-    for (InstVec::const_iterator nit = nextInsts.begin(), enit = nextInsts.end(); nit != enit; ++nit)
+    for(const ICFGEdge* outEdge : curInst->getOutEdges())
     {
-        CxtStmt newCts(curCxt, *nit);
-        markCxtStmtFlag(newCts, cts);
+        if(outEdge->getDstNode()->getFun() == curInst->getFun())
+        {
+            CxtStmt newCts(curCxt, outEdge->getDstNode());
+            markCxtStmtFlag(newCts, cts);
+        }
     }
 }
 
-
-void LockAnalysis::pushCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee)
+void LockAnalysis::pushCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee)
 {
-    const SVFFunction* svfcaller = call->getParent()->getParent();
-    CallICFGNode* cbn = tct->getCallICFGNode(call);
-    CallSiteID csId = getTCG()->getCallSiteID(cbn, callee);
-
-//    /// handle calling context for candidate functions only
-//    if (isLockCandidateFun(caller) == false)
-//        return;
-
-    if (tct->inSameCallGraphSCC(getTCG()->getCallGraphNode(svfcaller), getTCG()->getCallGraphNode(callee)) == false)
-    {
-        tct->pushCxt(cxt,csId);
-        DBOUT(DMTA, tct->dumpCxt(cxt));
-    }
+    tct->pushCxt(cxt,call,callee);
 }
 
-bool LockAnalysis::matchCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee)
+bool LockAnalysis::matchCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee)
 {
-    const SVFFunction* svfcaller = call->getParent()->getParent();
-    CallICFGNode* cbn = tct->getCallICFGNode(call);
-    CallSiteID csId = getTCG()->getCallSiteID(cbn, callee);
+    const FunObjVar* svfcaller = call->getFun();
+    CallSiteID csId = getTCG()->getCallSiteID(call, callee);
 
 //    /// handle calling context for candidate functions only
 //    if (isLockCandidateFun(caller) == false)
@@ -549,11 +568,16 @@ bool LockAnalysis::matchCxt(CallStrCxt& cxt, const SVFInstruction* call, const S
     return true;
 }
 
+bool LockAnalysis::isContextSuffix(const CallStrCxt& lhs, const CallStrCxt& call)
+{
+    return tct->isContextSuffix(lhs,call);
+}
+
 
 /*!
  * Protected by at least one common lock under every context
  */
-bool LockAnalysis::isProtectedByCommonLock(const SVFInstruction *i1, const SVFInstruction *i2)
+bool LockAnalysis::isProtectedByCommonLock(const ICFGNode *i1, const ICFGNode *i2)
 {
     numOfTotalQueries++;
     bool commonlock = false;
@@ -570,7 +594,7 @@ bool LockAnalysis::isProtectedByCommonLock(const SVFInstruction *i1, const SVFIn
 /*!
  * Protected by at least one common context-insensitive lock
  */
-bool LockAnalysis::isProtectedByCommonCILock(const SVFInstruction *i1, const SVFInstruction *i2)
+bool LockAnalysis::isProtectedByCommonCILock(const ICFGNode *i1, const ICFGNode *i2)
 {
 
     if(!isInsideCondIntraLock(i1) && !isInsideCondIntraLock(i2))
@@ -604,12 +628,12 @@ bool LockAnalysis::isProtectedByCommonCxtLock(const CxtStmt& cxtStmt1, const Cxt
 /*!
  * Protected by at least one common context-sensitive lock under each context
  */
-bool LockAnalysis::isProtectedByCommonCxtLock(const SVFInstruction *i1, const SVFInstruction *i2)
+bool LockAnalysis::isProtectedByCommonCxtLock(const ICFGNode *i1, const ICFGNode *i2)
 {
-    if(!hasCxtStmtfromInst(i1) || !hasCxtStmtfromInst(i2))
+    if(!hasCxtStmtFromInst(i1) || !hasCxtStmtFromInst(i2))
         return false;
-    const CxtStmtSet& ctsset1 = getCxtStmtfromInst(i1);
-    const CxtStmtSet& ctsset2 = getCxtStmtfromInst(i2);
+    const CxtStmtSet& ctsset1 = getCxtStmtsFromInst(i1);
+    const CxtStmtSet& ctsset2 = getCxtStmtsFromInst(i2);
     for (CxtStmtSet::const_iterator cts1 = ctsset1.begin(), ects1 = ctsset1.end(); cts1 != ects1; cts1++)
     {
         const CxtStmt& cxtStmt1 = *cts1;
@@ -628,7 +652,7 @@ bool LockAnalysis::isProtectedByCommonCxtLock(const SVFInstruction *i1, const SV
 /*!
  * Return true if two instructions are inside at least one common lock span
  */
-bool LockAnalysis::isInSameSpan(const SVFInstruction *i1, const SVFInstruction *i2)
+bool LockAnalysis::isInSameSpan(const ICFGNode *i1, const ICFGNode *i2)
 {
     DOTIMESTAT(double queryStart = PTAStat::getClk(true));
 
@@ -646,7 +670,7 @@ bool LockAnalysis::isInSameSpan(const SVFInstruction *i1, const SVFInstruction *
 /*!
  * Return true if two instructions are inside same context-insensitive lock span
  */
-bool LockAnalysis::isInSameCISpan(const SVFInstruction *i1, const SVFInstruction *i2) const
+bool LockAnalysis::isInSameCISpan(const ICFGNode *i1, const ICFGNode *i2) const
 {
     if(!isInsideCondIntraLock(i1) && !isInsideCondIntraLock(i2))
     {
@@ -678,12 +702,12 @@ bool LockAnalysis::isInSameCSSpan(const CxtStmt& cxtStmt1, const CxtStmt& cxtStm
 /*!
  * Return true if two instructions are inside at least one common context-sensitive lock span
  */
-bool LockAnalysis::isInSameCSSpan(const SVFInstruction *I1, const SVFInstruction *I2) const
+bool LockAnalysis::isInSameCSSpan(const ICFGNode *I1, const ICFGNode *I2) const
 {
-    if(!hasCxtStmtfromInst(I1) || !hasCxtStmtfromInst(I2))
+    if(!hasCxtStmtFromInst(I1) || !hasCxtStmtFromInst(I2))
         return false;
-    const CxtStmtSet& ctsset1 = getCxtStmtfromInst(I1);
-    const CxtStmtSet& ctsset2 = getCxtStmtfromInst(I2);
+    const CxtStmtSet& ctsset1 = getCxtStmtsFromInst(I1);
+    const CxtStmtSet& ctsset2 = getCxtStmtsFromInst(I2);
 
     for (CxtStmtSet::const_iterator cts1 = ctsset1.begin(), ects1 = ctsset1.end(); cts1 != ects1; cts1++)
     {

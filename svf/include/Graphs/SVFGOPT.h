@@ -81,12 +81,21 @@ public:
         keepContextSelfCycle = true;
     }
 
+    /// Optimised SVFG's aren't written in their optimised form; read full SVFG and optimise it
+    void readAndOptSVFG(const std::string &filename);
+
+    /// Optimised SVFG's shouldn't be written in their optimised form; writes the full SVFG to file before optimising
+    void buildAndWriteSVFG(const std::string &filename);
+
 protected:
     void buildSVFG() override;
 
+    /// Separate optimisation function to avoid duplicate code
+    void optimiseSVFG();
+
     /// Connect SVFG nodes between caller and callee for indirect call sites
     //@{
-    inline void connectAParamAndFParam(const PAGNode* cs_arg, const PAGNode* fun_arg, const CallICFGNode*, CallSiteID csId, SVFGEdgeSetTy& edges) override
+    inline void connectAParamAndFParam(const ValVar* cs_arg, const ValVar* fun_arg, const CallICFGNode*, CallSiteID csId, SVFGEdgeSetTy& edges) override
     {
         NodeID phiId = getDef(fun_arg);
         SVFGEdge* edge = addCallEdge(getDef(cs_arg), phiId, csId);
@@ -98,13 +107,13 @@ protected:
         }
     }
     /// Connect formal-ret and actual ret
-    inline void connectFRetAndARet(const PAGNode* fun_ret, const PAGNode* cs_ret, CallSiteID csId, SVFGEdgeSetTy& edges) override
+    inline void connectFRetAndARet(const ValVar* fun_ret, const ValVar* cs_ret, CallSiteID csId, SVFGEdgeSetTy& edges) override
     {
         NodeID phiId = getDef(cs_ret);
         NodeID retdef = getDef(fun_ret);
         /// If a function does not have any return instruction. The def of a FormalRetVFGNode is itself (see VFG.h: addFormalRetVFGNode).
         /// Therefore, we do not connect return edge from a function without any return instruction (i.e., pag->isPhiNode(fun_ret)==false)
-        /// because unique fun_ret PAGNode was not collected as a PhiNode in SVFIRBuilder::visitReturnInst
+        /// because unique fun_ret SVFVar was not collected as a PhiNode in SVFIRBuilder::visitReturnInst
         if (pag->isPhiNode(fun_ret)==false)
             return;
 
@@ -235,7 +244,7 @@ private:
         return (inter1 && inter2);
     }
 
-    inline void addInterPHIOperands(PHISVFGNode* phi, const PAGNode* operand)
+    inline void addInterPHIOperands(PHISVFGNode* phi, const ValVar* operand)
     {
         phi->setOpVer(phi->getOpVerNum(), operand);
     }
@@ -252,15 +261,16 @@ private:
     inline InterPHISVFGNode* addInterPHIForAR(const ActualRetSVFGNode* ar)
     {
         InterPHISVFGNode* sNode = new InterPHISVFGNode(totalVFGNode++,ar);
-        addSVFGNode(sNode, pag->getICFG()->getRetICFGNode(ar->getCallSite()->getCallSite()));
+        addSVFGNode(sNode, const_cast<RetICFGNode*>(
+                        ar->getCallSite()->getRetICFGNode()));
         resetDef(ar->getRev(),sNode);
         return sNode;
     }
 
-    inline void resetDef(const PAGNode* pagNode, const SVFGNode* node)
+    inline void resetDef(const ValVar* valVar, const SVFGNode* node)
     {
-        PAGNodeToDefMapTy::iterator it = PAGNodeToDefMap.find(pagNode);
-        assert(it != PAGNodeToDefMap.end() && "a SVFIR node doesn't have definition before");
+        ValVarToDefMapTy::iterator it = ValVarToDefMap.find(valVar);
+        assert(it != ValVarToDefMap.end() && "a SVFIR node doesn't have definition before");
         it->second = node->getId();
     }
 

@@ -19,8 +19,6 @@ class BVDataPTAImpl;
 /// all symbols have been allocated through endSymbolAllocation.
 class NodeIDAllocator
 {
-    friend class SVFIRWriter;
-    friend class SVFIRReader;
 
 public:
     /// Allocation strategy to use.
@@ -62,6 +60,9 @@ public:
     /// Allocate an object ID as determined by the strategy.
     NodeID allocateObjectId(void);
 
+    /// Allocate an type ID as determined by the strategy.
+    NodeID allocateTypeId(void);
+
     /// Allocate a GEP object ID as determined by the strategy.
     /// allocateObjectId is still fine for GEP objects, but
     /// for some strategies (DBUG, namely), GEP objects can
@@ -88,6 +89,17 @@ public:
         ++numNodes;
     }
 
+    inline void increaseNumOfValues()
+    {
+        ++numValues;
+        ++numNodes;
+    }
+
+    inline int getNumOfNodes()
+    {
+        return numNodes;
+    }
+
 private:
     /// Builds a node ID allocator with the strategy specified on the command line.
     NodeIDAllocator(void);
@@ -103,6 +115,8 @@ private:
     NodeID numSymbols;
     /// Total number of objects and values allocated.
     NodeID numNodes;
+    /// Total number of svftypes
+    NodeID numType;
     ///@}
 
     /// Strategy to allocate with.

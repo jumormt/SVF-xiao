@@ -64,23 +64,11 @@ public:
     }
     static inline bool classof(const VFGNode *node)
     {
-        return node->getNodeKind() == FPIN ||
-               node->getNodeKind() == FPOUT ||
-               node->getNodeKind() == APIN ||
-               node->getNodeKind() == APOUT ||
-               node->getNodeKind() == MPhi ||
-               node->getNodeKind() == MIntraPhi ||
-               node->getNodeKind() == MInterPhi;
+        return isMRSVFGNodeKinds(node->getNodeKind());
     }
     static inline bool classof(const GenericVFGNodeTy *node)
     {
-        return node->getNodeKind() == FPIN ||
-               node->getNodeKind() == FPOUT ||
-               node->getNodeKind() == APIN ||
-               node->getNodeKind() == APOUT ||
-               node->getNodeKind() == MPhi ||
-               node->getNodeKind() == MIntraPhi ||
-               node->getNodeKind() == MInterPhi;
+        return isMRSVFGNodeKinds(node->getNodeKind());
     }
     //@}
 
@@ -328,15 +316,15 @@ public:
     }
     static inline bool classof(const MRSVFGNode *node)
     {
-        return (node->getNodeKind() == MPhi || node->getNodeKind() == MIntraPhi || node->getNodeKind() == MInterPhi);
+        return isMSSAPHISVFGNodeKinds(node->getNodeKind());
     }
     static inline bool classof(const VFGNode *node)
     {
-        return (node->getNodeKind() == MPhi || node->getNodeKind() == MIntraPhi || node->getNodeKind() == MInterPhi);
+        return isMSSAPHISVFGNodeKinds(node->getNodeKind());
     }
     static inline bool classof(const GenericVFGNodeTy *node)
     {
-        return (node->getNodeKind() == MPhi || node->getNodeKind() == MIntraPhi || node->getNodeKind() == MInterPhi);
+        return isMSSAPHISVFGNodeKinds(node->getNodeKind());
     }
     //@}
 
@@ -420,7 +408,7 @@ public:
         return (fun==nullptr) && (callInst != nullptr);
     }
 
-    inline const SVFFunction* getFun() const
+    inline const FunObjVar* getFun() const
     {
         assert(isFormalINPHI() && "expect a formal parameter phi");
         return fun;
@@ -459,7 +447,7 @@ public:
     virtual const std::string toString() const;
 
 private:
-    const SVFFunction* fun;
+    const FunObjVar* fun;
     const CallICFGNode* callInst;
 };
 

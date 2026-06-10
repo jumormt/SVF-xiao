@@ -88,7 +88,7 @@ class TCTNode: public GenericTCTNodeTy
 public:
     /// Constructor
     TCTNode(NodeID i, const CxtThread& cctx) :
-        GenericTCTNodeTy(i, 0), ctx(cctx), multiforked(false)
+        GenericTCTNodeTy(i, TCTNodeKd), ctx(cctx), multiforked(false)
     {
     }
 
@@ -97,7 +97,7 @@ public:
         SVFUtil::outs() << "---\ntid: " << this->getId() << "  inloop:" << ctx.isInloop() << "  incycle:" << ctx.isIncycle() << " multiforked:"<< isMultiforked();
     }
 
-    /// Get CxtThread
+    /// Get thread creation context, <fork site, call string context>
     inline const CxtThread& getCxtThread() const
     {
         return ctx;
@@ -123,8 +123,26 @@ public:
     }
     //@}
 
+    ///Methods for support type inquiry through isa, cast, and dyn_cast:
+    //@{
+    static inline bool classof(const TCTNode *)
+    {
+        return true;
+    }
+
+    static inline bool classof(const GenericTCTNodeTy *node)
+    {
+        return node->getNodeKind() == TCTNodeKd;
+    }
+    static inline bool classof(const SVFValue*node)
+    {
+        return node->getNodeKind() == TCTNodeKd;
+    }
+    //@}
+
+
 private:
-    const CxtThread ctx;
+    const CxtThread ctx;  /// Thread creation context, <fork site, call string context>
     bool multiforked;
 };
 
@@ -139,22 +157,24 @@ public:
     typedef SVFLoopAndDomInfo::LoopBBs LoopBBs;
     typedef TCTEdge::ThreadCreateEdgeSet ThreadCreateEdgeSet;
     typedef ThreadCreateEdgeSet::iterator TCTNodeIter;
-    typedef Set<const SVFFunction*> FunSet;
-    typedef std::vector<const SVFInstruction*> InstVec;
-    typedef Set<const SVFInstruction*> InstSet;
-    typedef Set<const PTACallGraphNode*> PTACGNodeSet;
+    typedef Set<const FunObjVar*> FunSet;
+    typedef std::vector<const ICFGNode*> InstVec;
+    typedef Set<const ICFGNode*> InstSet;
+    typedef Set<const CallGraphNode*> PTACGNodeSet;
     typedef Map<CxtThread,TCTNode*> CxtThreadToNodeMap;
-    typedef Map<CxtThread,CallStrCxt> CxtThreadToForkCxt;
-    typedef Map<CxtThread,const SVFFunction*> CxtThreadToFun;
-    typedef Map<const SVFInstruction*, LoopBBs> InstToLoopMap;
+    typedef Set<std::pair<NodeID, CallStrCxt>> CallStrCxtSet;
+    typedef Map<CxtThread,CallStrCxtSet> CxtThreadToForkCxtSet;
+    typedef Map<CxtThread,const FunObjVar*> CxtThreadToFun;
+    typedef Map<const ICFGNode*, LoopBBs> InstToLoopMap;
     typedef FIFOWorkList<CxtThreadProc> CxtThreadProcVec;
     typedef Set<CxtThreadProc> CxtThreadProcSet;
-    typedef SCCDetection<PTACallGraph*> ThreadCallGraphSCC;
+    typedef SCCDetection<CallGraph*> ThreadCallGraphSCC;
 
     /// Constructor
     TCT(PointerAnalysis* p) :pta(p),TCTNodeNum(0),TCTEdgeNum(0),MaxCxtSize(0)
     {
-        tcg = SVFUtil::cast<ThreadCallGraph>(pta->getPTACallGraph());
+        tcg = SVFUtil::dyn_cast<ThreadCallGraph>(pta->getCallGraph());
+        assert(tcg != nullptr && "TCT::TCT: call graph is not a ThreadCallGraph!");
         tcg->updateCallGraph(pta);
         //tcg->updateJoinEdge(pta);
         tcgSCC = pta->getCallGraphSCC();
@@ -164,19 +184,7 @@ public:
 
     /// Destructor
     virtual ~TCT()
-    {
-        destroy();
-    }
-    /// Get CallICFGNode given inst
-    CallICFGNode* getCallICFGNode(const SVFInstruction* inst)
-    {
-        return pta->getICFG()->getCallICFGNode(inst);
-    }
-    /// Get SVFFModule
-    SVFModule* getSVFModule() const
-    {
-        return pta->getModule();
-    }
+    {  }
 
     /// Get TCG
     inline ThreadCallGraph* getThreadCallGraph() const
@@ -246,6 +254,19 @@ public:
     }
     //@}
 
+    /// Whether it is calling an external function
+    inline bool isExtCall(const ICFGNode* inst)
+    {
+        if(const CallICFGNode* call = SVFUtil::dyn_cast<CallICFGNode>(inst))
+            return SVFUtil::isExtCall(call);
+        return false;
+    }
+    /// Whether it is a callsite
+    inline bool isCallSite(const ICFGNode* inst)
+    {
+        return SVFUtil::isa<CallICFGNode>(inst);
+    }
+
     /// Find/Get TCT node
     //@{
     inline bool hasTCTNode(const CxtThread& ct) const
@@ -261,9 +282,9 @@ public:
     //@}
 
     /// Whether it is a candidate function for indirect call
-    inline bool isCandidateFun(const PTACallGraph::FunctionSet& callees) const
+    inline bool isCandidateFun(const CallGraph::FunctionSet& callees) const
     {
-        for(PTACallGraph::FunctionSet::const_iterator cit = callees.begin(),
+        for(CallGraph::FunctionSet::const_iterator cit = callees.begin(),
                 ecit = callees.end(); cit!=ecit; cit++)
         {
             if(candidateFuncSet.find((*cit))!=candidateFuncSet.end())
@@ -271,12 +292,12 @@ public:
         }
         return false;
     }
-    inline bool isCandidateFun(const SVFFunction* fun) const
+    inline bool isCandidateFun(const FunObjVar* fun) const
     {
         return candidateFuncSet.find(fun)!=candidateFuncSet.end();
     }
     /// Whether two functions in the same callgraph scc
-    inline bool inSameCallGraphSCC(const PTACallGraphNode* src,const PTACallGraphNode* dst)
+    inline bool inSameCallGraphSCC(const CallGraphNode* src,const CallGraphNode* dst)
     {
         return (tcgSCC->repNode(src->getId()) == tcgSCC->repNode(dst->getId()));
     }
@@ -289,24 +310,29 @@ public:
         const TCTNode* node = getTCTNode(tid);
         return node->getInEdges().size()==1;
     }
-    /// Get parent thread
-    inline NodeID getParentThread(NodeID tid) const
+    /// Get parent threads
+    inline NodeBS getParentThreads(NodeID tid) const
     {
+        NodeBS parentTds;
         const TCTNode* node = getTCTNode(tid);
-        assert(node->getInEdges().size()<=1 && "should have at most one parent thread");
-        assert(node->getInEdges().size()==1 && "does not have a parent thread");
-        const TCTEdge* edge = *(node->getInEdges().begin());
-        return edge->getSrcID();
+        assert(node->getInEdges().size()>=1 && "does not have a parent thread");
+
+        for (const TCTEdge* edge : node->getInEdges())
+        {
+            parentTds.set(edge->getSrcID());
+        }
+        return parentTds;
     }
     /// Get all ancestor threads
-    const NodeBS getAncestorThread(NodeID tid) const
+    const NodeBS getAncestorThreads(NodeID tid) const
     {
         NodeBS tds;
         if(hasParentThread(tid) == false)
             return tds;
 
         FIFOWorkList<NodeID> worklist;
-        worklist.push(getParentThread(tid));
+        for(NodeID parentTid : getParentThreads(tid))
+            worklist.push(parentTid);
 
         while(!worklist.empty())
         {
@@ -314,7 +340,8 @@ public:
             if(tds.test_and_set(t))
             {
                 if(hasParentThread(t))
-                    worklist.push(getParentThread(t));
+                    for(NodeID parentTid : getParentThreads(t))
+                        worklist.push(parentTid);
             }
         }
         return tds;
@@ -325,29 +352,31 @@ public:
         NodeBS tds;
         if(hasParentThread(tid) == false)
             return tds;
-
-        const TCTNode* node = getTCTNode(getParentThread(tid));
-        for(ThreadCreateEdgeSet::const_iterator it = getChildrenBegin(node), eit = getChildrenEnd(node); it!=eit; ++it)
+        for (NodeID parentTid : getParentThreads(tid))
         {
-            NodeID child = (*it)->getDstNode()->getId();
-            if(child!=tid)
-                tds.set(child);
+            const TCTNode* parentNode = getTCTNode(parentTid);
+            for(ThreadCreateEdgeSet::const_iterator it = getChildrenBegin(parentNode),
+                    eit = getChildrenEnd(parentNode); it!=eit; ++it)
+            {
+                NodeID child = (*it)->getDstNode()->getId();
+                if(child!=tid)
+                    tds.set(child);
+            }
         }
-
         return tds;
     }
     //@}
 
-    /// get the context of a thread at its spawning site (fork site)
-    const CallStrCxt& getCxtOfCxtThread(const CxtThread& ct) const
+    /// get the contexts of a thread at its spawning sites (fork sites)
+    const CallStrCxtSet& getCxtOfCxtThread(const CxtThread& ct) const
     {
-        CxtThreadToForkCxt::const_iterator it = ctToForkCxtMap.find(ct);
-        assert(it!=ctToForkCxtMap.end() && "Cxt Thread not found!!");
+        CxtThreadToForkCxtSet::const_iterator it = ctToForkCxtsMap.find(ct);
+        assert(it!=ctToForkCxtsMap.end() && "Cxt Thread not found!!");
         return it->second;
     }
 
     /// get the start routine function of a thread
-    const SVFFunction* getStartRoutineOfCxtThread(const CxtThread& ct) const
+    const FunObjVar* getStartRoutineOfCxtThread(const CxtThread& ct) const
     {
         CxtThreadToFun::const_iterator it = ctToRoutineFunMap.find(ct);
         assert(it!=ctToRoutineFunMap.end() && "Cxt Thread not found!!");
@@ -355,7 +384,7 @@ public:
     }
 
     /// Get loop for join site
-    inline LoopBBs& getJoinLoop(const SVFInstruction* join)
+    inline LoopBBs& getJoinLoop(const CallICFGNode* join)
     {
         assert(tcg->getThreadAPI()->isTDJoin(join) && "not a join site");
         InstToLoopMap::iterator it = joinSiteToLoopMap.find(join);
@@ -363,7 +392,7 @@ public:
         return it->second;
     }
 
-    inline bool hasJoinLoop(const SVFInstruction* join) const
+    inline bool hasJoinLoop(const CallICFGNode* join) const
     {
         assert(tcg->getThreadAPI()->isTDJoin(join) && "not a join site");
         InstToLoopMap::const_iterator it = joinSiteToLoopMap.find(join);
@@ -372,33 +401,32 @@ public:
 
     bool hasLoop(const SVFBasicBlock* bb) const
     {
-        const SVFFunction* fun = bb->getParent();
+        const FunObjVar* fun = bb->getFunction();
         return fun->hasLoopInfo(bb);
     }
-    bool hasLoop(const SVFInstruction* inst) const
+    bool hasLoop(const ICFGNode* inst) const
     {
-        return hasLoop(inst->getParent());
+        return hasLoop(inst->getBB());
     }
     /// Return true if a join instruction must be executed inside a loop
-    bool isJoinMustExecutedInLoop(const LoopBBs& lp,const SVFInstruction* join);
+    bool isJoinMustExecutedInLoop(const LoopBBs& lp,const ICFGNode* join);
     /// Get loop for an instruction
-    const LoopBBs& getLoop(const SVFInstruction* inst);
+    const LoopBBs& getLoop(const ICFGNode* inst);
     /// Get loop for fork/join site
     const LoopBBs& getLoop(const SVFBasicBlock* bb);
 
+    /// Context helper functions
+    //@{
     /// Push calling context
-    void pushCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee);
+    void pushCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee);
     /// Match context
-    bool matchCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee);
+    bool matchAndPopCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee);
+    /// If lhs is a suffix of rhs, including equal
+    bool isContextSuffix(const CallStrCxt& lhs, const CallStrCxt& call);
+    //@}
 
-    inline void pushCxt(CallStrCxt& cxt, CallSiteID csId)
-    {
-        cxt.push_back(csId);
-        if (cxt.size() > MaxCxtSize)
-            MaxCxtSize = cxt.size();
-    }
     /// Whether a join site is in recursion
-    inline bool isJoinSiteInRecursion(const SVFInstruction* join) const
+    inline bool isJoinSiteInRecursion(const CallICFGNode* join) const
     {
         assert(tcg->getThreadAPI()->isTDJoin(join) && "not a join site");
         return inRecurJoinSites.find(join)!=inRecurJoinSites.end();
@@ -450,7 +478,7 @@ private:
     /// Mark relevant procedures that are backward reachable from any fork/join site
     //@{
     void markRelProcs();
-    void markRelProcs(const SVFFunction* fun);
+    void markRelProcs(const FunObjVar* fun);
     //@}
 
     /// Get entry functions that are neither called by other functions nor extern functions
@@ -473,17 +501,17 @@ private:
     /// Multi-forked threads
     //@{
     /// Whether an instruction is in a loop
-    bool isInLoopInstruction(const SVFInstruction* inst);
+    bool isInLoopInstruction(const ICFGNode* inst);
     /// Whether an instruction is in a recursion
-    bool isInRecursion(const SVFInstruction* inst) const;
+    bool isInRecursion(const ICFGNode* inst) const;
     //@}
 
     /// Handle call relations
-    void handleCallRelation(CxtThreadProc& ctp, const PTACallGraphEdge* cgEdge, CallSite call);
+    void handleCallRelation(CxtThreadProc& ctp, const CallGraphEdge* cgEdge, const CallICFGNode* call);
 
     /// Get or create a tct node based on CxtThread
     //@{
-    inline TCTNode* getOrCreateTCTNode(const CallStrCxt& cxt, const SVFInstruction* fork,const CallStrCxt& oldCxt, const SVFFunction* routine)
+    inline TCTNode* getOrCreateTCTNode(const CallStrCxt& cxt, const ICFGNode* fork, const CxtThreadProc& forkSiteCtp, const FunObjVar* routine)
     {
         CxtThread ct(cxt,fork);
         CxtThreadToNodeMap::const_iterator it = ctpToNodeMap.find(ct);
@@ -492,7 +520,7 @@ private:
             return it->second;
         }
 
-        addCxtOfCxtThread(oldCxt,ct);
+        addCxtOfCxtThread(forkSiteCtp.getTid(), forkSiteCtp.getContext(), ct);
         addStartRoutineOfCxtThread(routine,ct);
 
         setMultiForkedAttrs(ct);
@@ -506,7 +534,7 @@ private:
         /// non-main thread
         if(ct.getThread() != nullptr)
         {
-            const SVFInstruction* svfInst = ct.getThread();
+            const ICFGNode* svfInst = ct.getThread();
             ct.setInloop(isInLoopInstruction(svfInst));
             ct.setIncycle(isInRecursion(svfInst));
         }
@@ -519,12 +547,13 @@ private:
     }
 
     /// Add context for a thread at its spawning site (fork site)
-    void addCxtOfCxtThread(const CallStrCxt& cxt, const CxtThread& ct)
+    void addCxtOfCxtThread(NodeID pTid, const CallStrCxt& cxt, const CxtThread& ct)
     {
-        ctToForkCxtMap[ct] = cxt;
+        ctToForkCxtsMap[ct].insert(std::make_pair(pTid, cxt));
     }
+
     /// Add start routine function of a cxt thread
-    void addStartRoutineOfCxtThread(const SVFFunction* fun, const CxtThread& ct)
+    void addStartRoutineOfCxtThread(const FunObjVar* fun, const CxtThread& ct)
     {
         ctToRoutineFunMap[ct] = fun;
     }
@@ -550,13 +579,6 @@ private:
         return visitedCTPs.find(ctp)!=visitedCTPs.end();
     }
     //@}
-    /// Clean up memory
-    inline void destroy()
-    {
-        if(tcgSCC)
-            delete tcgSCC;
-        tcgSCC=nullptr;
-    }
 
     FunSet entryFuncSet; /// Procedures that are neither called by other functions nor extern functions
     FunSet candidateFuncSet; /// Procedures we care about during call graph traversing when creating TCT
@@ -564,10 +586,10 @@ private:
     CxtThreadProcVec ctpList;	/// CxtThreadProc List
     CxtThreadProcSet visitedCTPs; /// Record all visited ctps
     CxtThreadToNodeMap ctpToNodeMap; /// Map a ctp to its graph node
-    CxtThreadToForkCxt ctToForkCxtMap; /// Map a CxtThread to the context at its spawning site (fork site).
+    CxtThreadToForkCxtSet ctToForkCxtsMap; /// Map a CxtThread to the context at its spawning site (fork site).
     CxtThreadToFun ctToRoutineFunMap; /// Map a CxtThread to its start routine function.
     InstToLoopMap joinSiteToLoopMap; ///< map an inloop join to its loop class
-    InstSet inRecurJoinSites;	///< Fork or Join sites in recursions
+    Set<const ICFGNode*>  inRecurJoinSites;	///< Fork or Join sites in recursions
 };
 
 } // End namespace SVF

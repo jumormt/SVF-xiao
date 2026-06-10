@@ -32,8 +32,8 @@
 
 #include "Util/SVFUtil.h"
 #include "SVF-LLVM/BasicTypes.h"
-#include "SVFIR/SVFValue.h"
 #include "Util/ThreadAPI.h"
+#include "Util/Options.h"
 
 namespace SVF
 {
@@ -52,8 +52,41 @@ inline bool isCallSite(const Value* val)
     return SVFUtil::isa<CallBase>(val);
 }
 
-/// Get the definition of a function across multiple modules
-const Function* getDefFunForMultipleModule(const Function* fun);
+inline double getDoubleValue(const ConstantFP* fpValue)
+{
+    double dval = 0;
+    if (fpValue->isNormalFP())
+    {
+        const llvm::fltSemantics& semantics = fpValue->getValueAPF().getSemantics();
+        if (&semantics == &llvm::APFloat::IEEEhalf() ||
+                &semantics == &llvm::APFloat::IEEEsingle() ||
+                &semantics == &llvm::APFloat::IEEEdouble() ||
+                &semantics == &llvm::APFloat::IEEEquad() ||
+                &semantics == &llvm::APFloat::x87DoubleExtended())
+        {
+            dval = fpValue->getValueAPF().convertToDouble();
+        }
+        else
+        {
+            assert (false && "Unsupported floating point type");
+            abort();
+        }
+    }
+    else
+    {
+        // other cfp type, like isZero(), isInfinity(), isNegative(), etc.
+        // do nothing
+    }
+    return dval;
+}
+
+inline std::pair<s64_t, u64_t> getIntegerValue(const ConstantInt* intValue)
+{
+    if (intValue->getBitWidth() <= 64 && intValue->getBitWidth() >= 1)
+        return std::make_pair(intValue->getSExtValue(), intValue->getZExtValue());
+    else
+        return std::make_pair(0,0);
+}
 
 /// Return LLVM callsite given a value
 inline const CallBase* getLLVMCallSite(const Value* value)
@@ -65,8 +98,7 @@ inline const CallBase* getLLVMCallSite(const Value* value)
 inline const Function* getCallee(const CallBase* cs)
 {
     // FIXME: do we need to strip-off the casts here to discover more library functions
-    const Function* callee = SVFUtil::dyn_cast<Function>(cs->getCalledOperand()->stripPointerCasts());
-    return callee ? getDefFunForMultipleModule(callee) : nullptr;
+    return SVFUtil::dyn_cast<Function>(cs->getCalledOperand()->stripPointerCasts());
 }
 
 /// Return LLVM function if this value is
@@ -81,7 +113,8 @@ const Function* getProgFunction(const std::string& funName);
 /// Check whether a function is an entry function (i.e., main)
 inline bool isProgEntryFunction(const Function* fun)
 {
-    return fun && fun->getName() == "main";
+    const char* main_name=Options::SVFMain() ? "svf.main" : "main";
+    return fun && fun->getName() == main_name;
 }
 
 /// Check whether this value is a black hole
@@ -104,7 +137,9 @@ static inline Type* getPtrElementType(const PointerType* pty)
     assert(!pty->isOpaque() && "Opaque Pointer is used, please recompile the source adding '-Xclang -no-opaque-pointers'");
     return pty->getNonOpaquePointerElementType();
 #else
+    (void)pty; // Suppress warning of unused variable under release build
     assert(false && "llvm version 17+ only support opaque pointers!");
+    return nullptr;
 #endif
 }
 
@@ -283,28 +318,29 @@ inline static DataLayout* getDataLayout(Module* mod)
 {
     static DataLayout *dl = nullptr;
     if (dl == nullptr)
+#if LLVM_VERSION_MAJOR >= 19
+        dl = new DataLayout(mod->getDataLayout());
+#else
         dl = new DataLayout(mod);
+#endif
     return dl;
 }
 
 /// Get the next instructions following control flow
 void getNextInsts(const Instruction* curInst,
-                  std::vector<const SVFInstruction*>& instList);
-
-/// Get the previous instructions following control flow
-void getPrevInsts(const Instruction* curInst,
-                  std::vector<const SVFInstruction*>& instList);
-
-/// Get the next instructions following control flow
-void getNextInsts(const Instruction* curInst,
                   std::vector<const Instruction*>& instList);
 
-/// Get the previous instructions following control flow
-void getPrevInsts(const Instruction* curInst,
-                  std::vector<const Instruction*>& instList);
 
-/// Get num of BB's predecessors
-u32_t getBBPredecessorNum(const BasicBlock* BB);
+/// Basic block does not have predecessors
+/// map-1.cpp.bc
+/// try.cont: ; No predecessors!
+///    call void @llvm.trap()
+///    unreachable
+inline bool isNoPrecessorBasicBlock(const BasicBlock* bb)
+{
+    return bb != &bb->getParent()->getEntryBlock() &&
+           pred_empty(bb);
+}
 
 /// Check whether a file is an LLVM IR file
 bool isIRFile(const std::string& filename);
@@ -313,10 +349,6 @@ bool isIRFile(const std::string& filename);
 void processArguments(int argc, char** argv, int& arg_num, char** arg_value,
                       std::vector<std::string>& moduleNameVec);
 
-/// Helper method to get the size of the type from target data layout
-//@{
-u32_t getTypeSizeInBytes(const Type* type);
-u32_t getTypeSizeInBytes(const StructType* sty, u32_t field_index);
 //@}
 
 const std::string getSourceLoc(const Value* val);
@@ -327,16 +359,18 @@ bool isIntrinsicFun(const Function* func);
 
 /// Get all called funcions in a parent function
 std::vector<const Function *> getCalledFunctions(const Function *F);
-void removeFunAnnotations(Set<Function*>& removedFuncList);
-bool isUnusedGlobalVariable(const GlobalVariable& global);
-void removeUnusedGlobalVariables(Module* module);
-/// Delete unused functions, annotations and global variables in extapi.bc
-void removeUnusedFuncsAndAnnotationsAndGlobalVariables(Set<Function*> removedFuncList);
 // Converts a mangled name to C naming style to match functions in extapi.c.
 std::string restoreFuncName(std::string funcName);
 
-/// Get the corresponding Function based on its name
-const SVFFunction* getFunction(const std::string& name);
+bool isExtCall(const Function* fun);
+
+bool isMemcpyExtFun(const Function *fun);
+
+bool isMemsetExtFun(const Function* fun);
+
+u32_t getHeapAllocHoldingArgPosition(const Function* fun);
+
+const FunObjVar* getFunObjVar(const std::string&name);
 
 /// Return true if the value refers to constant data, e.g., i32 0
 inline bool isConstDataOrAggData(const Value* val)
@@ -347,9 +381,6 @@ inline bool isConstDataOrAggData(const Value* val)
 
 /// find the unique defined global across multiple modules
 const Value* getGlobalRep(const Value* val);
-
-/// Check whether this value points-to a constant object
-bool isConstantObjSym(const SVFValue* val);
 
 /// Check whether this value points-to a constant object
 bool isConstantObjSym(const Value* val);
@@ -366,53 +397,42 @@ std::string dumpType(const Type* type);
 
 std::string dumpValueAndDbgInfo(const Value* val);
 
-/**
- * See more: https://github.com/SVF-tools/SVF/pull/1191
- *
- * Given the code:
- *
- * switch (a) {
- *   case 0: printf("0\n"); break;
- *   case 1:
- *   case 2:
- *   case 3: printf("a >=1 && a <= 3\n"); break;
- *   case 4:
- *   case 6:
- *   case 7:  printf("a >= 4 && a <=7\n"); break;
- *   default: printf("a < 0 || a > 7"); break;
- * }
- *
- * Generate the IR:
- *
- * switch i32 %0, label %sw.default [
- *  i32 0, label %sw.bb
- *  i32 1, label %sw.bb1
- *  i32 2, label %sw.bb1
- *  i32 3, label %sw.bb1
- *  i32 4, label %sw.bb3
- *  i32 6, label %sw.bb3
- *  i32 7, label %sw.bb3
- * ]
- *
- * We can get every case basic block and related case value:
- * [
- *   {%sw.default, -1},
- *   {%sw.bb, 0},
- *   {%sw.bb1, 1},
- *   {%sw.bb1, 2},
- *   {%sw.bb1, 3},
- *   {%sw.bb3, 4},
- *   {%sw.bb3, 6},
- *   {%sw.bb3, 7},
- * ]
- * Note: default case value is nullptr
- */
-void getSuccBBandCondValPairVec(const SwitchInst &switchInst, SuccBBAndCondValPairVec &vec);
+bool isHeapAllocExtCallViaRet(const Instruction *inst);
 
-/**
- * Note: default case value is nullptr
- */
-s64_t getCaseValue(const SwitchInst &switchInst, SuccBBAndCondValPair &succBB2CondVal);
+bool isHeapAllocExtCallViaArg(const Instruction *inst);
+
+inline bool isHeapAllocExtCall(const Instruction *inst)
+{
+    return isHeapAllocExtCallViaRet(inst) || isHeapAllocExtCallViaArg(inst);
+}
+
+bool isStackAllocExtCallViaRet(const Instruction *inst);
+
+inline bool isStackAllocExtCall(const Instruction *inst)
+{
+    return isStackAllocExtCallViaRet(inst);
+}
+
+// Check if a given value represents a heap object.
+bool isHeapObj(const Value* val);
+
+// Check if a given value represents a stack object.
+bool isStackObj(const Value* val);
+
+/// Whether an instruction is a callsite in the application code, excluding llvm intrinsic calls
+bool isNonInstricCallSite(const Instruction* inst);
+
+/// Get program entry function from module.
+inline const Function* getProgEntryFunction(Module& module)
+{
+    for (auto it = module.begin(), eit = module.end(); it != eit; ++it)
+    {
+        const Function *fun = &(*it);
+        if (isProgEntryFunction(fun))
+            return (fun);
+    }
+    return nullptr;
+}
 
 } // End namespace LLVMUtil
 

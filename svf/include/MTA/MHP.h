@@ -46,18 +46,16 @@ class MHP
 {
 
 public:
-    typedef Set<const SVFFunction*> FunSet;
-    typedef Set<const SVFInstruction*> InstSet;
-    typedef TCT::InstVec InstVec;
+    typedef Set<const FunObjVar*> FunSet;
     typedef FIFOWorkList<CxtThreadStmt> CxtThreadStmtWorkList;
     typedef Set<CxtThreadStmt> CxtThreadStmtSet;
     typedef Map<CxtThreadStmt,NodeBS> ThreadStmtToThreadInterleav;
-    typedef Map<const SVFInstruction*,CxtThreadStmtSet> InstToThreadStmtSetMap;
+    typedef Map<const ICFGNode*,CxtThreadStmtSet> InstToThreadStmtSetMap;
     typedef SVFLoopAndDomInfo::LoopBBs LoopBBs;
 
     typedef Set<CxtStmt> LockSpan;
 
-    typedef std::pair<const SVFFunction*,const SVFFunction*> FuncPair;
+    typedef std::pair<const FunObjVar*,const FunObjVar*> FuncPair;
     typedef Map<FuncPair, bool> FuncPairToBool;
 
     /// Constructor
@@ -84,52 +82,37 @@ public:
         return tct;
     }
 
-    // Get CallICFGNode
-    inline CallICFGNode* getCBN(const SVFInstruction* inst)
-    {
-        return tct->getCallICFGNode(inst);
-    }
-
     /// Whether the function is connected from main function in thread call graph
-    bool isConnectedfromMain(const SVFFunction* fun);
+    bool isConnectedfromMain(const FunObjVar* fun);
 
-//    /// Interface to query whether two instructions are protected by common locks
-//    virtual bool isProtectedByACommonLock(const SVFInstruction* i1, const SVFInstruction* i2);
-//    virtual bool isAllCxtInSameLockSpan(const SVFInstruction *I1, const SVFInstruction *I2);
-//    virtual bool isOneCxtInSameLockSpan(const SVFInstruction *I1, const SVFInstruction *I2);
-//
-//    bool hasOneCxtInLockSpan(const SVFInstruction *I, LockSpan lspan);
-//    bool hasAllCxtInLockSpan(const SVFInstruction *I, LockSpan lspan);
-//
-//
 //    LockSpan getSpanfromCxtLock(NodeID l);
     /// Interface to query whether two instructions may happen-in-parallel
-    virtual bool mayHappenInParallel(const SVFInstruction* i1, const SVFInstruction* i2);
-    virtual bool mayHappenInParallelCache(const SVFInstruction* i1, const SVFInstruction* i2);
-    virtual bool mayHappenInParallelInst(const SVFInstruction* i1, const SVFInstruction* i2);
-    virtual bool executedByTheSameThread(const SVFInstruction* i1, const SVFInstruction* i2);
+    virtual bool mayHappenInParallel(const ICFGNode* i1, const ICFGNode* i2);
+    virtual bool mayHappenInParallelCache(const ICFGNode* i1, const ICFGNode* i2);
+    virtual bool mayHappenInParallelInst(const ICFGNode* i1, const ICFGNode* i2);
+    virtual bool executedByTheSameThread(const ICFGNode* i1, const ICFGNode* i2);
 
     /// Get interleaving thread for statement inst
     //@{
     inline const NodeBS& getInterleavingThreads(const CxtThreadStmt& cts)
     {
-        return threadStmtToTheadInterLeav[cts];
+        return threadStmtToThreadInterLeav[cts];
     }
     inline bool hasInterleavingThreads(const CxtThreadStmt& cts) const
     {
-        return threadStmtToTheadInterLeav.find(cts)!=threadStmtToTheadInterLeav.end();
+        return threadStmtToThreadInterLeav.find(cts)!=threadStmtToThreadInterLeav.end();
     }
     //@}
 
     /// Get/has ThreadStmt
     //@{
-    inline const CxtThreadStmtSet& getThreadStmtSet(const SVFInstruction* inst) const
+    inline const CxtThreadStmtSet& getThreadStmtSet(const ICFGNode* inst) const
     {
         InstToThreadStmtSetMap::const_iterator it = instToTSMap.find(inst);
         assert(it!=instToTSMap.end() && "no thread access the instruction?");
         return it->second;
     }
-    inline bool hasThreadStmtSet(const SVFInstruction* inst) const
+    inline bool hasThreadStmtSet(const ICFGNode* inst) const
     {
         return instToTSMap.find(inst)!=instToTSMap.end();
     }
@@ -140,9 +123,9 @@ public:
 
 private:
 
-    inline const PTACallGraph::FunctionSet& getCallee(const SVFInstruction* inst, PTACallGraph::FunctionSet& callees)
+    inline const CallGraph::FunctionSet& getCallee(const CallICFGNode* inst, CallGraph::FunctionSet& callees)
     {
-        tcg->getCallees(getCBN(inst), callees);
+        tcg->getCallees(inst, callees);
         return callees;
     }
     /// Update non-candidate functions' interleaving.
@@ -171,7 +154,7 @@ private:
     //@{
     inline void addInterleavingThread(const CxtThreadStmt& tgr, NodeID tid)
     {
-        if(threadStmtToTheadInterLeav[tgr].test_and_set(tid))
+        if(threadStmtToThreadInterLeav[tgr].test_and_set(tid))
         {
             instToTSMap[tgr.getStmt()].insert(tgr);
             pushToCTSWorkList(tgr);
@@ -179,14 +162,14 @@ private:
     }
     inline void addInterleavingThread(const CxtThreadStmt& tgr, const CxtThreadStmt& src)
     {
-        bool changed = threadStmtToTheadInterLeav[tgr] |= threadStmtToTheadInterLeav[src];
+        bool changed = threadStmtToThreadInterLeav[tgr] |= threadStmtToThreadInterLeav[src];
         if(changed)
         {
             instToTSMap[tgr.getStmt()].insert(tgr);
             pushToCTSWorkList(tgr);
         }
     }
-    inline void rmInterleavingThread(const CxtThreadStmt& tgr, const NodeBS& tids, const SVFInstruction* joinsite)
+    inline void rmInterleavingThread(const CxtThreadStmt& tgr, const NodeBS& tids, const ICFGNode* joinsite)
     {
         NodeBS joinedTids;
         for(NodeBS::iterator it = tids.begin(), eit = tids.end(); it!=eit; ++it)
@@ -194,7 +177,7 @@ private:
             if(isMustJoin(tgr.getTid(),joinsite))
                 joinedTids.set(*it);
         }
-        if(threadStmtToTheadInterLeav[tgr].intersectWithComplement(joinedTids))
+        if(threadStmtToThreadInterLeav[tgr].intersectWithComplement(joinedTids))
         {
             pushToCTSWorkList(tgr);
         }
@@ -211,23 +194,35 @@ private:
     bool isRecurFullJoin(NodeID parentTid, NodeID curTid);
 
     /// Whether a join site must join a thread t
-    bool isMustJoin(const NodeID curTid, const SVFInstruction* joinsite);
+    bool isMustJoin(const NodeID curTid, const ICFGNode* joinsite);
 
     /// A thread is a multiForked thread if it is in a loop or recursion
     inline bool isMultiForkedThread(NodeID curTid)
     {
         return tct->getTCTNode(curTid)->isMultiforked();
     }
+
+    /// Context helper functions
+    //@{
     /// Push calling context
-    inline void pushCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee)
+    inline void pushCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee)
     {
+        /// handle calling context for candidate functions only
+        if(tct->isCandidateFun(call->getFun()) == false)
+            return;
         tct->pushCxt(cxt,call,callee);
     }
     /// Match context
-    inline bool matchCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee)
+    inline bool matchAndPopCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee)
     {
-        return tct->matchCxt(cxt,call,callee);
+        return tct->matchAndPopCxt(cxt,call,callee);
     }
+    /// If lhs is a suffix of rhs, including equal
+    inline bool isContextSuffix(const CallStrCxt& lhs, const CallStrCxt call)
+    {
+        return tct->isContextSuffix(lhs,call);
+    }
+    //@}
 
     /// WorkList helper functions
     //@{
@@ -242,24 +237,26 @@ private:
     }
 
     /// Whether it is a fork site
-    inline bool isTDFork(const SVFInstruction* call)
+    inline bool isTDFork(const ICFGNode* call)
     {
-        return tcg->getThreadAPI()->isTDFork(call);
+        const CallICFGNode* fork = SVFUtil::dyn_cast<CallICFGNode>(call);
+        return fork && tcg->getThreadAPI()->isTDFork(fork);
     }
     /// Whether it is a join site
-    inline bool isTDJoin(const SVFInstruction* call)
+    inline bool isTDJoin(const ICFGNode* call)
     {
-        return tcg->getThreadAPI()->isTDJoin(call);
+        const CallICFGNode* join = SVFUtil::dyn_cast<CallICFGNode>(call);
+        return join && tcg->getThreadAPI()->isTDJoin(join);
     }
 
     /// Return thread id(s) which are directly or indirectly joined at this join site
-    NodeBS getDirAndIndJoinedTid(const CallStrCxt& cxt, const SVFInstruction* call);
+    NodeBS getDirAndIndJoinedTid(const CallStrCxt& cxt, const ICFGNode* call);
 
     /// Whether a context-sensitive join satisfies symmetric loop pattern
-    bool hasJoinInSymmetricLoop(const CallStrCxt& cxt, const SVFInstruction* call) const;
+    bool hasJoinInSymmetricLoop(const CallStrCxt& cxt, const ICFGNode* call) const;
 
     /// Whether a context-sensitive join satisfies symmetric loop pattern
-    const LoopBBs& getJoinInSymmetricLoop(const CallStrCxt& cxt, const SVFInstruction* call) const;
+    const LoopBBs& getJoinInSymmetricLoop(const CallStrCxt& cxt, const ICFGNode* call) const;
 
     /// Whether thread t1 happens before t2 based on ForkJoin Analysis
     bool isHBPair(NodeID tid1, NodeID tid2);
@@ -268,7 +265,7 @@ private:
     TCT* tct;							///< TCT
     ForkJoinAnalysis* fja;				///< ForJoin Analysis
     CxtThreadStmtWorkList cxtStmtList;	///< CxtThreadStmt worklist
-    ThreadStmtToThreadInterleav threadStmtToTheadInterLeav; /// Map a statement to its thread interleavings
+    ThreadStmtToThreadInterleav threadStmtToThreadInterLeav; /// Map a statement to its thread interleavings
     InstToThreadStmtSetMap instToTSMap; ///< Map an instruction to its ThreadStmtSet
     FuncPairToBool nonCandidateFuncMHPRelMap;
 
@@ -304,6 +301,10 @@ public:
     typedef Set<NodePair> ThreadPairSet;
     typedef Map<CxtStmt, LoopBBs> CxtStmtToLoopMap;
     typedef FIFOWorkList<CxtStmt> CxtStmtWorkList;
+
+    typedef Set<CxtStmt> CxtStmtSet;
+    typedef Map<const ICFGNode*, CxtStmtSet> InstToCxtStmt;
+
 
     ForkJoinAnalysis(TCT* t) : tct(t)
     {
@@ -352,22 +353,12 @@ public:
         return full && !partial;
     }
 
-    /// Get exit instruction of the start routine function of tid's parent thread
-    inline const SVFInstruction* getExitInstOfParentRoutineFun(NodeID tid) const
-    {
-        NodeID parentTid = tct->getParentThread(tid);
-        const CxtThread& parentct = tct->getTCTNode(parentTid)->getCxtThread();
-        const SVFFunction* parentRoutine = tct->getStartRoutineOfCxtThread(parentct);
-        const SVFInstruction* inst = parentRoutine->getExitBB()->back();
-        return inst;
-    }
-
     /// Get loop for join site
-    inline LoopBBs& getJoinLoop(const SVFInstruction* inst)
+    inline LoopBBs& getJoinLoop(const CallICFGNode* inst)
     {
         return tct->getJoinLoop(inst);
     }
-    inline bool hasJoinLoop(const SVFInstruction* inst)
+    inline bool hasJoinLoop(const CallICFGNode* inst)
     {
         return tct->hasJoinLoop(inst);
     }
@@ -389,20 +380,15 @@ private:
     void handleIntra(const CxtStmt& cts);
 
     /// Return true if the fork and join have the same SCEV
-    bool isSameSCEV(const SVFInstruction* forkSite, const SVFInstruction* joinSite);
+    bool isSameSCEV(const ICFGNode* forkSite, const ICFGNode* joinSite);
 
     /// Same loop trip count
-    bool sameLoopTripCount(const SVFInstruction* forkSite, const SVFInstruction* joinSite);
+    bool sameLoopTripCount(const ICFGNode* forkSite, const ICFGNode* joinSite);
 
     /// Whether it is a matched fork join pair
-    bool isAliasedForkJoin(const SVFInstruction* forkSite, const SVFInstruction* joinSite)
+    bool isAliasedForkJoin(const CallICFGNode* forkSite, const CallICFGNode* joinSite)
     {
-        return tct->getPTA()->alias(getForkedThread(forkSite), getJoinedThread(joinSite)) && isSameSCEV(forkSite,joinSite);
-    }
-    // Get CallICFGNode
-    inline CallICFGNode* getCBN(const SVFInstruction* inst)
-    {
-        return tct->getCallICFGNode(inst);
+        return tct->getPTA()->alias(getForkedThread(forkSite)->getId(), getJoinedThread(joinSite)->getId());
     }
     /// Mark thread flags for cxtStmt
     //@{
@@ -424,7 +410,11 @@ private:
         ValDomain flag_tgr = getMarkedFlag(tgr);
         cxtStmtToAliveFlagMap[tgr] = flag;
         if(flag_tgr!=getMarkedFlag(tgr))
+        {
+            instToCxtStmt[tgr.getStmt()].insert(tgr);
             pushToCTSWorkList(tgr);
+        }
+
     }
     /// Transfer function for marking context-sensitive statement
     void markCxtStmtFlag(const CxtStmt& tgr, const CxtStmt& src)
@@ -446,6 +436,7 @@ private:
         }
         if(flag_tgr!=getMarkedFlag(tgr))
         {
+            instToCxtStmt[tgr.getStmt()].insert(tgr);
             pushToCTSWorkList(tgr);
         }
     }
@@ -470,40 +461,53 @@ private:
     }
     //@}
 
+    /// Context helper functions
+    //@{
     /// Push calling context
-    inline void pushCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee)
+    inline void pushCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee)
     {
+        /// handle calling context for candidate functions only
+        if(tct->isCandidateFun(call->getFun()) == false)
+            return;
         tct->pushCxt(cxt,call,callee);
     }
     /// Match context
-    inline bool matchCxt(CallStrCxt& cxt, const SVFInstruction* call, const SVFFunction* callee)
+    inline bool matchAndPopCxt(CallStrCxt& cxt, const CallICFGNode* call, const FunObjVar* callee)
     {
-        return tct->matchCxt(cxt,call,callee);
+        return tct->matchAndPopCxt(cxt,call,callee);
     }
+    /// If lhs is a suffix of rhs, including equal
+    inline bool isContextSuffix(const CallStrCxt& lhs, const CallStrCxt call)
+    {
+        return tct->isContextSuffix(lhs,call);
+    }
+    //@}
 
     /// Whether it is a fork site
-    inline bool isTDFork(const SVFInstruction* call)
+    inline bool isTDFork(const ICFGNode* call)
     {
-        return getTCG()->getThreadAPI()->isTDFork(call);
+        const CallICFGNode* fork = SVFUtil::dyn_cast<CallICFGNode>(call);
+        return fork && getTCG()->getThreadAPI()->isTDFork(fork);
     }
     /// Whether it is a join site
-    inline bool isTDJoin(const SVFInstruction* call)
+    inline bool isTDJoin(const ICFGNode* call)
     {
-        return getTCG()->getThreadAPI()->isTDJoin(call);
+        const CallICFGNode* join = SVFUtil::dyn_cast<CallICFGNode>(call);
+        return join && getTCG()->getThreadAPI()->isTDJoin(join);
     }
     /// Get forked thread
-    inline const SVFValue* getForkedThread(const SVFInstruction* call)
+    inline const SVFVar* getForkedThread(const CallICFGNode* call)
     {
         return getTCG()->getThreadAPI()->getForkedThread(call);
     }
     /// Get joined thread
-    inline const SVFValue* getJoinedThread(const SVFInstruction* call)
+    inline const SVFVar* getJoinedThread(const CallICFGNode* call)
     {
         return getTCG()->getThreadAPI()->getJoinedThread(call);
     }
-    inline const PTACallGraph::FunctionSet& getCallee(const SVFInstruction* inst, PTACallGraph::FunctionSet& callees)
+    inline const CallGraph::FunctionSet& getCallee(const ICFGNode* inst, CallGraph::FunctionSet& callees)
     {
-        getTCG()->getCallees(getCBN(inst), callees);
+        getTCG()->getCallees(SVFUtil::cast<CallICFGNode>(inst), callees);
         return callees;
     }
     /// ThreadCallGraph
@@ -543,6 +547,18 @@ private:
     }
     //@}
 
+    /// Get CxtStmtSet for an instruction
+    inline const CxtStmtSet& getCxtStmtsFromInst(const ICFGNode* inst) const
+    {
+        InstToCxtStmt::const_iterator it = instToCxtStmt.find(inst);
+        assert(it!=instToCxtStmt.end() && "no CxtStmt for the instruction?");
+        return it->second;
+    }
+    inline bool hasCxtStmtsFromInst(const ICFGNode* inst) const
+    {
+        return instToCxtStmt.find(inst)!=instToCxtStmt.end();
+    }
+
     /// Add inloop join
     inline void addSymmetricLoopJoin(const CxtStmt& cs, LoopBBs& lp)
     {
@@ -558,6 +574,7 @@ private:
     ThreadPairSet HPPair;		///< threads happen-in-parallel
     ThreadPairSet fullJoin;		///< t1 fully joins t2 along all program path
     ThreadPairSet partialJoin;		///< t1 partially joins t2 along some program path(s)
+    InstToCxtStmt instToCxtStmt;    ///<Map a statement to all its context-sensitive statements
 };
 
 } // End namespace SVF

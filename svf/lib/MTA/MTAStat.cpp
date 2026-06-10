@@ -32,8 +32,8 @@
 #include "MTA/TCT.h"
 #include "MTA/MHP.h"
 #include "MTA/LockAnalysis.h"
-#include "MTA/FSMPTA.h"
 #include "Graphs/ThreadCallGraph.h"
+#include "Graphs/CallGraph.h"
 
 using namespace SVF;
 
@@ -50,8 +50,8 @@ void MTAStat::performThreadCallGraphStat(ThreadCallGraph* tcg)
     for (ThreadCallGraph::CallSiteSet::const_iterator it = tcg->forksitesBegin(), eit = tcg->forksitesEnd(); it != eit; ++it)
     {
         bool indirectfork = false;
-        const SVFFunction* spawnee = SVFUtil::dyn_cast<SVFFunction>(tcg->getThreadAPI()->getForkedFun((*it)->getCallSite()));
-        if(spawnee==nullptr)
+        const ValVar* pValVar = tcg->getThreadAPI()->getForkedFun(*it);
+        if(!SVFUtil::isa<FunValVar>(pValVar))
         {
             numOfIndForksite++;
             indirectfork = true;
@@ -115,42 +115,41 @@ void MTAStat::performMHPPairStat(MHP* mhp, LockAnalysis* lsa)
     SVFIR* pag = SVFIR::getPAG();
     if(Options::AllPairMHP())
     {
-        Set<const SVFInstruction*> instSet1;
-        Set<const SVFInstruction*> instSet2;
-        SVFModule* mod = mhp->getTCT()->getSVFModule();
-        for (const SVFFunction* fun : mod->getFunctionSet())
+        Set<const ICFGNode*> instSet1;
+        Set<const ICFGNode*> instSet2;
+
+        for (const auto& item : *PAG::getPAG()->getCallGraph())
         {
+            const FunObjVar* fun = item.second->getFunction();
             if(SVFUtil::isExtCall(fun))
                 continue;
             if(!mhp->isConnectedfromMain(fun))
                 continue;
-            for (SVFFunction::const_iterator bit =  fun->begin(), ebit = fun->end(); bit != ebit; ++bit)
+            for (FunObjVar::const_bb_iterator bit =  fun->begin(), ebit = fun->end(); bit != ebit; ++bit)
             {
-                const SVFBasicBlock* bb = *bit;
-                for (SVFBasicBlock::const_iterator ii = bb->begin(), eii = bb->end(); ii != eii; ++ii)
+                const SVFBasicBlock* bb = bit->second;
+                for (const auto& icfgNode : bb->getICFGNodeList())
                 {
-                    const SVFInstruction* inst = *ii;
-                    for(const SVFStmt* stmt : pag->getSVFStmtList(pag->getICFG()->getICFGNode(inst)))
+                    for(const SVFStmt* stmt : pag->getSVFStmtList(icfgNode))
                     {
                         if(SVFUtil::isa<LoadStmt>(stmt))
                         {
-                            instSet1.insert(inst);
+                            instSet1.insert(stmt->getICFGNode());
                         }
                         else if(SVFUtil::isa<StoreStmt>(stmt))
                         {
-                            instSet1.insert(inst);
-                            instSet2.insert(inst);
+                            instSet1.insert(stmt->getICFGNode());
+                            instSet2.insert(stmt->getICFGNode());
                         }
                     }
-
                 }
             }
         }
 
 
-        for(Set<const SVFInstruction*>::const_iterator it1 = instSet1.begin(), eit1 = instSet1.end(); it1!=eit1; ++it1)
+        for(Set<const ICFGNode*>::const_iterator it1 = instSet1.begin(), eit1 = instSet1.end(); it1!=eit1; ++it1)
         {
-            for(Set<const SVFInstruction*>::const_iterator it2 = instSet2.begin(), eit2 = instSet2.end(); it2!=eit2; ++it2)
+            for(Set<const ICFGNode*>::const_iterator it2 = instSet2.begin(), eit2 = instSet2.end(); it2!=eit2; ++it2)
             {
                 mhp->mayHappenInParallel(*it1,*it2);
             }
@@ -166,38 +165,13 @@ void MTAStat::performMHPPairStat(MHP* mhp, LockAnalysis* lsa)
     PTNumStatMap["TotalLockQueries"] = lsa->numOfTotalQueries;
     PTNumStatMap["NumOfLockedPairs"] = lsa->numOfLockedQueries;
     PTNumStatMap["NumOfCxtLocks"] = lsa->getNumOfCxtLocks();
-    PTNumStatMap["NumOfNewSVFGEdges"] = MTASVFGBuilder::numOfNewSVFGEdges;
-    PTNumStatMap["NumOfRemovedEdges"] = MTASVFGBuilder::numOfRemovedSVFGEdges;
-    PTNumStatMap["NumOfRemovedPTS"] = MTASVFGBuilder::numOfRemovedPTS;
     timeStatMap["InterlevAnaTime"] = mhp->interleavingTime;
     timeStatMap["LockAnaTime"] = lsa->lockTime;
     timeStatMap["InterlevQueryTime"] = mhp->interleavingQueriesTime;
     timeStatMap["LockQueryTime"] = lsa->lockQueriesTime;
     timeStatMap["MHPAnalysisTime"] = MHPTime;
-    timeStatMap["MFSPTATime"] = FSMPTATime;
 
     SVFUtil::outs() << "\n****MHP Stmt Pairs Statistics****\n";
     PTAStat::printStat();
 }
-
-// void MTAStat::performAnnotationStat(MTAAnnotator* anno)
-// {
-
-//     PTNumStatMap.clear();
-//     timeStatMap.clear();
-//     PTNumStatMap["TotalNumOfStore"] = anno->numOfAllSt;
-//     PTNumStatMap["TotalNumOfLoad"] = anno->numOfAllLd;
-//     PTNumStatMap["NumOfNonLocalStore"] = anno->numOfNonLocalSt;
-//     PTNumStatMap["NumOfNonLocalLoad"] = anno->numOfNonLocalLd;
-//     PTNumStatMap["NumOfAliasStore"] = anno->numOfAliasSt;
-//     PTNumStatMap["NumOfAliasLoad"] = anno->numOfAliasLd;
-//     PTNumStatMap["NumOfMHPStore"] = anno->numOfMHPSt;
-//     PTNumStatMap["NumOfMHPLoad"] = anno->numOfMHPLd;
-//     PTNumStatMap["NumOfAnnotatedStore"] = anno->numOfAnnotatedSt;
-//     PTNumStatMap["NumOfAnnotatedLoad"] = anno->numOfAnnotatedLd;
-//     timeStatMap["AnnotationTime"] = AnnotationTime;
-
-//     SVFUtil::outs() << "\n****Annotation Statistics****\n";
-//     PTAStat::printStat();
-// }
 

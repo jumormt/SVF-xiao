@@ -2,6 +2,10 @@
 
 
 ## News
+* <b>SVF now supports [LLVM-21](https://github.com/SVF-tools/SVF/pull/1815) (Contributed by [cjsrxzdyzds](https://github.com/cjsrxzdyzds)). </b>
+* <b>SVF now supports new [build system](https://github.com/SVF-tools/SVF/pull/1703) (Thank [Johannes](https://github.com/Johanmyst) for his help!). </b>
+* <b> [SVF-Python](https://github.com/SVF-tools/SVF-Python) is now available, enabling developers to write static analyzers in Python by leveraging the SVF library (Contributed by [Jiawei Wang](https://github.com/bjjwwang)). </b>
+* <b>New course [Software Security Analysis](https://github.com/SVF-tools/Software-Security-Analysis) for learning code analysis and verification with SVF for fun and expertise! </b>
 * <b>SVF now supports LLVM-16.0.0 with opaque pointers (Contributed by [Xiao Cheng](https://github.com/jumormt)). </b>
 * <b>Modernize SVF's CMake (Contributed by [Johannes](https://github.com/Johanmyst)). </b>
 * <b>SVF now supports LLVM-13.0.0 (Thank [Shengjie Xu](https://github.com/xushengj) for his help!). </b>
@@ -26,8 +30,10 @@
 
 ## Documentation
 
+<br />
+
 <b>SVF</b> is a static value-flow analysis tool for LLVM-based languages. <b>SVF</b> ([CC'16](https://yuleisui.github.io/publications/cc16.pdf)) is able to perform
-* [AE](https://github.com/SVF-tools/SVF/tree/master/svf/include/AE) (<b>abstract execution</b>): cross-domain execution ([ICSE'24](https://yuleisui.github.io/publications/icse24a.pdf)), typestate analysis ([FSE'24](https://yuleisui.github.io/publications/fse24a.pdf));
+* [AE](https://github.com/SVF-tools/SVF/tree/master/svf/include/AE) (<b>abstract execution</b>): cross-domain execution ([ICSE'24](https://yuleisui.github.io/publications/icse24a.pdf)), recursion analysis ([ECOOP'25](https://yuleisui.github.io/publications/ecoop25.pdf)) typestate analysis ([FSE'24](https://yuleisui.github.io/publications/fse24a.pdf));
 * [WPA](https://github.com/SVF-tools/SVF/tree/master/svf/include/WPA) (<b>whole program analysis</b>): field-sensitive ([SAS'19](https://yuleisui.github.io/publications/sas2019a.pdf)), flow-sensitive ([CGO'21](https://yuleisui.github.io/publications/cgo21.pdf), [OOPSLA'21](https://yuleisui.github.io/publications/oopsla21.pdf)) analysis;
 * [DDA](https://github.com/SVF-tools/SVF/tree/master/svf/include/DDA) (<b>demand-driven analysis</b>): flow-sensitive, context-sensitive points-to analysis ([FSE'16](https://yuleisui.github.io/publications/fse16.pdf), [TSE'18](https://yuleisui.github.io/publications/tse18.pdf));
 * [MSSA](https://github.com/SVF-tools/SVF/tree/master/svf/include/MSSA) (<b>memory SSA form construction</b>): memory regions, side-effects, SSA form ([JSS'18](https://yuleisui.github.io/publications/jss18.pdf));
@@ -37,6 +43,8 @@
 * [SVFIR](https://github.com/SVF-tools/SVF/tree/master/svf/include/SVFIR) and [MemoryModel](https://github.com/SVF-tools/SVF/tree/master/svf/include/MemoryModel) (<b>SVFIR</b>): SVFIR, memory abstraction and points-to data structure ([SAS'21](https://yuleisui.github.io/publications/sas21.pdf));
 * [Graphs](https://github.com/SVF-tools/SVF/tree/master/svf/include/Graphs): <b> generating a variety of graphs</b>, including call graph, ICFG, class hierarchy graph, constraint graph, value-flow graph for static analyses and code embedding ([OOPSLA'20](https://yuleisui.github.io/publications/oopsla20.pdf), [TOSEM'21](https://yuleisui.github.io/publications/tosem21.pdf))
 
+<p>We release the SVF source code with the hope of benefiting the open-source community. You are kindly requested to acknowledge usage of the tool by referring to or citing relevant publications above. </p>
+
 <b>SVF</b>'s doxygen document is available [here](https://svf-tools.github.io/SVF-doxygen/html).
 
 <br />
@@ -44,35 +52,8 @@
 | About SVF       | Setup  Guide         | User Guide  | Developer Guide  |
 | ------------- |:-------------:| -----:|-----:|
 | ![About](https://github.com/svf-tools/SVF/blob/master/docs/images/help.png?raw=true)| ![Setup](https://github.com/svf-tools/SVF/blob/master/docs/images/tools.png?raw=true)  | ![User](https://github.com/svf-tools/SVF/blob/master/docs/images/users.png?raw=true)  |  ![Developer](https://github.com/svf-tools/SVF/blob/master/docs/images/database.png?raw=true) 
-| Introducing SVF -- [what it does](https://github.com/svf-tools/SVF/wiki/About#what-is-svf) and [how we design it](https://github.com/svf-tools/SVF/wiki/SVF-Design#svf-design)      | A step by step [setup guide](https://github.com/svf-tools/SVF/wiki/Setup-Guide#getting-started) to build SVF | Command-line options to [run SVF](https://github.com/svf-tools/SVF/wiki/User-Guide#quick-start), get [analysis outputs](https://github.com/svf-tools/SVF/wiki/User-Guide#analysis-outputs), and test SVF with [an example](https://github.com/svf-tools/SVF/wiki/Analyze-a-Simple-C-Program) or [PTABen](https://github.com/SVF-tools/PTABen) | Detailed [technical documentation](https://github.com/svf-tools/SVF/wiki/Technical-documentation) and how to [write your own analyses](https://github.com/svf-tools/SVF/wiki/Write-your-own-analysis-in-SVF) in SVF or [use SVF as a lib](https://github.com/SVF-tools/SVF-example) for your tool  |
+| Introducing SVF -- [what it does](https://github.com/svf-tools/SVF/wiki/About#what-is-svf) and [how we design it](https://github.com/svf-tools/SVF/wiki/SVF-Design#svf-design)      | A step by step [setup guide](https://github.com/svf-tools/SVF/wiki/Setup-Guide#getting-started) to build SVF | Command-line options to [run SVF](https://github.com/svf-tools/SVF/wiki/User-Guide#quick-start), get [analysis outputs](https://github.com/svf-tools/SVF/wiki/User-Guide#analysis-outputs), and test SVF with [an example](https://github.com/svf-tools/SVF/wiki/Analyze-a-Simple-C-Program) or [PTABen](https://github.com/SVF-tools/PTABen) | Detailed [technical documentation](https://github.com/svf-tools/SVF/wiki/Technical-documentation) and how to [write your own analyses](https://github.com/svf-tools/SVF/wiki/Write-your-own-analysis-in-SVF) in SVF or [use SVF as a lib](https://github.com/SVF-tools/SVF-example) for your tool, and the [course](https://github.com/SVF-tools/Software-Security-Analysis) on SVF  |
 
 <br />
 
-#### We are looking for self-motivated PhD students and welcome industry collaboration to improve SVF (Please contact y.sui@unsw.edu.au)
 
-<br />
-<p>We release SVF source code in the hope of benefiting others. You are kindly asked to acknowledge usage of the tool by citing some of our publications listed http://svf-tools.github.io/SVF, especially the following two: </p>
-
-```
-@inproceedings{sui2016svf,
-  title={SVF: interprocedural static value-flow analysis in LLVM},
-  author={Sui, Yulei and Xue, Jingling},
-  booktitle={Proceedings of the 25th international conference on compiler construction},
-  pages={265--266},
-  year={2016},
-  organization={ACM}
-}
-```
-
-```
-@article{sui2014detecting,
-  title={Detecting memory leaks statically with full-sparse value-flow analysis},
-  author={Sui, Yulei and Ye, Ding and Xue, Jingling},
-  journal={IEEE Transactions on Software Engineering},
-  volume={40},
-  number={2},
-  pages={107--122},
-  year={2014},
-  publisher={IEEE}
-}
-```
