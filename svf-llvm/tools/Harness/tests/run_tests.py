@@ -188,5 +188,23 @@ class HarnessTest(unittest.TestCase):
         self.assertIn("evidence_record", j)
         self.assertIn("program", j)
 
+    def test_schema_summary_consistency(self):
+        # regression: dangling SVFG pointer corrupted svfg_nodes after schema()
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td); sock = os.path.join(td, "h.sock")
+            srv = subprocess.Popen([BIN, "serve", ll, "--socket", sock],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                self.wait_for(lambda: os.path.exists(sock), 60)
+                before = self.client(sock, "summary", {})["result"]
+                schema = self.client(sock, "schema", {})["result"]
+                after = self.client(sock, "summary", {})["result"]
+                self.assertEqual(before, after)
+                self.assertEqual(schema["program"]["summary"], before)
+                self.assertGreater(before["svfg_nodes"], 0)
+                self.assertLess(before["svfg_nodes"], 10000)  # demo fixture is tiny
+            finally:
+                self.client(sock, "shutdown", {}); srv.wait(timeout=10)
+
 if __name__ == "__main__":
     unittest.main()

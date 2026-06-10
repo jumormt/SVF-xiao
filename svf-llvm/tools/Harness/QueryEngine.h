@@ -1,5 +1,6 @@
 //===- QueryEngine.h -- SVF analysis bootstrap + query dispatch ----------===//
 #pragma once
+#include "MSSA/SVFGBuilder.h"
 #include "nlohmann/json.hpp"
 #include <string>
 #include <vector>
@@ -58,6 +59,7 @@ private:
     std::vector<std::string> modules;
     SVF::SVFIR* pag = nullptr;
     SVF::AndersenBase* ander = nullptr;
+    SVF::SVFGBuilder svfBuilder; // owns the SVFG; must outlive svfg
     SVF::SVFG* svfg = nullptr;
     SVF::CallGraph* callgraph = nullptr;
 };

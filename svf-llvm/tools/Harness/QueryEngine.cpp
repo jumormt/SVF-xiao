@@ -35,11 +35,14 @@ QueryEngine::QueryEngine(const std::vector<std::string>& moduleNames)
     LLVMModuleSet::preProcessBCs(names);
     LLVMModuleSet::buildSVFModule(names);
 
+    // SVFIRBuilder holds a non-owning pointer to the SVFIR::getPAG()
+    // singleton, so a temporary builder is safe here.
     SVFIRBuilder builder;
     pag = builder.build();
     ander = AndersenWaveDiff::createAndersenWaveDiff(pag);
     callgraph = ander->getCallGraph();
-    SVFGBuilder svfBuilder;
+    // svfBuilder is a member: it owns the SVFG via unique_ptr and must
+    // outlive our svfg pointer (a stack-local builder left it dangling).
     svfg = svfBuilder.buildFullSVFG(ander);
 }
 
