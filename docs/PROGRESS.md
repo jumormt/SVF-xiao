@@ -11,7 +11,7 @@ through which an LLM can introspect the schema, navigate SVF's graphs, and get
 value-flow paths with structured evidence.
 
 ## Epics
-- [ ] E1: svf-harness thin slice (v0) — daemon/CLI/MCP, 11 query methods, evidence v0
+- [x] E1: svf-harness thin slice (v0) — daemon/CLI/MCP, 11 query methods, evidence v0
 - [ ] E2: declarative query language L_Q (proposal Task 2.2) — future
 - [ ] E3: composable precision configuration (proposal Task 1) — future
 - [ ] E4: evidence schema with path conditions / abstract traces (proposal Task 2.3) — future
@@ -19,23 +19,13 @@ value-flow paths with structured evidence.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
-| 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
+| 2026-06-10 | svf-harness-thin-slice | E1 | done | **All 7 phases done, 2026-06-10.** 11 methods, daemon+CLI+MCP, 33 py tests, full regression 2267/2267, demo green. Summary: `docs/summaries/2026-06-10-svf-harness-thin-slice.md` |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 7:** start Task 7.1 (end-to-end demo +
-  ctest hook + docs), Step 1: demo script
-  `svf-llvm/tools/Harness/demo/llm_workflow.sh` (build fixture, start
-  daemon, replay `schema → functions(".*free.*") → vfpath(malloc ret →
-  b[0])`, pretty-print witness path, shut down; exit 0, first step locates
-  malloc, last step line 11). Then Step 2 ctest hook (`harness_integration`
-  in Harness/CMakeLists.txt with SVF_HARNESS_BIN env), Step 3 full
-  Test-Suite serial re-run, Step 4 Harness README + MCP setup docs +
-  plan→done + summary, Step 5 commit+push. Task 6.1 done (f7e84a5e,
-  33/33): MCP wrapper is 13 STATIC tools (load_program/unload_program +
-  11 methods with generic `params` dict; schema tool = source of truth —
-  see plan Task 6.1 notes for rationale); Task 7.1 Step 4's MCP setup
-  line should match mcp/svf_harness_mcp/README.md (python with `mcp` SDK
-  + SVF_HARNESS_BIN env, not bare python3).
+- **Merge/push decision for `harness-v0`** (user): merge into focal and/or push to fork.
+- **Next epic candidates** (user picks): E2 declarative query language L_Q (proposal
+  Task 2.2) — natural next; or exercise the harness on a real codebase first
+  (recommended shakedown before E2).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -213,3 +203,12 @@ value-flow paths with structured evidence.
 - **Files:** mcp/svf_harness_mcp/{server.py,test_smoke.py,pyproject.toml,
   README.md}(new), svf-llvm/tools/Harness/tests/run_tests.py
 - **Blockers:** none
+
+### 2026-06-10 (later)
+- **Focus:** svf-harness thin slice implementation (subagent-driven, Tasks 1.1-7.1)
+- **Completed:** entire plan — daemon/CLI (11 methods), MCP wrapper, schema invariant
+  script, demo. 2 critical bugs caught in review (SVFG use-after-free; daemon
+  idle-wedge). Final holistic review: ready to merge.
+- **Tests:** 33 python integration tests green; full Test-Suite 2267/2267 serial; demo PASSED
+- **Files:** svf-llvm/tools/Harness/* (~2400 LoC C++), mcp/svf_harness_mcp/*, docs/*
+- **Blockers:** none. Branch harness-v0 unpushed pending user decision.
