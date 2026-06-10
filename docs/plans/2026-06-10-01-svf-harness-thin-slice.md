@@ -280,7 +280,7 @@ through SVF's `OptionBase::parseOptions` (as svf-ex does) to get module paths, c
 - Modify: `QueryEngine.{h,cpp}`
 - Test: append to `tests/run_tests.py`
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```python
     def test_functions_lists_fixture_funcs(self):
@@ -295,7 +295,7 @@ through SVF's `OptionBase::parseOptions` (as svf-ex does) to get module paths, c
 Add an `oneshot(method, params)` helper to the test class that passes params as a JSON
 string argument: `[BIN, "--oneshot", method, "--params", json.dumps(params), ll]`.
 
-- [ ] **Step 2: Evidence.h**
+- [x] **Step 2: Evidence.h**
 
 ```cpp
 #pragma once
@@ -315,12 +315,22 @@ nlohmann::json node(const SVF::SVFVar* n);
 (If `getSourceLoc()` returns structured `SVFLoc` in current master, use it directly —
 grep `getSourceLoc` in `svf/include/Util/SVFValue.h` and `Graphs/ICFGNode.h` first.)
 
-- [ ] **Step 3: Implement `functions`** — iterate `callgraph` nodes, filter by
+- [x] **Step 3: Implement `functions`** — iterate `callgraph` nodes, filter by
   `std::regex` on name, emit `{name, loc, is_decl, num_args}` per function (function
   object: `CallGraphNode::getFunction()`; verify type in `Graphs/CallGraph.h`).
   Support `--params` JSON in oneshot mode.
 
-- [ ] **Step 4: Build + test PASS; Commit** — `harness: functions() with evidence locs`
+- [x] **Step 4: Build + test PASS; Commit** — `harness: functions() with evidence locs`
+
+**Implementation notes (Task 2.2, commit cebb73e3):** Evidence became `.h` + `.cpp`
+(not header-only). API deltas vs sketch: SVFValue lives in `svf/include/SVFIR/SVFValue.h`
+(not Util/); `getSourceLoc()` strings are JSON-ish with *quoted* keys, and instructions
+use `"fl"` while functions use `"file"` — `evidence::loc()` tries both. `kind` =
+leading alpha run of `toString()` (each SVF subclass prints its class name first);
+function object is `const FunObjVar*` via `CallGraphNode::getFunction()`, with
+`isDeclaration()` / `arg_size()`. `evidence::node()` overloads compile but are first
+exercised by later tasks (callers/cfg). `--params` is stripped before
+`OptionBase::parseOptions` since SVF's parser rejects unknown flags.
 
 ## Phase 3: Daemon + socket protocol
 

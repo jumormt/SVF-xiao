@@ -22,11 +22,12 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 2:** continue at Task 2.2 (functions(pattern) +
-  Evidence.h node records), Step 1 (failing test with `oneshot(method, params)` helper
-  passing `--params` JSON). Task 2.1 done (commit a94ed8dc): QueryEngine bootstrap +
-  `--oneshot summary`, 3 python tests green. See Task 2.1 implementation notes in the
-  plan for API deltas (-fexceptions, -stat=false injection, abort-on-bad-input guard).
+- **svf-harness-thin-slice Phase 3:** start Task 3.1 (HarnessServer + client mode +
+  shutdown), Step 1 (failing daemon-lifecycle test `test_daemon_roundtrip` with
+  `client(sock, method, params)` JSON-RPC helper over Unix socket). Task 2.2 done
+  (commit cebb73e3): `functions(pattern)` + Evidence records + `--params`, 5 python
+  tests green. See Task 2.2 implementation notes in the plan for API deltas
+  (SVFValue.h moved to SVFIR/, sourceLoc "fl" vs "file" keys, FunObjVar accessors).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -66,4 +67,16 @@ value-flow paths with structured evidence.
   test_oneshot_summary)
 - **Files:** svf-llvm/tools/Harness/{QueryEngine.h,QueryEngine.cpp,svf-harness.cpp,
   CMakeLists.txt,tests/run_tests.py}
+- **Blockers:** none
+
+### 2026-06-10 (Task 2.2)
+- **Focus:** svf-harness Phase 2 Task 2.2 — functions(pattern) + Evidence records
+- **Completed:** Evidence.{h,cpp} (uniform kind/id/loc/ir node records; tolerant
+  getSourceLoc() parser handling "fl"/"file" key variants); QueryEngine::functions
+  (regex search, sorted, 200-cap + truncated flag); `--oneshot --params <json>`
+  (stripped before SVF option parsing). Commit cebb73e3.
+- **Tests:** 5/5 harness python tests green (new: test_functions_lists_fixture_funcs);
+  manual: pattern "make" → make_buf only; bad JSON / bad regex → JSON error exit 1
+- **Files:** svf-llvm/tools/Harness/{Evidence.h,Evidence.cpp,QueryEngine.h,
+  QueryEngine.cpp,svf-harness.cpp,CMakeLists.txt,tests/run_tests.py}
 - **Blockers:** none
