@@ -6,6 +6,7 @@ add_subdirectory(MTA)
 add_subdirectory(CFL)
 add_subdirectory(LLVM2SVF)
 add_subdirectory(AE)
+add_subdirectory(Harness)
 
 set(ALL_TOOLS
     ae
@@ -15,6 +16,7 @@ set(ALL_TOOLS
     mta
     saber
     svf-ex
+    svf-harness
     wpa
 )
 
