@@ -619,7 +619,7 @@ public facade; all five source files share the same CMake target.
 
 **Files:** modify `QueryEngine.{h,cpp}`, `Evidence.h`; tests.
 
-- [ ] **Step 1: Failing test (the acceptance scenario)**
+- [x] **Step 1: Failing test (the acceptance scenario)**
 
 ```python
     def test_vfpath_malloc_to_use(self):
@@ -636,7 +636,7 @@ public facade; all five source files share the same CMake target.
         self.assertIn("truncated", j)
 ```
 
-- [ ] **Step 2: Implement** — resolve source/sink anchors to SVFG nodes
+- [x] **Step 2: Implement** — resolve source/sink anchors to SVFG nodes
   (`svfg->getDefSVFGNode(var)` for defs; for sinks, the SVFG node(s) whose ICFG node
   matches the `file:line`); BFS over SVFG out-edges recording parent pointers, budget
   `max_visited=100000` (param-overridable), collect up to k distinct paths; emit
@@ -644,7 +644,60 @@ public facade; all five source files share the same CMake target.
   (edge kind via `dyn_cast<CallDirSVFGEdge/RetDirSVFGEdge/...>` — grep
   `Graphs/SVFGEdge.h` for the class list). `reachable` = same machinery, k=1,
   multiple sinks, returns `[{sink, reachable, first_path?}]`.
-- [ ] **Step 3: PASS + Commit** — `harness: value-flow paths with witness evidence`
+- [x] **Step 3: PASS + Commit** — `harness: value-flow paths with witness evidence`
+
+**Task 5.1 implementation notes (commit 9f99dd43, 30/30 tests green):**
+- **New TU `VFPath.cpp`** (third QueryEngine TU): Queries.cpp (575 lines) +
+  ~400 lines of vfpath/reachable would have exceeded the ~800-line split
+  threshold. `fileMatches` moved to `evidence::fileMatches` (Evidence.{h,cpp})
+  so both TUs share it.
+- **BFS k-paths strategy (the simple option, documented in schema):** ONE
+  multi-source BFS over SVFG out-edges with a parent tree
+  (node id -> (pred, in-edge)); each distinct sink SVFG node yields at most
+  one shortest-by-edge-count witness path, k caps how many distinct sink
+  nodes are reported. No k-rounds/node-banning — alternative routes to the
+  SAME sink node are not enumerated; honestly stated in the schema method
+  description together with may-analysis semantics ("evidence to inspect,
+  not proof of a bug"). `truncated` = max_visited budget (default 100000,
+  counted at dequeue) exhausted with frontier left.
+- **Anchors:** sources = resolveVars() then `dyn_cast<ValVar>` +
+  `svfg->hasDefSVFGNode/getDefSVFGNode` (svf-ex traverseOnVFG guard; the def
+  map covers top-level ValVars only). Sinks: {file,line[,name]} scans ICFG
+  nodes by loc and takes `ICFGNode::getVFGNodes()` (every value-flow use/def
+  at the line; name filters via `VFGNode::getValue()->getValueName()`);
+  {func,ret/arg} = def nodes + scan of SVFG nodes whose `getValue()` is one
+  of the resolved vars. Misses throw the standard anchor error (with
+  nearest value-flow lines / name-filter hints).
+- **Edge labels:** isa<> over the 7 concrete classes (CallDir/RetDir/
+  IntraDir/CallInd/RetInd/ThreadMHPInd/IntraInd); all four interprocedural
+  classes expose `getCallSiteId()` and `svfg->getCallSite(id)` (VFG.h,
+  delegates to CallGraph) maps back to the CallICFGNode for `callsite`
+  evidence.
+- **API discovery / latent bug fixed:** `VFGNode::getSourceLoc()` returns the
+  inherited `SVFValue::sourceLoc` string which SVF NEVER populates for VFG
+  nodes — all value-flow evidence locs were empty. `evidence::node(VFGNode)`
+  now takes the loc from `getICFGNode()->getSourceLoc()` (every VFG node is
+  wired to an ICFG node by `VFG::addVFGNode`).
+- **Money shot** (malloc -> line 11, k=3: 3 paths, visited=12): AddrVFGNode
+  demo.c:4 (make_buf) -> IntraPHI -> FormalRet -> [RetDirSVFGEdge +
+  callsite CallICFGNode@demo.c:8] ActualRet (use_after_free) ->
+  StoreVFGNode:8 -> [IntraIndSVFGEdge] LoadVFGNode:11.
+- **reachable:** sinks array capped at 20 (error names the cap); per-spec
+  first-hit witness via node->spec-indexes map; one BFS serves all sinks;
+  result {results: [{sink echo, reachable, first_path?}], sources, visited,
+  truncated}. Manual: line 11 -> true (6 steps), line 22 -> false.
+- **Carry-overs from Task 4.3 review all done:** defuse per-var defs/uses
+  capped at 200 (folded into truncated + schema doc + drift guard);
+  name-filter-miss error blames the filter and mentions
+  -fno-discard-value-names (counts pre-filter matches); {func,name} gets a
+  targeted "unsupported form" message; anchor-forms prose deduped into
+  `AnchorDoc.h` (`kAnchorForms`) shared by Queries.cpp/VFPath.cpp/Schema.cpp.
+- **Test deltas vs plan sketch:** edge assertions use the concrete class
+  names ("Ret"/"Call" substring) instead of the old intra|call|ret labels;
+  files-set comprehension skips empty-loc steps (MSSA/synthetic nodes);
+  line 22 (`return a0 + a19;` — inside long_ir_helper, not long_ir as the
+  task text guessed) verified as the unreachable sink. k default is 1
+  (max 10) per task spec; schema doc updated from the stale "default 3".
 
 ## Phase 6: MCP thin wrapper
 

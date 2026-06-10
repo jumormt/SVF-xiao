@@ -22,18 +22,18 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 5:** start Task 5.1 (vfpath + reachable),
-  Step 1 (failing test `test_vfpath_malloc_to_use`: source
-  `{func: malloc, ret: true}`, sink `{file: demo.c, line: 11}`, k=3 — full
-  sketch in plan). Reuse `resolveVars()` (Queries.cpp) for anchors: source
-  vars → `svfg->getDefSVFGNode(var)`; sinks need a new file:line → SVFG-node
-  resolver. BFS over SVFG out-edges with parent pointers + max_visited
-  budget; per-step edge labels via dyn_cast on the `Graphs/SVFGEdge.h`
-  concrete classes (names already in schema edge_kinds). Task 4.3 done
-  (commit ff2308a1, 24/24 tests): cfg/defuse/pts/aliases + shared
-  resolveVars; query bodies split into Queries.cpp (second TU of
-  QueryEngine) — see plan Task 4.3 notes for API findings and the v0
-  aliases same-function scope.
+- **svf-harness-thin-slice Phase 6:** start Task 6.1 (MCP thin wrapper),
+  Step 1 (failing smoke test `mcp/svf_harness_mcp/test_smoke.py`: in-memory
+  MCP client lists tools → 11 methods + `load_program`; `load_program` then
+  `summary` matches CLI fields; skip cleanly if `pip install mcp` is
+  unavailable). Then `server.py` via FastMCP: `load_program` spawns
+  `svf-harness serve` (binary from `SVF_HARNESS_BIN`), other tools
+  registered dynamically from the daemon's `schema()` and forwarded over
+  the socket; surface JSON-RPC `hint` in errors. Task 5.1 done (commit
+  9f99dd43, 30/30 tests): vfpath/reachable in new VFPath.cpp (third TU) —
+  see plan Task 5.1 notes for the single-BFS k-paths strategy, the
+  VFGNode::getSourceLoc() empty-loc fix, and the 4 review carry-overs
+  (AnchorDoc.h, defuse caps, anchor error messages).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -153,4 +153,26 @@ value-flow paths with structured evidence.
 - **Files:** svf-llvm/tools/Harness/{Queries.cpp(new),QueryEngine.h,
   QueryEngine.cpp,Schema.cpp,CMakeLists.txt,tests/run_tests.py,
   tests/fixtures/demo.c}
+- **Blockers:** none
+
+### 2026-06-10 (Task 5.1)
+- **Focus:** svf-harness Phase 5 Task 5.1 — vfpath/reachable + 4.3 carry-overs
+- **Completed:** vfpath (single multi-source BFS over SVFG out-edges, parent
+  tree, k=1..10 witness paths — one per distinct sink node, concrete
+  SVFGEdge labels + CallICFGNode callsite evidence on Call*/Ret* steps,
+  max_visited budget → truncated) and reachable (one shared BFS, ≤20 sinks,
+  first_path witnesses) in new VFPath.cpp; sink resolver via
+  ICFGNode::getVFGNodes(); fixed latent empty-loc bug (VFGNode sourceLoc is
+  never set by SVF — use the ICFG node's). Carry-overs: AnchorDoc.h shared
+  anchor prose, defuse defs/uses 200-caps, name-filter-miss +
+  {func,name} error messages. Honest BFS limits documented in schema.
+  Commit 9f99dd43.
+- **Tests:** 30/30 harness python tests green (new: vfpath_malloc_to_use,
+  reachable_batch, vfpath_unreachable, reachable_sink_cap,
+  anchor_name_filter_miss_hint, func_name_anchor_unsupported); manual:
+  malloc→line-11 money shot (RetDirSVFGEdge + callsite@demo.c:8, store 8 →
+  IntraInd → load 11), reachable [11 true/6 steps, 22 false]
+- **Files:** svf-llvm/tools/Harness/{VFPath.cpp(new),AnchorDoc.h(new),
+  Evidence.h,Evidence.cpp,Queries.cpp,QueryEngine.h,QueryEngine.cpp,
+  Schema.cpp,CMakeLists.txt,tests/run_tests.py}
 - **Blockers:** none
