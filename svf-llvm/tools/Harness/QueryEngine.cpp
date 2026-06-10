@@ -1,11 +1,14 @@
 //===- QueryEngine.cpp -- SVF analysis bootstrap + query dispatch --------===//
 #include "QueryEngine.h"
+#include "Evidence.h"
 #include "Graphs/SVFG.h"
 #include "SVF-LLVM/LLVMModule.h"
 #include "SVF-LLVM/LLVMUtil.h"
 #include "SVF-LLVM/SVFIRBuilder.h"
 #include "WPA/Andersen.h"
+#include <algorithm>
 #include <fstream>
+#include <regex>
 #include <stdexcept>
 
 using namespace SVF;
@@ -48,10 +51,58 @@ json QueryEngine::summary() const
     return j;
 }
 
+json QueryEngine::functions(const json& params) const
+{
+    std::string pattern = params.value("pattern", "");
+    std::regex re;
+    bool filter = !pattern.empty();
+    if (filter)
+    {
+        try
+        {
+            re = std::regex(pattern, std::regex::ECMAScript);
+        }
+        catch (const std::regex_error& e)
+        {
+            throw std::runtime_error("invalid pattern: " + pattern + " (" +
+                                     e.what() + ")");
+        }
+    }
+    std::vector<const FunObjVar*> funs;
+    for (const auto& it : *callgraph)
+    {
+        const FunObjVar* fun = it.second->getFunction();
+        if (!fun)
+            continue;
+        if (filter && !std::regex_search(fun->getName(), re))
+            continue;
+        funs.push_back(fun);
+    }
+    std::sort(funs.begin(), funs.end(),
+              [](const FunObjVar* a, const FunObjVar* b)
+    {
+        return a->getName() < b->getName();
+    });
+    constexpr size_t kCap = 200;
+    bool truncated = funs.size() > kCap;
+    if (truncated)
+        funs.resize(kCap);
+    json out = json::array();
+    for (const FunObjVar* fun : funs)
+    {
+        out.push_back({{"name", fun->getName()},
+                       {"loc", evidence::loc(fun->getSourceLoc())},
+                       {"is_decl", fun->isDeclaration()},
+                       {"num_args", fun->arg_size()}});
+    }
+    return json{{"functions", std::move(out)}, {"truncated", truncated}};
+}
+
 json QueryEngine::dispatch(const std::string& m, const json& p)
 {
-    (void)p;
     if (m == "summary")
         return summary();
+    if (m == "functions")
+        return functions(p);
     throw std::runtime_error("unknown method: " + m);
 }

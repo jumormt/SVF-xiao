@@ -19,6 +19,9 @@ public:
     explicit QueryEngine(const std::vector<std::string>& moduleNames);
     nlohmann::json dispatch(const std::string& method, const nlohmann::json& params);
     nlohmann::json summary() const;
+    /// List functions whose name matches params["pattern"] (ECMAScript regex,
+    /// search semantics; missing/empty => all). Sorted by name, capped at 200.
+    nlohmann::json functions(const nlohmann::json& params) const;
 
     // One instance per process — SVF state (LLVMModuleSet/PAG) is global.
     // Never throw from callbacks passed into SVF/LLVM code.

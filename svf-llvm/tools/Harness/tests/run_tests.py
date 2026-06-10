@@ -38,6 +38,23 @@ class HarnessTest(unittest.TestCase):
             self.assertGreaterEqual(j["functions"], 4)
             self.assertIn("icfg_nodes", j); self.assertIn("svfg_nodes", j)
 
+    def oneshot(self, method, params, fixture="demo.c"):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td, fixture)
+            out = subprocess.run([BIN, "--oneshot", method, "--params",
+                                  json.dumps(params), ll],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 0, f"stderr={out.stderr} stdout={out.stdout}")
+            return json.loads(out.stdout)
+
+    def test_functions_lists_fixture_funcs(self):
+        j = self.oneshot("functions", {"pattern": "use_after_free"})
+        names = [f["name"] for f in j["functions"]]
+        self.assertIn("use_after_free", names)
+        f = j["functions"][names.index("use_after_free")]
+        self.assertTrue(f["loc"]["file"].endswith("demo.c"))
+        self.assertGreater(f["loc"]["line"], 0)
+
     def test_oneshot_invalid_ir_json_error(self):
         with tempfile.TemporaryDirectory() as td:
             bad = os.path.join(td, "garbage.ll")
