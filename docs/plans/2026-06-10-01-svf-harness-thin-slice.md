@@ -516,11 +516,39 @@ int main(void) { return apply(0, 21); }
   {schema,summary,functions,callers,callees} ⊆ implemented set and that every
   implemented method has dict params + non-empty returns.
 
+**Task 4.2 code-review fixes (commit dbc7e91d, 18/18 tests green):**
+- **Fix 1 (contract):** Schema.cpp `returns` strings for `callers`/`callees`
+  corrected to document the real response shape `{function, calls:[{caller,
+  callee, callsite, direct}], total, truncated, matched_functions}`. The old
+  docs showed a bare array `[{...}]` which never matched the implementation.
+  `test_schema_self_describing` now asserts "calls" and "truncated" are present
+  in both entries as a drift guard.
+- **Fix 2 (ambiguous names — DECISION):** `callers`/`callees` now use MERGE
+  semantics: new `findFunctions()` returns ALL call-graph nodes whose name
+  matches exactly; `callEdges()` merges rows from all of them and reports
+  `matched_functions: N` (1 in the common case). This is the right behaviour
+  for same-named statics in different TUs. `findFunction()` (singular) is kept
+  for future single-target uses and throws on ambiguity with message
+  "ambiguous function name 'X': N matches; use functions() to disambiguate".
+  New fixtures `dup_a.c`/`dup_b.c` and `test_duplicate_function_names_merged`
+  verify the merge path (matched_functions==2, callers=={entry_a,entry_b}).
+  `oneshot()` now accepts a fixture list for multi-module tests.
+- **Fix 3 (hint perf):** edit-distance was computed inside a `sort` comparator,
+  causing O(n log n) Levenshtein DP runs over all call-graph names. Refactored:
+  unique candidate names collected into `std::set`, distance computed once per
+  candidate into `vector<pair<size_t,string>>`, then `std::partial_sort`
+  (top 5, O(n log 5)) instead of full sort. No behaviour change.
+
 ### Task 4.3: cfg / defuse / pts / aliases
 
 **Test obligation (from Task 2.2 quality review):** assert that cfg/defuse results carry
 instruction-level locs (the `"fl"` key path of evidence::loc) and exercise ir-truncation
 on at least one long node string.
+
+**Pre-implementation note (reviewer-suggested):** natural split point: if
+`QueryEngine.cpp` doubles in size as cfg/defuse/pts/aliases land, move query
+method bodies to `Queries.cpp` (planned refactor). Keep `QueryEngine.h` as the
+public facade; all five source files share the same CMake target.
 
 - [ ] **Step 1: Failing tests** — `cfg("use_after_free")` returns nodes with line
   numbers and intra edges; `pts` on variable `b` (resolve by `file:line` of the
