@@ -104,11 +104,27 @@ json QueryEngine::functions(const json& params) const
                 {"total", total}};
 }
 
+const std::vector<QueryEngine::Method>& QueryEngine::methodTable()
+{
+    static const std::vector<Method> table = {
+        {"summary", &QueryEngine::summaryQ},
+        {"functions", &QueryEngine::functions},
+    };
+    return table;
+}
+
+std::vector<std::string> QueryEngine::methodNames()
+{
+    std::vector<std::string> names;
+    for (const Method& m : methodTable())
+        names.push_back(m.name);
+    return names;
+}
+
 json QueryEngine::dispatch(const std::string& m, const json& p)
 {
-    if (m == "summary")
-        return summary();
-    if (m == "functions")
-        return functions(p);
+    for (const Method& entry : methodTable())
+        if (m == entry.name)
+            return (this->*entry.handler)(p);
     throw std::runtime_error("unknown method: " + m);
 }

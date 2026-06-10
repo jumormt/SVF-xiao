@@ -82,5 +82,66 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual(j["total"], len(j["functions"]))
         self.assertFalse(j["truncated"])
 
+    def wait_for(self, cond, timeout):
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            if cond(): return
+            time.sleep(0.1)
+        self.fail("timeout waiting for condition")
+
+    def client(self, sock, method, params, _id=[0]):
+        _id[0] += 1
+        req = {"jsonrpc": "2.0", "id": _id[0], "method": method, "params": params}
+        with socket.socket(socket.AF_UNIX) as s:
+            s.settimeout(60)
+            s.connect(sock); s.sendall((json.dumps(req) + "\n").encode())
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(65536)
+                if not chunk: break
+                buf += chunk
+        resp = json.loads(buf)
+        self.assertEqual(resp.get("jsonrpc"), "2.0")
+        self.assertEqual(resp.get("id"), _id[0])
+        return resp
+
+    def test_daemon_roundtrip(self):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td); sock = os.path.join(td, "h.sock")
+            srv = subprocess.Popen([BIN, "serve", ll, "--socket", sock],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                self.wait_for(lambda: os.path.exists(sock), 60)
+                r = self.client(sock, "summary", {})
+                self.assertIn("functions", r["result"])
+                r2 = self.client(sock, "functions", {"pattern": "make"})
+                self.assertEqual(r2["result"]["functions"][0]["name"], "make_buf")
+                bad = self.client(sock, "nope", {})
+                self.assertEqual(bad["error"]["code"], -32601)
+                self.assertIn("hint", bad["error"].get("data", {}))
+            finally:
+                self.client(sock, "shutdown", {})
+                srv.wait(timeout=10)
+                self.assertFalse(os.path.exists(sock))
+
+    def test_cli_client_subcommand(self):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td); sock = os.path.join(td, "h.sock")
+            srv = subprocess.Popen([BIN, "serve", ll, "--socket", sock],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                self.wait_for(lambda: os.path.exists(sock), 60)
+                out = subprocess.run([BIN, "functions", "--params",
+                                      json.dumps({"pattern": "main"}),
+                                      "--socket", sock],
+                                     capture_output=True, text=True)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                j = json.loads(out.stdout)
+                self.assertEqual(j["functions"][0]["name"], "main")
+            finally:
+                subprocess.run([BIN, "shutdown", "--socket", sock],
+                               capture_output=True, text=True)
+                srv.wait(timeout=10)
+
 if __name__ == "__main__":
     unittest.main()

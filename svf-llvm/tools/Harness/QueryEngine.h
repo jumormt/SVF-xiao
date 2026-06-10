@@ -18,6 +18,9 @@ public:
     /// Builds LLVM modules -> SVFIR -> Andersen -> SVFG. Throws std::runtime_error on bad input.
     explicit QueryEngine(const std::vector<std::string>& moduleNames);
     nlohmann::json dispatch(const std::string& method, const nlohmann::json& params);
+    /// Names of all dispatchable methods, in registration order. Backed by the
+    /// same table dispatch() uses, so the two can never drift apart.
+    static std::vector<std::string> methodNames();
     nlohmann::json summary() const;
     /// List functions whose name matches params["pattern"] (ECMAScript regex,
     /// search semantics; missing/empty => all). Sorted by (name, node-id) for
@@ -31,6 +34,21 @@ public:
     QueryEngine& operator=(const QueryEngine&) = delete;
 
 private:
+    /// Method registry entry: every query handler has the uniform signature
+    /// json(const json& params) const. dispatch() and methodNames() share it.
+    using Handler = nlohmann::json (QueryEngine::*)(const nlohmann::json&) const;
+    struct Method
+    {
+        const char* name;
+        Handler handler;
+    };
+    static const std::vector<Method>& methodTable();
+    /// Adapter: summary() takes no params but the table needs the uniform signature.
+    nlohmann::json summaryQ(const nlohmann::json&) const
+    {
+        return summary();
+    }
+
     SVF::SVFIR* pag = nullptr;
     SVF::AndersenBase* ander = nullptr;
     SVF::SVFG* svfg = nullptr;
