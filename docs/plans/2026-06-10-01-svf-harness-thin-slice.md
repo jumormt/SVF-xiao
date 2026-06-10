@@ -417,7 +417,7 @@ no enum. Do NOT build node_kinds from GNodeK enums alone.
 
 **Files:** Create `Schema.h/.cpp`; modify `QueryEngine.cpp`; test in `run_tests.py`.
 
-- [ ] **Step 1: Failing test** — `schema()` returns `node_kinds` (≥ all ICFGNode +
+- [x] **Step 1: Failing test** — `schema()` returns `node_kinds` (≥ all ICFGNode +
   VFGNode subclass names), `edge_kinds`, `methods` (all 11 with param/result docs),
   and every entry has a non-empty `"description"`.
 
@@ -431,14 +431,39 @@ no enum. Do NOT build node_kinds from GNodeK enums alone.
         for m in j["methods"]: self.assertTrue(m["description"])
 ```
 
-- [ ] **Step 2: Implement** — a static registry built by hand (NOT reflection): node
+- [x] **Step 2: Implement** — a static registry built by hand (NOT reflection): node
   kinds from `ICFGNode::GNodeK`/`VFGNode::VFGNodeK` enums (grep `enum` in
   `Graphs/ICFGNode.h`, `Graphs/VFGNode.h`), each with 1-2 sentence English description
   and attribute list (`{kind,id,loc,ir}`); edge kinds (intra/call/ret for both graphs,
   call edges carry callsite); `methods` with JSON-schema-ish param descriptions. This
   hand-written registry IS the product: write descriptions an LLM can act on.
 
-- [ ] **Step 3: PASS + Commit** — `harness: self-describing schema()`
+- [x] **Step 3: PASS + Commit** — `harness: self-describing schema()` (c7f0029f)
+
+**Task 4.1 implementation notes (commit c7f0029f, 11/11 tests green):**
+- `Schema.cpp` enumerates node_kinds from audited `toString()` prefixes per the
+  review-decision, NOT from enums. Audit result: 67 kinds — 7 ICFG (incl. base
+  `ICFGNode` + `GlobalICFGNode`), 31 VFG/SVFG, 29 SVFIR vars. Beyond the two known
+  MSSA aliases, the audit found a SECOND alias pair: `InterPHIVFGNode::toString()`
+  prints `FormalParmPHI` / `ActualRetPHI` (VFG.cpp:335) — also in no enum; both are
+  in node_kinds. Printable base classes (`SVFVar`, `VFGNode`, `StmtVFGNode`,
+  `MRSVFGNode`, `MSSAPHISVFGNode`, `ArgumentVFGNode`, `ValVar`, `ObjVar`,
+  `BaseObjVar`, `ICFGNode`) are included since `kindOf()` can emit them (e.g.
+  `DummyVersionPropSVFGNode` has no override and prints `VFGNode`). Invariant
+  verified bidirectionally by script: printed-prefix set == node_kinds set, both
+  directions empty diff. `FIObjVar` (named in older notes) no longer exists —
+  superseded by `BaseObjVar`.
+- edge_kinds = 10 concrete classes only (3 ICFG + 7 SVFG families). Abstract
+  bases `ICFGEdge`/`VFGEdge`/`DirectVFGEdge`/`IndirectSVFGEdge` deliberately
+  omitted — the evidence-kind invariant covers nodes only, and Task 5.1 step
+  labels will use the concrete names. Note: `DirectSVFGEdge::toString()` prints
+  "DirectVFGEdge" (name mismatch in SVF, harmless here).
+- `methods` lists all 11 with `params` ({type,description,required}) and
+  `returns`; `implemented` is merged at runtime in `QueryEngine::schemaQ` from
+  `methodNames()` (currently true for schema/summary/functions only).
+  `program` = {modules (ctor paths, new `modules` member), summary()}.
+- `evidence_record` documents the ~200-byte UTF-8-safe ir truncation and the
+  empty-""/0 loc semantics for declarations/globals/synthetic nodes.
 
 ### Task 4.2: callers / callees
 

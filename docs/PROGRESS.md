@@ -22,14 +22,15 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 4:** start Task 4.1 (`schema()`), Step 1 (failing
-  test `test_schema_self_describing`: node_kinds/edge_kinds/methods with non-empty
-  descriptions, 11 methods). Mind the review-decision in the plan: node_kinds must
-  derive from `toString()` prefixes (incl. `FormalINPHISVFGNode`/`ActualOUTPHISVFGNode`
-  aliases), not GNodeK enums alone; `schema().methods` should reuse
-  `QueryEngine::methodNames()`/method table added in Task 3.1. Task 3.1 done (commit
-  227e72ee): daemon + client mode, 9 python tests green — see Task 3.1 implementation
-  notes in the plan (socket resolution, error contracts, method registry).
+- **svf-harness-thin-slice Phase 4:** start Task 4.2 (callers/callees), Step 1
+  (failing tests: `callers("fill")` shows the `use_after_free` callsite with
+  file/line evidence; `callees("use_after_free")` includes make_buf/fill/free; new
+  fixture `tests/fixtures/indirect.c` proving Andersen-resolved indirect callees).
+  Implement via CallGraph node in/out edges, results
+  `{caller,callee,callsite:<evidence>,direct}`; unknown function → JSON-RPC error
+  with edit-distance hint (≤5 names). Task 4.1 done (commit c7f0029f, 11/11 tests):
+  schema() with 67 audited node_kinds — see Task 4.1 implementation notes in the
+  plan (second alias pair FormalParmPHI/ActualRetPHI; runtime implemented-flags).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -95,4 +96,19 @@ value-flow paths with structured evidence.
   SIGTERM unlink, oversize -32600, early-disconnect survival, env-var + auto-discovery
 - **Files:** svf-llvm/tools/Harness/{HarnessServer.h,HarnessServer.cpp,JsonUtil.h,
   QueryEngine.h,QueryEngine.cpp,svf-harness.cpp,CMakeLists.txt,tests/run_tests.py}
+- **Blockers:** none
+
+### 2026-06-10 (Task 4.1)
+- **Focus:** svf-harness Phase 4 Task 4.1 — self-describing schema()
+- **Completed:** Schema.{h,cpp} hand-written registry: 67 node_kinds audited from
+  toString() prefixes (incl. enum-less aliases FormalINPHISVFGNode/
+  ActualOUTPHISVFGNode and newly-found FormalParmPHI/ActualRetPHI), 10 edge_kinds,
+  11 methods with param docs + runtime `implemented` flags from methodNames(),
+  evidence_record + program blocks; `schema` registered in methodTable.
+  Commit c7f0029f.
+- **Tests:** 11/11 harness python tests green (new: test_schema_self_describing);
+  manual: oneshot schema on demo.ll; invariant cross-checked by script (printed
+  toString prefixes == node_kinds, both diffs empty)
+- **Files:** svf-llvm/tools/Harness/{Schema.h,Schema.cpp,QueryEngine.h,
+  QueryEngine.cpp,CMakeLists.txt,tests/run_tests.py}
 - **Blockers:** none
