@@ -484,7 +484,7 @@ class HarnessTest(unittest.TestCase):
         env = dict(os.environ, SVF_HARNESS_BIN=os.path.abspath(BIN)
                    if os.path.isfile(BIN) else BIN)
         out = subprocess.run([self.MCP_PYTHON, smoke], capture_output=True,
-                             text=True, env=env)
+                             text=True, env=env, timeout=300)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
     def test_duplicate_function_names_merged(self):

@@ -3,4 +3,4 @@ name = "svf-harness-mcp"
 version = "0.1.0"
 description = "Thin MCP adapter over the svf-harness daemon socket"
 requires-python = ">=3.10"
-dependencies = ["mcp"]
+dependencies = ["mcp>=1.10"]

@@ -71,9 +71,20 @@ class McpSmokeTest(unittest.TestCase):
 
     def test_a_query_before_load_is_error_not_exception(self):
         async def scenario(session):
+            # Ensure any previous daemon state is cleared first so the test is
+            # order-independent.
+            await self.call(session, "unload_program", {})
             out = await self.call(session, "summary", {})
             self.assertIn("error", out)
             self.assertIn("load_program", out["error"])
+        self.run_session(scenario)
+
+    def test_a2_load_nonexistent_path_returns_error(self):
+        """load_program with a nonexistent path must return an error dict, not raise."""
+        async def scenario(session):
+            out = await self.call(session, "load_program",
+                                  {"bitcode_paths": ["/nonexistent/path/to/file.ll"]})
+            self.assertIn("error", out)
         self.run_session(scenario)
 
     def test_b_list_tools(self):
