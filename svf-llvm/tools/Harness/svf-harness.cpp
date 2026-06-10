@@ -21,6 +21,11 @@ static const char* kUsage =
 
 /// `svf-harness --oneshot <method> [options] <bitcode...>`: build analysis
 /// state, answer a single query on stdout, exit.
+///
+/// CLI output contract:
+///   exit 0  => stdout is the JSON result
+///   exit != 0 => stdout is a JSON error object or empty
+///               (option-parser diagnostics go to stderr)
 static int runOneshot(int argc, char** argv)
 {
     if (argc < 3)
@@ -48,7 +53,7 @@ static int runOneshot(int argc, char** argv)
     }
     catch (const std::exception& e)
     {
-        json err = {{"error", {{"message", e.what()}}}};
+        json err = {{"error", {{"code", -32000}, {"message", e.what()}}}};
         std::puts(err.dump().c_str());
         return 1;
     }

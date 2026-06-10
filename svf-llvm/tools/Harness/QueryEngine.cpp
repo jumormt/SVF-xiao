@@ -2,6 +2,7 @@
 #include "QueryEngine.h"
 #include "Graphs/SVFG.h"
 #include "SVF-LLVM/LLVMModule.h"
+#include "SVF-LLVM/LLVMUtil.h"
 #include "SVF-LLVM/SVFIRBuilder.h"
 #include "WPA/Andersen.h"
 #include <fstream>
@@ -14,12 +15,16 @@ QueryEngine::QueryEngine(const std::vector<std::string>& moduleNames)
 {
     if (moduleNames.empty())
         throw std::runtime_error("no input bitcode module given");
-    // Pre-validate: SVF core abort()s on unreadable inputs, so fail early
-    // with a catchable error instead.
+    // Pre-validate: SVF core abort()s on unreadable/invalid inputs, so fail
+    // early with a catchable error instead.
     for (const std::string& name : moduleNames)
     {
         if (!std::ifstream(name).good())
             throw std::runtime_error("cannot read module: " + name);
+        // LLVMUtil::isIRFile also rejects directories (ifstream on a dir is
+        // good() on Linux) and non-IR text files.
+        if (!LLVMUtil::isIRFile(name))
+            throw std::runtime_error("not an LLVM IR file: " + name);
     }
     std::vector<std::string> names(moduleNames);
     LLVMModuleSet::preProcessBCs(names);

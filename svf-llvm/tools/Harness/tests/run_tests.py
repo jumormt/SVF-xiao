@@ -38,5 +38,17 @@ class HarnessTest(unittest.TestCase):
             self.assertGreaterEqual(j["functions"], 4)
             self.assertIn("icfg_nodes", j); self.assertIn("svfg_nodes", j)
 
+    def test_oneshot_invalid_ir_json_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            bad = os.path.join(td, "garbage.ll")
+            with open(bad, "w") as f:
+                f.write("this is not llvm ir\n")
+            out = subprocess.run([BIN, "--oneshot", "summary", bad],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1, f"rc={out.returncode} stderr={out.stderr}")
+            j = json.loads(out.stdout)
+            self.assertEqual(j["error"]["code"], -32000)
+            self.assertIn("not an LLVM IR file", j["error"]["message"])
+
 if __name__ == "__main__":
     unittest.main()

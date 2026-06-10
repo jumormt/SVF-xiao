@@ -20,6 +20,11 @@ public:
     nlohmann::json dispatch(const std::string& method, const nlohmann::json& params);
     nlohmann::json summary() const;
 
+    // One instance per process — SVF state (LLVMModuleSet/PAG) is global.
+    // Never throw from callbacks passed into SVF/LLVM code.
+    QueryEngine(const QueryEngine&) = delete;
+    QueryEngine& operator=(const QueryEngine&) = delete;
+
 private:
     SVF::SVFIR* pag = nullptr;
     SVF::AndersenBase* ander = nullptr;
