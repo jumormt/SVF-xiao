@@ -1,6 +1,7 @@
 //===- QueryEngine.cpp -- SVF analysis bootstrap + query dispatch --------===//
 #include "QueryEngine.h"
 #include "Evidence.h"
+#include "Schema.h"
 #include "Graphs/SVFG.h"
 #include "SVF-LLVM/LLVMModule.h"
 #include "SVF-LLVM/LLVMUtil.h"
@@ -29,6 +30,7 @@ QueryEngine::QueryEngine(const std::vector<std::string>& moduleNames)
         if (!LLVMUtil::isIRFile(name))
             throw std::runtime_error("not an LLVM IR file: " + name);
     }
+    modules = moduleNames;
     std::vector<std::string> names(moduleNames);
     LLVMModuleSet::preProcessBCs(names);
     LLVMModuleSet::buildSVFModule(names);
@@ -104,9 +106,26 @@ json QueryEngine::functions(const json& params) const
                 {"total", total}};
 }
 
+json QueryEngine::schemaQ(const json&) const
+{
+    json j = schema::registry();
+    // "implemented" comes from the live method table, not from Schema.cpp, so
+    // the schema stays honest as methods land without anyone updating a flag.
+    const std::vector<std::string> impl = methodNames();
+    for (json& m : j["methods"])
+    {
+        const std::string name = m["name"].get<std::string>();
+        m["implemented"] =
+            std::find(impl.begin(), impl.end(), name) != impl.end();
+    }
+    j["program"] = json{{"modules", modules}, {"summary", summary()}};
+    return j;
+}
+
 const std::vector<QueryEngine::Method>& QueryEngine::methodTable()
 {
     static const std::vector<Method> table = {
+        {"schema", &QueryEngine::schemaQ},
         {"summary", &QueryEngine::summaryQ},
         {"functions", &QueryEngine::functions},
     };

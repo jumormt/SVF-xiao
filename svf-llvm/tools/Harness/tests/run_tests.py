@@ -172,5 +172,21 @@ class HarnessTest(unittest.TestCase):
             finally:
                 self.client(sock, "shutdown", {}); srv.wait(timeout=10)
 
+    def test_schema_self_describing(self):
+        j = self.oneshot("schema", {})
+        kinds = {k["name"] for k in j["node_kinds"]}
+        self.assertLessEqual({"IntraICFGNode", "CallICFGNode", "RetICFGNode",
+                              "LoadVFGNode", "StoreVFGNode",
+                              "FormalINPHISVFGNode", "ActualOUTPHISVFGNode"}, kinds)
+        for k in j["node_kinds"]:
+            self.assertTrue(k["description"], f"missing description: {k['name']}")
+        edge_names = {e["name"] for e in j["edge_kinds"]}
+        self.assertLessEqual({"IntraCFGEdge", "CallCFGEdge", "RetCFGEdge"}, edge_names)
+        self.assertEqual(len(j["methods"]), 11)
+        for m in j["methods"]:
+            self.assertTrue(m["description"]); self.assertIn("params", m)
+        self.assertIn("evidence_record", j)
+        self.assertIn("program", j)
+
 if __name__ == "__main__":
     unittest.main()

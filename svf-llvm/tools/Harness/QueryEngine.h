@@ -48,7 +48,14 @@ private:
     {
         return summary();
     }
+    /// schema::registry() + runtime parts: per-method "implemented" flags
+    /// (derived from methodTable, so they can never drift) and the "program"
+    /// block (module paths + summary counts) so a client can verify which
+    /// daemon/program it is talking to.
+    nlohmann::json schemaQ(const nlohmann::json&) const;
 
+    /// Module paths as given to the ctor; reported in schema().program.
+    std::vector<std::string> modules;
     SVF::SVFIR* pag = nullptr;
     SVF::AndersenBase* ander = nullptr;
     SVF::SVFG* svfg = nullptr;
