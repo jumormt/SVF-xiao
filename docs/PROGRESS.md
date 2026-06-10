@@ -19,12 +19,12 @@ value-flow paths with structured evidence.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
+| 2026-06-10 | tutorials | E1+ | approved | Design: `docs/designs/2026-06-10-tutorials.md`. Plan: `docs/plans/2026-06-10-02-tutorials.md`. 6 tutorials + 5 scripts + ctest. |
 | 2026-06-10 | svf-harness-thin-slice | E1 | done | **All 7 phases done, 2026-06-10.** 11 methods, daemon+CLI+MCP, 33 py tests, full regression 2267/2267, demo green. Summary: `docs/summaries/2026-06-10-svf-harness-thin-slice.md` |
 
 ## Next Steps
-- **Next epic** (user picks): E2 declarative query language L_Q (proposal Task 2.2) is
-  the natural next; aliases-perf indexing (FUTURE.md) is the first perf item if real
-  targets grow.
+- **tutorials Phase 1:** Task 1.1 (example scripts 01-04 + run_all.sh).
+- Then: E2 declarative query language L_Q (proposal Task 2.2).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
