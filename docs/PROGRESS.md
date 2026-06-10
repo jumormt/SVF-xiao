@@ -19,16 +19,12 @@ value-flow paths with structured evidence.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
-| 2026-06-10 | tutorials | E1+ | in-progress | Design: `docs/designs/2026-06-10-tutorials.md`. Plan: `docs/plans/2026-06-10-02-tutorials.md`. Phases 1-2 done (scripts 01-05 + run_all 5/5 PASS; tutorials 01-06 from real runs incl. MCP transcript + mcp-sample.mcp.json). Phase 3 (ctest harness_examples + docs index) remains. |
+| 2026-06-10 | tutorials | E1+ | done | **All 3 phases done, 2026-06-10.** 6 tutorials (docs/tutorials/ + index), 5 example scripts + run_all (5/5 PASS), 2 ctest entries (harness_integration + harness_examples, both green). Summary: `docs/summaries/2026-06-10-tutorials.md` |
 | 2026-06-10 | svf-harness-thin-slice | E1 | done | **All 7 phases done, 2026-06-10.** 11 methods, daemon+CLI+MCP, 33 py tests, full regression 2267/2267, demo green. Summary: `docs/summaries/2026-06-10-svf-harness-thin-slice.md` |
 
 ## Next Steps
-- **tutorials Phase 3 Task 3.1:** CMakeLists `harness_examples` ctest running
-  examples/run_all.sh (BUILD_TESTING-gated, env like harness_integration,
-  RUN_BIG unset); verify `ctest -R harness_examples` serial from Release-build;
-  docs/tutorials/README.md index (link all 6 tutorials) + Harness README link;
-  full py suite re-check; then plan completion summary (`/ldd-summary`).
-- Then: E2 declarative query language L_Q (proposal Task 2.2).
+- **E2 declarative query language L_Q** (proposal Task 2.2) — needs a design
+  doc + plan (`/ldd-plan`) before any code — or user direction.
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -261,4 +257,22 @@ value-flow paths with structured evidence.
 - **Files:** svf-llvm/tools/Harness/examples/{05-real-world.sh,
   mcp-sample.mcp.json}(new), docs/tutorials/{05-real-world-program.md,
   06-claude-code-mcp.md}(new), docs/tutorials/04-value-flow-witnesses.md
+- **Blockers:** none
+
+### 2026-06-10 (tutorials Phase 3 — plan complete)
+- **Focus:** tutorials Task 3.1 — harness_examples ctest, docs/tutorials index,
+  Phase 2 review carry-overs, full verification, close-out
+- **Completed:** CMakeLists harness_examples ctest (BUILD_TESTING-gated, env
+  like harness_integration, RUN_BIG unset); docs/tutorials/README.md index
+  (6 one-liners, reading order, prereqs, examples/ + MCP links); index linked
+  from Harness README ("New here?") and mcp README. Carry-overs: tutorial 06
+  relabeled local scope + `-s user` note; Test-Suite clone command added to
+  Harness README / ex05 SKIP message / tutorial 05 prereqs. Summary:
+  `docs/summaries/2026-06-10-tutorials.md`. **Plan done.**
+- **Tests:** `ctest -R "harness_"` 2/2 Passed (integration 3.63s, examples
+  3.73s — all 5 scripts PASS incl. 05 on bc.bc); py suite 33/33; link sweep
+  37 relative links / 9 md files, 0 broken
+- **Files:** svf-llvm/tools/Harness/{CMakeLists.txt,README.md,
+  examples/05-real-world.sh}, docs/tutorials/{README.md(new),
+  05-real-world-program.md,06-claude-code-mcp.md}, mcp/svf_harness_mcp/README.md
 - **Blockers:** none
