@@ -22,21 +22,20 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 6:** start Task 6.1 (MCP thin wrapper),
-  Step 1 (failing smoke test `mcp/svf_harness_mcp/test_smoke.py`: in-memory
-  MCP client lists tools → 11 methods + `load_program`; `load_program` then
-  `summary` matches CLI fields; skip cleanly if `pip install mcp` is
-  unavailable). Then `server.py` via FastMCP: `load_program` spawns
-  `svf-harness serve` (binary from `SVF_HARNESS_BIN`), other tools
-  registered dynamically from the daemon's `schema()` and forwarded over
-  the socket; surface JSON-RPC `hint` in errors. Task 5.1 hardening done
-  (commit 9ca8b2c3, 32/32 tests): reachable per-sink error rows, vfpath
-  step elision (kPathStepCap=500, max_steps param [10,500]), SVF::Map/Set
-  containers, BIN existence check. Elision-test design decision: opted for
-  the `max_steps` optional param approach (rather than hidden debug method
-  or code-inspection only) because it also adds user-visible value for large
-  programs; chain.c fixture (10-hop store/load, 96-step path) exercises it
-  honestly with max_steps=10.
+- **svf-harness-thin-slice Phase 7:** start Task 7.1 (end-to-end demo +
+  ctest hook + docs), Step 1: demo script
+  `svf-llvm/tools/Harness/demo/llm_workflow.sh` (build fixture, start
+  daemon, replay `schema → functions(".*free.*") → vfpath(malloc ret →
+  b[0])`, pretty-print witness path, shut down; exit 0, first step locates
+  malloc, last step line 11). Then Step 2 ctest hook (`harness_integration`
+  in Harness/CMakeLists.txt with SVF_HARNESS_BIN env), Step 3 full
+  Test-Suite serial re-run, Step 4 Harness README + MCP setup docs +
+  plan→done + summary, Step 5 commit+push. Task 6.1 done (f7e84a5e,
+  33/33): MCP wrapper is 13 STATIC tools (load_program/unload_program +
+  11 methods with generic `params` dict; schema tool = source of truth —
+  see plan Task 6.1 notes for rationale); Task 7.1 Step 4's MCP setup
+  line should match mcp/svf_harness_mcp/README.md (python with `mcp` SDK
+  + SVF_HARNESS_BIN env, not bare python3).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -195,4 +194,22 @@ value-flow paths with structured evidence.
   vfpath_step_elision; test_schema_kind_invariant still skipped as before)
 - **Files:** svf-llvm/tools/Harness/{VFPath.cpp,Schema.cpp,tests/run_tests.py,
   tests/fixtures/chain.c(new)}
+- **Blockers:** none
+
+### 2026-06-10 (Task 6.1)
+- **Focus:** svf-harness Phase 6 Task 6.1 — MCP thin wrapper over daemon socket
+- **Completed:** FastMCP stdio server (13 tools: load_program spawns
+  `svf-harness serve` with 600s socket wait + stderr surfacing,
+  unload_program, 11 query forwards); design decision: STATIC tool
+  registration with `schema` tool as single source of truth + generic
+  `params` dict per tool (MCP clients list tools at connect, before any
+  program loads — dynamic schema()-driven registration impossible; full
+  rationale in plan Task 6.1 notes + mcp README); all failures structured
+  {"error": ...}, never exceptions; async tools + anyio.to_thread (SDK
+  1.27.2 runs sync tools on the event loop). Commit f7e84a5e.
+- **Tests:** 3/3 MCP smoke (in-memory transport) + 33/33 full suite (new:
+  test_mcp_smoke hook, MCP_PYTHON-gated); manual error-path checks (bad
+  binary/bitcode/IR, hint pass-through, daemon-kill recovery, no leaks)
+- **Files:** mcp/svf_harness_mcp/{server.py,test_smoke.py,pyproject.toml,
+  README.md}(new), svf-llvm/tools/Harness/tests/run_tests.py
 - **Blockers:** none

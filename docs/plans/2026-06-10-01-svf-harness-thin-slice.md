@@ -708,15 +708,46 @@ public facade; all five source files share the same CMake target.
   `mcp/svf_harness_mcp/pyproject.toml`
 - Test: `mcp/svf_harness_mcp/test_smoke.py`
 
-- [ ] **Step 1: Failing smoke test** (needs `pip install mcp`; skip with clear message
+- [x] **Step 1: Failing smoke test** (needs `pip install mcp`; skip with clear message
   if unavailable): in-memory MCP client lists tools → expects the 11 methods plus
   `load_program`; calls `load_program(bitcode)` then `summary` → same fields as CLI.
-- [ ] **Step 2: Implement** — `mcp.server.fastmcp.FastMCP`; on startup NO daemon;
+- [x] **Step 2: Implement** — `mcp.server.fastmcp.FastMCP`; on startup NO daemon;
   `load_program(paths)` spawns `svf-harness serve` (binary path from
   `SVF_HARNESS_BIN`), waits for socket, remembers it; the other tools are registered
   dynamically from the daemon's `schema()` response (name, description, params) and
   forward via the socket protocol; errors surface the JSON-RPC `hint`. ~200 lines.
-- [ ] **Step 3: PASS + Commit** — `harness: MCP thin wrapper over daemon socket`
+- [x] **Step 3: PASS + Commit** — `harness: MCP thin wrapper over daemon socket`
+  (f7e84a5e)
+
+**Task 6.1 notes (as built):**
+- **Design deviation from the Step 2 sketch — static, not dynamic, tool
+  registration.** MCP clients list tools at connect time, before any program is
+  loaded, so registering query tools from the daemon's `schema()` (only
+  available after `load_program`) would leave clients blind. Instead the 11
+  query tools are registered statically at import time with short docstrings
+  that defer to the `schema` tool as the single authoritative contract (no
+  hand-mirrored param docs to drift). Each tool takes one generic
+  `params: dict` forwarded verbatim as JSON-RPC params — C++-side param
+  evolution never touches the wrapper. Documented in
+  `mcp/svf_harness_mcp/README.md`.
+- 13 tools total: `load_program` + `unload_program` + the 11 methods.
+- All failures are structured `{"error": ...}` returns, never exceptions:
+  no-program-loaded, daemon JSON-RPC errors ({code,message,hint} — `data.hint`
+  surfaced), dead socket ("daemon unreachable ... call load_program again").
+- SDK 1.27.2 facts: sync tools run ON the event loop (no thread offload), so
+  tools are `async def` with blocking socket I/O in `anyio.to_thread.run_sync`
+  and the 600s socket poll on `anyio.sleep`; `dict[str, Any]` return
+  annotation → RootModel → `structuredContent` is the dict itself (plain
+  `dict` would be unstructured); in-memory test transport =
+  `mcp.shared.memory.create_connected_server_and_client_session(FastMCP)`.
+- Daemon stdout/stderr go to `daemon.log` next to the socket (avoids pipe-fill
+  deadlock on chatty builds); its tail is surfaced if the daemon exits before
+  listening. Tempdir `svf-mcp-*` removed on unload/replace/exit.
+- run_tests.py hook `test_mcp_smoke` (MCP_PYTHON env, default
+  /home/xiao/program/py311-mcp/bin/python, skipUnless exists): 33/33 green.
+- Manual checks beyond the suite: missing binary / missing bitcode / invalid
+  IR (stderr surfaced) errors, -32000 did-you-mean hint pass-through, daemon
+  kill → unreachable error → reload recovery; no leaked processes or tempdirs.
 
 ## Phase 7: Acceptance + integration
 
