@@ -16,7 +16,9 @@ top-level `CLAUDE.md`):
 
 ```bash
 env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
-  'source ./setup.sh > /dev/null && cmake --build Release-build -j8 --target svf-harness'
+  'source ./setup.sh > /dev/null && # first build on a fresh clone: env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash ./build.sh
+# incremental rebuild of just this tool afterwards:
+cmake --build Release-build -j8 --target svf-harness'
 ```
 
 Compile something to analyze and start the daemon:
@@ -193,7 +195,7 @@ env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
 
 # the same suite via ctest (registered as harness_integration)
 env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
-  'source ./setup.sh > /dev/null && cd Release-build && ctest -R harness_integration'
+  'source ./setup.sh > /dev/null && cd Release-build && ctest -R harness_integration   # requires ./Test-Suite to be cloned (enables BUILD_TESTING)'
 
 # the end-to-end demo
 env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
