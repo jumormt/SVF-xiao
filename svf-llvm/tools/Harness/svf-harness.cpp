@@ -11,6 +11,14 @@
 
 using json = nlohmann::json;
 
+/// Serialize a JSON value to a string using the replace error handler so that
+/// arbitrary bytes from LLVM symbols (e.g. non-UTF-8 identifiers) are replaced
+/// with U+FFFD instead of throwing nlohmann::json::type_error.316.
+static std::string dumpJson(const json& j)
+{
+    return j.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+}
+
 static const char* kUsage =
     "svf-harness — LLM-friendly SVF query daemon/CLI\n"
     "  svf-harness serve <bitcode...> [--socket PATH]   start daemon\n"
@@ -45,8 +53,16 @@ static int runOneshot(int argc, char** argv)
     shifted.push_back(statOff);
     for (int i = 3; i < argc; ++i)
     {
-        if (std::strcmp(argv[i], "--params") == 0 && i + 1 < argc)
+        if (std::strcmp(argv[i], "--params") == 0)
         {
+            if (i + 1 >= argc)
+            {
+                json err = {{"error",
+                             {{"code", -32000},
+                              {"message", "--params requires a JSON argument"}}}};
+                std::puts(dumpJson(err).c_str());
+                return 1;
+            }
             params = json::parse(argv[i + 1], /*cb=*/nullptr,
                                  /*allow_exceptions=*/false);
             if (params.is_discarded())
@@ -55,7 +71,7 @@ static int runOneshot(int argc, char** argv)
                              {{"code", -32000},
                               {"message", std::string("invalid --params JSON: ") +
                                argv[i + 1]}}}};
-                std::puts(err.dump().c_str());
+                std::puts(dumpJson(err).c_str());
                 return 1;
             }
             ++i; // skip the JSON value
@@ -69,13 +85,13 @@ static int runOneshot(int argc, char** argv)
     try
     {
         QueryEngine engine(moduleNameVec);
-        std::puts(engine.dispatch(method, params).dump().c_str());
+        std::puts(dumpJson(engine.dispatch(method, params)).c_str());
         return 0;
     }
     catch (const std::exception& e)
     {
         json err = {{"error", {{"code", -32000}, {"message", e.what()}}}};
-        std::puts(err.dump().c_str());
+        std::puts(dumpJson(err).c_str());
         return 1;
     }
 }
@@ -90,6 +106,6 @@ int main(int argc, char** argv)
     if (std::strcmp(argv[1], "--oneshot") == 0)
         return runOneshot(argc, argv);
     json err = {{"error", {{"message", "not implemented"}, {"method", argv[1]}}}};
-    std::puts(err.dump().c_str());
+    std::puts(dumpJson(err).c_str());
     return 2;
 }

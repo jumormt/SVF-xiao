@@ -10,13 +10,27 @@ using json = nlohmann::json;
 
 namespace
 {
-/// "ir" field: node->toString(), truncated to 200 chars.
+/// "ir" field: node->toString(), truncated to approximately 200 bytes.
+/// Truncation backs up to a UTF-8 codepoint boundary so nlohmann::json::dump()
+/// never sees a split multibyte sequence (which would throw type_error.316).
+/// The "…" suffix means the result may slightly exceed 200 bytes (up to 202
+/// bytes for the suffix itself) but will always be valid UTF-8.
 std::string truncatedIR(const std::string& s)
 {
     constexpr size_t kMax = 200;
     if (s.size() <= kMax)
         return s;
-    return s.substr(0, kMax) + "…";
+    std::string t = s.substr(0, kMax);
+    // Back up past any UTF-8 continuation bytes (10xxxxxx).
+    while (!t.empty() &&
+           (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80)
+        t.pop_back();
+    // If the last byte is now a multi-byte lead byte (11xxxxxx), the sequence
+    // was split — remove that lead byte too.
+    if (!t.empty() &&
+        (static_cast<unsigned char>(t.back()) & 0x80) != 0)
+        t.pop_back();
+    return t + "…";
 }
 
 /// "kind" field: the leading alphabetic run of toString(), which by SVF

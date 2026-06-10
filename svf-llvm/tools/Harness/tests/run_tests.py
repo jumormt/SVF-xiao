@@ -67,5 +67,20 @@ class HarnessTest(unittest.TestCase):
             self.assertEqual(j["error"]["code"], -32000)
             self.assertIn("not an LLVM IR file", j["error"]["message"])
 
+    def test_params_flag_missing_value(self):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            out = subprocess.run([BIN, "--oneshot", "functions", ll, "--params"],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            j = json.loads(out.stdout)
+            self.assertEqual(j["error"]["code"], -32000)
+            self.assertIn("--params", j["error"]["message"])
+
+    def test_functions_reports_total(self):
+        j = self.oneshot("functions", {})
+        self.assertEqual(j["total"], len(j["functions"]))
+        self.assertFalse(j["truncated"])
+
 if __name__ == "__main__":
     unittest.main()

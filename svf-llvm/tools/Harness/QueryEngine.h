@@ -20,7 +20,9 @@ public:
     nlohmann::json dispatch(const std::string& method, const nlohmann::json& params);
     nlohmann::json summary() const;
     /// List functions whose name matches params["pattern"] (ECMAScript regex,
-    /// search semantics; missing/empty => all). Sorted by name, capped at 200.
+    /// search semantics; missing/empty => all). Sorted by (name, node-id) for
+    /// determinism across TUs. Result includes "total" (pre-cap match count),
+    /// "truncated" bool, and "functions" array; capped at 200 entries.
     nlohmann::json functions(const nlohmann::json& params) const;
 
     // One instance per process — SVF state (LLVMModuleSet/PAG) is global.

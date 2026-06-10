@@ -78,12 +78,17 @@ json QueryEngine::functions(const json& params) const
             continue;
         funs.push_back(fun);
     }
+    // Sort by (name, node-id) so same-named statics from different TUs order
+    // deterministically across runs.
     std::sort(funs.begin(), funs.end(),
-              [](const FunObjVar* a, const FunObjVar* b)
+              [&](const FunObjVar* a, const FunObjVar* b)
     {
-        return a->getName() < b->getName();
+        if (a->getName() != b->getName())
+            return a->getName() < b->getName();
+        return a->getId() < b->getId();
     });
     constexpr size_t kCap = 200;
+    size_t total = funs.size(); // pre-cap match count
     bool truncated = funs.size() > kCap;
     if (truncated)
         funs.resize(kCap);
@@ -95,7 +100,8 @@ json QueryEngine::functions(const json& params) const
                        {"is_decl", fun->isDeclaration()},
                        {"num_args", fun->arg_size()}});
     }
-    return json{{"functions", std::move(out)}, {"truncated", truncated}};
+    return json{{"functions", std::move(out)}, {"truncated", truncated},
+                {"total", total}};
 }
 
 json QueryEngine::dispatch(const std::string& m, const json& p)
