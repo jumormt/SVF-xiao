@@ -14,8 +14,9 @@ Run the whole thing as a script:
 ## Prerequisites
 
 [Tutorial 03](03-pointer-and-dataflow.md) completed — daemon serving
-`/tmp/demo.ll` on `/tmp/h.sock`. The elision step also compiles
-`tests/fixtures/chain.c`.
+`/tmp/demo.ll` on `/tmp/h.sock`. If you shut the daemon down at the end of
+the previous tutorial, restart it: `Release-build/bin/svf-harness serve /tmp/demo.ll --socket /tmp/h.sock &`
+The elision step also compiles `tests/fixtures/chain.c`.
 
 ## Steps
 

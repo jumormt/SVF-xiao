@@ -14,8 +14,9 @@ Run the whole thing as a script:
 ## Prerequisites
 
 [Tutorial 01](01-getting-started.md) completed — you have a daemon serving
-`/tmp/demo.ll` on `/tmp/h.sock`. We will also compile a second fixture,
-`indirect.c`, along the way.
+`/tmp/demo.ll` on `/tmp/h.sock`. If you shut the daemon down at the end of
+the previous tutorial, restart it: `Release-build/bin/svf-harness serve /tmp/demo.ll --socket /tmp/h.sock &`
+We will also compile a second fixture, `indirect.c`, along the way.
 
 ## Steps
 
@@ -104,7 +105,7 @@ Real output (paths abbreviated):
             "caller": "use_after_free",
             "callsite": {
                 "id": 31,
-                "ir": "CallICFGNode31 {fun: use_after_free{ \"ln\": 9, ... }}\n   call void @fill(ptr noundef %0), !dbg !23 CallICFGNode: { …",
+                "ir": "CallICFGNode31 {fun: use_after_free{ \"ln\": 9, ... }}\n   call void @fill(ptr noundef %0) ... CallICFGNode: { …",
                 "kind": "CallICFGNode",
                 "loc": {
                     "file": ".../tests/fixtures/demo.c",
@@ -200,7 +201,7 @@ Real output (paths abbreviated):
             "caller": "apply",
             "callsite": {
                 "id": 23,
-                "ir": "CallICFGNode23 {fun: apply{ \"ln\": 15, ... }}\n   %call = call i32 %1(i32 noundef %2), !dbg !34 CallICFGNode: {…",
+                "ir": "CallICFGNode23 {fun: apply{ \"ln\": 15, ... }}\n   %call = call i32 %1(i32 noundef %2) ... CallICFGNode: {…",
                 "kind": "CallICFGNode",
                 "loc": {"file": ".../tests/fixtures/indirect.c", "func": "apply", "line": 15}
             },
@@ -211,7 +212,7 @@ Real output (paths abbreviated):
             "caller": "apply",
             "callsite": {
                 "id": 23,
-                "ir": "CallICFGNode23 {fun: apply{ \"ln\": 15, ... }}\n   %call = call i32 %1(i32 noundef %2), !dbg !34 CallICFGNode: {…",
+                "ir": "CallICFGNode23 {fun: apply{ \"ln\": 15, ... }}\n   %call = call i32 %1(i32 noundef %2) ... CallICFGNode: {…",
                 "kind": "CallICFGNode",
                 "loc": {"file": ".../tests/fixtures/indirect.c", "func": "apply", "line": 15}
             },
@@ -271,7 +272,7 @@ first edges, and three representative nodes):
         },
         {
             "id": 27,
-            "ir": "CallICFGNode27 {fun: use_after_free{ \"ln\": 8, ... }}\n   %call = call ptr @make_buf(i32 noundef 8), !dbg !21 CallI…",
+            "ir": "CallICFGNode27 {fun: use_after_free{ \"ln\": 8, ... }}\n   %call = call ptr @make_buf(i32 noundef 8) ... CallI…",
             "kind": "CallICFGNode",
             "loc": {"file": ".../tests/fixtures/demo.c", "func": "use_after_free", "line": 8}
         },

@@ -5,8 +5,8 @@
  * With 6 levels the path length exceeds 10, so max_steps=10 triggers
  * middle elision.
  *
- * Source: malloc return in alloc() (line 8).
- * Sink:   the dereference of q on line 26 (return *q). */
+ * Source: malloc return in alloc() (line 11).
+ * Sink:   the dereference of q on line 25 (return *q). */
 #include <stdlib.h>
 char* alloc(void) { return (char*)malloc(4); }
 char* hop0(char* p) { char* t = p; return t; }

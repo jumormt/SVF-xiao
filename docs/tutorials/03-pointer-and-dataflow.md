@@ -15,7 +15,8 @@ Run the whole thing as a script:
 ## Prerequisites
 
 [Tutorial 02](02-exploring-a-program.md) completed — daemon serving
-`/tmp/demo.ll` on `/tmp/h.sock`.
+`/tmp/demo.ll` on `/tmp/h.sock`. If you shut the daemon down at the end of
+the previous tutorial, restart it: `Release-build/bin/svf-harness serve /tmp/demo.ll --socket /tmp/h.sock &`
 
 ## The anchor mental model
 
@@ -55,14 +56,14 @@ Real output (paths abbreviated):
             "points_to": [
                 {
                     "id": 15,
-                    "ir": "HeapObjVar ID: 15\n   %call = call noalias ptr @malloc(i64 noundef %conv) #4, !dbg !22 { \"ln\": 4, ... }",
+                    "ir": "HeapObjVar ID: 15\n   %call = call noalias ptr @malloc(i64 noundef %conv) #4 ... { \"ln\": 4, ... }",
                     "kind": "HeapObjVar",
                     "loc": {"file": ".../tests/fixtures/demo.c", "func": "make_buf", "line": 4}
                 }
             ],
             "var": {
                 "id": 14,
-                "ir": "ValVar ID: 14\n   %call = call noalias ptr @malloc(i64 noundef %conv) #4, !dbg !22 { \"ln\": 4, ... }",
+                "ir": "ValVar ID: 14\n   %call = call noalias ptr @malloc(i64 noundef %conv) #4 ... { \"ln\": 4, ... }",
                 "kind": "ValVar",
                 "loc": {"file": ".../tests/fixtures/demo.c", "func": "make_buf", "line": 4}
             }
@@ -211,7 +212,7 @@ Real output (paths abbreviated):
             ],
             "var": {
                 "id": 51,
-                "ir": "ValVar ID: 51\n   %1 = load ptr, ptr %b, align 8, !dbg !24 { \"ln\": 10, ... }",
+                "ir": "ValVar ID: 51\n   %1 = load ptr, ptr %b, align 8 ... { \"ln\": 10, ... }",
                 "kind": "ValVar",
                 "loc": {"file": ".../tests/fixtures/demo.c", "func": "use_after_free", "line": 10}
             }

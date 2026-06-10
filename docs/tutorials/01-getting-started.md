@@ -16,9 +16,10 @@ Run the whole thing as a script:
   [Harness README quick start](../../svf-llvm/tools/Harness/README.md#quick-start).
   The binary lands in `Release-build/bin/svf-harness`.
 - `clang` on PATH. From the repo root, `source ./setup.sh` puts the bundled
-  LLVM toolchain (and the SVF libraries) on your PATH. On this machine,
-  prefix commands with `env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c '...'`
-  as described in the README.
+  LLVM toolchain (and the SVF libraries) on your PATH. If your shell exports
+  LLVM_DIR/Z3_DIR/SVF_DIR pointing at other installations, unset them for
+  these commands: prefix with `env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c
+  '...'` as described in the README.
 - `python3` (only used to pretty-print JSON in these tutorials).
 
 All commands below are run from the repo root after `source ./setup.sh`.
