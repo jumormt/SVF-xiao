@@ -168,7 +168,7 @@ SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness \
 - Modify: `svf-llvm/tools/Harness/svf-harness.cpp`, `CMakeLists.txt`
 - Test: append to `tests/run_tests.py`
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```python
     def test_oneshot_summary(self):
@@ -184,7 +184,7 @@ SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness \
 
 Run; expect FAIL (`not implemented`).
 
-- [ ] **Step 2: QueryEngine**
+- [x] **Step 2: QueryEngine**
 
 `QueryEngine.h`:
 
@@ -258,8 +258,20 @@ through SVF's `OptionBase::parseOptions` (as svf-ex does) to get module paths, c
 `QueryEngine`, print `dispatch(method, {})`. Add `QueryEngine.cpp` to the
 `add_llvm_executable` sources.
 
-- [ ] **Step 3: Build + run test, expect PASS** (same commands as Task 1.2/1.1)
-- [ ] **Step 4: Commit** — `harness: QueryEngine bootstrap + summary via --oneshot`
+- [x] **Step 3: Build + run test, expect PASS** (same commands as Task 1.2/1.1)
+- [x] **Step 4: Commit** — `harness: QueryEngine bootstrap + summary via --oneshot` (a94ed8dc)
+
+**Task 2.1 implementation notes (deltas from the sketch above):**
+- `SVFGBuilder::buildFullSVFG` takes `BVDataPTAImpl*` (AndersenBase derives from it);
+  no `static_cast<AndersenWaveDiff*>` needed.
+- LLVM-style builds disable exceptions: added `target_compile_options(svf-harness
+  PRIVATE -fexceptions)` (harness target only).
+- SVF stat reports pollute stdout: oneshot injects `-stat=false` as the first parsed
+  option (a user-passed `-stat=true` to --oneshot exits with a duplicate-option
+  error — acceptable; oneshot stdout must be pure JSON).
+- SVF core `abort()`s on unreadable bitcode before any throw: QueryEngine ctor
+  pre-validates module paths (ifstream) and throws runtime_error.
+- CLANG-missing guard added to run_tests.py (Phase 1 review carry-over).
 
 ### Task 2.2: functions(pattern) + uniform node evidence record
 

@@ -22,9 +22,11 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 2:** continue at Task 2.1 (QueryEngine + --oneshot summary).
-  Phase 1 done (commits f1af5cf4, 91f14f6f): skeleton builds, 2 python tests green.
-  Carry-over from review: add CLANG-missing guard to run_tests.py in Task 2.1.
+- **svf-harness-thin-slice Phase 2:** continue at Task 2.2 (functions(pattern) +
+  Evidence.h node records), Step 1 (failing test with `oneshot(method, params)` helper
+  passing `--params` JSON). Task 2.1 done (commit a94ed8dc): QueryEngine bootstrap +
+  `--oneshot summary`, 3 python tests green. See Task 2.1 implementation notes in the
+  plan for API deltas (-fexceptions, -stat=false injection, abort-on-bad-input guard).
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -53,4 +55,15 @@ value-flow paths with structured evidence.
   bootstrapped LDD.
 - **Tests:** full Test-Suite green (serial)
 - **Files:** Dockerfile conflict kept local; docs/ created
+- **Blockers:** none
+
+### 2026-06-10 (Task 2.1)
+- **Focus:** svf-harness Phase 2 Task 2.1 — QueryEngine + --oneshot summary
+- **Completed:** QueryEngine (SVFIR→AndersenWaveDiff→SVFG bootstrap, summary(),
+  dispatch()); `--oneshot <method> <bitcode...>` mode with pure-JSON stdout;
+  run_tests.py CLANG guard (review carry-over). Commit a94ed8dc.
+- **Tests:** 3/3 harness python tests green (test_help, test_fixture_compiles,
+  test_oneshot_summary)
+- **Files:** svf-llvm/tools/Harness/{QueryEngine.h,QueryEngine.cpp,svf-harness.cpp,
+  CMakeLists.txt,tests/run_tests.py}
 - **Blockers:** none
