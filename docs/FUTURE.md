@@ -12,3 +12,12 @@ Items intentionally out of the v0 thin slice, with trigger conditions.
 | Incremental graph construction (avoid full rebuild per change) | Proposal Task 2.1 | Harness used interactively on evolving codebases |
 | Concurrent query handling in daemon | engineering | Profiling shows serial handling is a bottleneck |
 | Property-graph storage backend for subgraph retrieval at scale | Proposal Task 2.1 | Linux-kernel-scale targets |
+
+## Daemon hardening (deferred from Task 3.1 review, 2026-06-10)
+
+| Item | Trigger |
+|------|---------|
+| Self-pipe/ppoll to close the signal-vs-accept race window | First report of a hung scripted `kill && wait` |
+| Destructor unlink guard (stat dev/ino match) against successor-daemon socket deletion | Kill/restart races observed in practice |
+| Socket in `$XDG_RUNTIME_DIR` + umask 0177 (multi-user hardening) | Harness used on shared machines |
+| Drain/SHUT_RD before oversize -32600 reply so client can actually read it | An MCP/client actually needs the structured oversize error |
