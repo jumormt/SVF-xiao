@@ -30,7 +30,7 @@
 - Create: `svf-llvm/tools/Harness/external/nlohmann/json.hpp` (vendored)
 - Modify: `svf-llvm/tools/CMakeLists.txt` (add_subdirectory + ALL_TOOLS)
 
-- [ ] **Step 1: Vendor nlohmann/json (pinned 3.11.3)**
+- [x] **Step 1: Vendor nlohmann/json (pinned 3.11.3)**
 
 ```bash
 mkdir -p svf-llvm/tools/Harness/external/nlohmann
@@ -39,7 +39,7 @@ curl -L -o svf-llvm/tools/Harness/external/nlohmann/json.hpp \
 grep -q "NLOHMANN_JSON_VERSION_MAJOR 3" svf-llvm/tools/Harness/external/nlohmann/json.hpp
 ```
 
-- [ ] **Step 2: Write minimal main with subcommand dispatch**
+- [x] **Step 2: Write minimal main with subcommand dispatch**
 
 `svf-harness.cpp`:
 
@@ -73,7 +73,7 @@ int main(int argc, char** argv)
 }
 ```
 
-- [ ] **Step 3: CMake wiring**
+- [x] **Step 3: CMake wiring**
 
 `svf-llvm/tools/Harness/CMakeLists.txt`:
 
@@ -84,7 +84,7 @@ target_include_directories(svf-harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/exter
 
 In `svf-llvm/tools/CMakeLists.txt`: add `add_subdirectory(Harness)` after `add_subdirectory(AE)` and `svf-harness` to the `ALL_TOOLS` list (the foreach below links SvfCore/SvfLLVM and sets output dirs — verify by reading the file).
 
-- [ ] **Step 4: Build and verify**
+- [x] **Step 4: Build and verify**
 
 ```bash
 env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
@@ -92,7 +92,7 @@ env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
 Release-build/bin/svf-harness --help   # expect usage text, exit 0
 ```
 
-- [ ] **Step 5: Commit** — `harness: scaffold svf-harness tool with vendored json`
+- [x] **Step 5: Commit** — `harness: scaffold svf-harness tool with vendored json`
 
 ### Task 1.2: Test fixture + test runner skeleton
 
@@ -100,7 +100,7 @@ Release-build/bin/svf-harness --help   # expect usage text, exit 0
 - Create: `svf-llvm/tools/Harness/tests/fixtures/demo.c`
 - Create: `svf-llvm/tools/Harness/tests/run_tests.py`
 
-- [ ] **Step 1: Fixture with a malloc→free→use value flow**
+- [x] **Step 1: Fixture with a malloc→free→use value flow**
 
 `tests/fixtures/demo.c`:
 
@@ -120,7 +120,7 @@ int use_after_free(void)
 int main(void) { return use_after_free(); }
 ```
 
-- [ ] **Step 2: Test runner with fixture compilation + binary discovery**
+- [x] **Step 2: Test runner with fixture compilation + binary discovery**
 
 `tests/run_tests.py` (skeleton; later tasks append test methods):
 
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 3: Run, expect PASS**
+- [x] **Step 3: Run, expect PASS**
 
 ```bash
 SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness \
@@ -157,7 +157,7 @@ SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness \
   'source ./setup.sh > /dev/null && python3 svf-llvm/tools/Harness/tests/run_tests.py -v'
 ```
 
-- [ ] **Step 4: Commit** — `harness: add test fixture and python test runner`
+- [x] **Step 4: Commit** — `harness: add test fixture and python test runner`
 
 ## Phase 2: QueryEngine + oneshot mode (testable before sockets)
 

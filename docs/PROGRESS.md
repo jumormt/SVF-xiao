@@ -19,12 +19,12 @@ value-flow paths with structured evidence.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
-| 2026-06-10 | svf-harness-thin-slice | E1 | approved | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
+| 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 1:** start at Task 1.1 (tool skeleton + CMake wiring).
-  Prerequisite (done): upstream synced to 795fd5cb, build green via conda LLVM 21,
-  Test-Suite 2266/2266 serial.
+- **svf-harness-thin-slice Phase 2:** continue at Task 2.1 (QueryEngine + --oneshot summary).
+  Phase 1 done (commits f1af5cf4, 91f14f6f): skeleton builds, 2 python tests green.
+  Carry-over from review: add CLANG-missing guard to run_tests.py in Task 2.1.
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
