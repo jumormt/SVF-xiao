@@ -11,6 +11,15 @@ class QueryEngine;
 /// The constructor binds + listens (throws std::runtime_error on failure,
 /// e.g. when another daemon is already bound to the path); the socket file
 /// therefore exists as soon as construction returns.
+///
+/// Known limitation: a signal landing between the gStop check and accept()
+/// entry is not detected until the next connection (self-pipe/ppoll would
+/// close this race; deferred — see docs/FUTURE.md).
+///
+/// Intentional simplifications:
+///   - The `jsonrpc` version field in incoming requests is not validated.
+///   - Requests without an `id` field get responses with `id: null`
+///     (JSON-RPC notifications are not treated specially).
 class HarnessServer
 {
 public:

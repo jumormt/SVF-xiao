@@ -143,5 +143,34 @@ class HarnessTest(unittest.TestCase):
                                capture_output=True, text=True)
                 srv.wait(timeout=10)
 
+    def test_daemon_parse_error_and_idle_timeout_setup(self):
+        # parse error path; idle-timeout is set to 30s so we only verify the
+        # daemon survives an idle connect-and-drop plus a garbage line.
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td); sock = os.path.join(td, "h.sock")
+            srv = subprocess.Popen([BIN, "serve", ll, "--socket", sock],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                self.wait_for(lambda: os.path.exists(sock), 60)
+                # idle client connects and immediately disconnects
+                s = socket.socket(socket.AF_UNIX); s.connect(sock); s.close()
+                # garbage line -> -32700 with id null
+                with socket.socket(socket.AF_UNIX) as g:
+                    g.settimeout(10); g.connect(sock)
+                    g.sendall(b"this is not json\n")
+                    buf = b""
+                    while not buf.endswith(b"\n"):
+                        chunk = g.recv(65536)
+                        if not chunk: break
+                        buf += chunk
+                resp = json.loads(buf)
+                self.assertEqual(resp["error"]["code"], -32700)
+                self.assertIsNone(resp["id"])
+                # daemon still alive and serving
+                r = self.client(sock, "summary", {})
+                self.assertIn("functions", r["result"])
+            finally:
+                self.client(sock, "shutdown", {}); srv.wait(timeout=10)
+
 if __name__ == "__main__":
     unittest.main()

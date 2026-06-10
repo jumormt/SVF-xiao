@@ -161,7 +161,11 @@ static std::string resolveClientSocket(const std::string& explicitPath)
             candidates.push_back(g.gl_pathv[i]);
     globfree(&g);
     if (candidates.size() == 1)
+    {
+        std::fprintf(stderr, "svf-harness: using auto-discovered socket %s\n",
+                     candidates[0].c_str());
         return candidates[0];
+    }
     std::string msg = candidates.empty()
                           ? "no daemon socket found"
                           : "multiple daemon sockets found:";

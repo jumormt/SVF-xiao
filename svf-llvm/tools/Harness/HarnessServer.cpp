@@ -144,21 +144,65 @@ void HarnessServer::run()
 
 bool HarnessServer::handleConnection(int fd)
 {
-    // Read one newline-terminated request (or until EOF / size cap).
+    // Set 30-second recv/send timeouts so an idle or non-reading client cannot
+    // wedge the single-threaded daemon forever.
+    struct timeval tv;
+    tv.tv_sec = 30;
+    tv.tv_usec = 0;
+    // Deliberately ignore return values: if the socket option cannot be set the
+    // daemon continues without the timeout (preferable to refusing connections).
+    (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    // Read one newline-terminated request (or until EOF / size cap / timeout).
     std::string line;
     bool oversize = false;
+    bool timedOut = false;
     char buf[65536];
     while (line.find('\n') == std::string::npos)
     {
         ssize_t n = recv(fd, buf, sizeof(buf), 0);
-        if (n <= 0)
-            break; // EOF or error: treat what we have as the request
+        if (n < 0)
+        {
+            if (errno == EINTR)
+                continue; // signal: retry the recv
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                timedOut = true; // SO_RCVTIMEO expired
+                break;
+            }
+            break; // other error: treat what we have as the request
+        }
+        if (n == 0)
+            break; // EOF: client disconnected
         line.append(buf, static_cast<size_t>(n));
         if (line.size() > kMaxRequestBytes)
         {
             oversize = true;
             break;
         }
+    }
+
+    if (timedOut)
+    {
+        // Send a -32000 "request timed out" error and close; the caller closes fd.
+        json resp = rpcError(nullptr, -32000, "request timed out");
+        std::string out = harness::dumpJson(resp) + "\n";
+        size_t sent = 0;
+        while (sent < out.size())
+        {
+            ssize_t n = send(fd, out.data() + sent, out.size() - sent, 0);
+            if (n < 0)
+            {
+                if (errno == EINTR)
+                    continue; // signal: retry the send
+                break;        // EAGAIN/EWOULDBLOCK or other error: give up silently
+            }
+            if (n == 0)
+                break;
+            sent += static_cast<size_t>(n);
+        }
+        return false;
     }
 
     bool shutdown = false;
@@ -171,8 +215,14 @@ bool HarnessServer::handleConnection(int fd)
     while (sent < out.size())
     {
         ssize_t n = send(fd, out.data() + sent, out.size() - sent, 0);
-        if (n <= 0)
-            break; // client went away (EPIPE et al.); nothing more to do
+        if (n < 0)
+        {
+            if (errno == EINTR)
+                continue;  // signal: retry the send
+            break;         // EAGAIN/EWOULDBLOCK or other: give up silently (close)
+        }
+        if (n == 0)
+            break; // client went away
         sent += static_cast<size_t>(n);
     }
     return shutdown;
