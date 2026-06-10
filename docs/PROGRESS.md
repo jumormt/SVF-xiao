@@ -19,11 +19,15 @@ value-flow paths with structured evidence.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
-| 2026-06-10 | tutorials | E1+ | approved | Design: `docs/designs/2026-06-10-tutorials.md`. Plan: `docs/plans/2026-06-10-02-tutorials.md`. 6 tutorials + 5 scripts + ctest. |
+| 2026-06-10 | tutorials | E1+ | in-progress | Design: `docs/designs/2026-06-10-tutorials.md`. Plan: `docs/plans/2026-06-10-02-tutorials.md`. Phase 1 done (scripts 01-04 + run_all green; tutorials 01-04 from real runs). Phases 2-3 (real-world+MCP, ctest+index) remain. |
 | 2026-06-10 | svf-harness-thin-slice | E1 | done | **All 7 phases done, 2026-06-10.** 11 methods, daemon+CLI+MCP, 33 py tests, full regression 2267/2267, demo green. Summary: `docs/summaries/2026-06-10-svf-harness-thin-slice.md` |
 
 ## Next Steps
-- **tutorials Phase 1:** Task 1.1 (example scripts 01-04 + run_all.sh).
+- **tutorials Phase 2:** Task 2.1 (examples/05-real-world.sh + tutorial 05 on
+  Test-Suite bc.bc; RUN_BIG=1 stretch), then Task 2.2 (tutorial 06 MCP +
+  examples/mcp-sample.mcp.json).
+- Then: tutorials Phase 3 Task 3.1 (ctest harness_examples + docs/tutorials/README.md
+  index + Harness README link).
 - Then: E2 declarative query language L_Q (proposal Task 2.2).
 
 ## Known Issues
@@ -211,6 +215,20 @@ value-flow paths with structured evidence.
 - **Tests:** 33 python integration tests green; full Test-Suite 2267/2267 serial; demo PASSED
 - **Files:** svf-llvm/tools/Harness/* (~2400 LoC C++), mcp/svf_harness_mcp/*, docs/*
 - **Blockers:** none. Branch harness-v0 unpushed pending user decision.
+
+### 2026-06-10 (tutorials Phase 1)
+- **Focus:** tutorials plan Tasks 1.1 + 1.2 — example scripts 01-04 + run_all,
+  tutorials 01-04 written from real runs
+- **Completed:** examples/{01-getting-started,02-exploring,03-pointer-dataflow,
+  04-value-flow,run_all}.sh (demo conventions: pipefail, tempdir socket, trap,
+  bounded waits, assertions, "EXAMPLE NN PASSED"; side fixtures via --oneshot);
+  docs/tutorials/{01..04}*.md with all outputs pasted from real runs (anchor
+  mental model, HeapObjVar/may-alias/witness-edge-kind/elision interpretations).
+  Commits fc62564a (scripts), a02ba571 (tutorials).
+- **Tests:** run_all.sh 4/4 PASS + 05 SKIP, rc=0; failure path verified rc=1;
+  2 tutorial outputs spot-checked against fresh runs (identical)
+- **Files:** svf-llvm/tools/Harness/examples/*(new), docs/tutorials/*(new)
+- **Blockers:** none
 
 ### 2026-06-10 (shakedown)
 - **Focus:** real-program shakedown of svf-harness (user-requested before merge)
