@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Sample project-scope MCP config for Claude Code (save as .mcp.json in",
+    "the directory you run `claude` from). Replace the two placeholders",
+    "before use — they are NOT expanded automatically:",
+    "  ${SVF_REPO}        absolute path to your SVF-xiao checkout",
+    "  ${PYTHON_WITH_MCP} a python >= 3.10 with `pip install mcp`",
+    "                     (on this machine: /home/xiao/program/py311-mcp/bin/python)",
+    "Remove this _comment key if your tooling objects to unknown keys.",
+    "See docs/tutorials/06-claude-code-mcp.md for the full walkthrough."
+  ],
+  "mcpServers": {
+    "svf": {
+      "command": "${PYTHON_WITH_MCP}",
+      "args": ["${SVF_REPO}/mcp/svf_harness_mcp/server.py"],
+      "env": {
+        "SVF_HARNESS_BIN": "${SVF_REPO}/Release-build/bin/svf-harness"
+      }
+    }
+  }
+}

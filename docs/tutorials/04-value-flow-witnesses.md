@@ -253,8 +253,6 @@ anchor an intermediate hop as the sink, then as the source.
 
 ## Next
 
-Tutorial 05 (real-world programs) is coming with Phase 2 of the tutorials
-plan. Until then: point the harness at your own bitcode — everything you
-just did works the same, only slower to load and richer in results. For
-using the harness from Claude Code via MCP, see
-[`mcp/svf_harness_mcp/README.md`](../../mcp/svf_harness_mcp/README.md).
+[Tutorial 05 — A real-world program](05-real-world-program.md): the same
+queries on GNU bc and bash straight from the SVF Test-Suite — no-debug-info
+evidence, the xmalloc lesson, and honest performance numbers.
