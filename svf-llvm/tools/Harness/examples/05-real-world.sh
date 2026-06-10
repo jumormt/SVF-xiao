@@ -29,7 +29,9 @@ BC_BC="${SVF_EX05_BC:-$REPO_ROOT/Test-Suite/test_cases_bc/crux-bc/bc.bc}"
 BASH_BC="${SVF_EX05_BASH_BC:-$REPO_ROOT/Test-Suite/test_cases_bc/crux-bc/bash.bc}"
 
 if [ ! -f "$BC_BC" ]; then
-    echo "SKIP: Test-Suite not cloned (see Harness README)"
+    echo "SKIP: Test-Suite not cloned (at the repo root run:" \
+         "git clone https://github.com/SVF-tools/Test-Suite.git" \
+         "then reconfigure: cmake -S . -B Release-build)"
     exit 0
 fi
 

@@ -11,4 +11,10 @@ if(BUILD_TESTING)
            COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.py -v)
   set_tests_properties(harness_integration PROPERTIES
     ENVIRONMENT "SVF_HARNESS_BIN=$<TARGET_FILE:svf-harness>")
+  # Tutorial example scripts (examples/01..05 via run_all.sh). RUN_BIG is
+  # deliberately not set: the bash.bc stretch in 05 stays off in CI.
+  add_test(NAME harness_examples
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/examples/run_all.sh)
+  set_tests_properties(harness_examples PROPERTIES
+    ENVIRONMENT "SVF_HARNESS_BIN=$<TARGET_FILE:svf-harness>")
 endif()

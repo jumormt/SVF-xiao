@@ -8,6 +8,9 @@ the daemon's Unix socket. 13 tools total: `load_program`, `unload_program`,
 and the 11 daemon methods (`schema summary functions callers callees cfg
 defuse pts aliases vfpath reachable`).
 
+Guided walkthroughs (including a full Claude Code MCP tutorial with question
+patterns and a sample session): [`docs/tutorials/`](../../docs/tutorials/README.md).
+
 ## Setup for Claude Code
 
 Requires python >= 3.10 with the `mcp` SDK (`pip install mcp`) and a built

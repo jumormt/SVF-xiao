@@ -21,7 +21,14 @@ Run the whole thing as a script:
 - The SVF Test-Suite cloned at the repo root (the same clone that enables
   `ctest`): it ships prebuilt real-program bitcode under
   `Test-Suite/test_cases_bc/crux-bc/`, so there is nothing to compile.
-  Without it, the script prints `SKIP: Test-Suite not cloned` and exits 0.
+
+  ```bash
+  git clone https://github.com/SVF-tools/Test-Suite.git   # at the repo root
+  cmake -S . -B Release-build                             # reconfigure to pick it up
+  ```
+
+  Without it, the script prints `SKIP: Test-Suite not cloned` (plus the
+  clone command above) and exits 0.
 
 ## Steps
 

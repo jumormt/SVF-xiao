@@ -1,5 +1,8 @@
 # svf-harness — LLM-friendly SVF query daemon/CLI
 
+> **New here?** Start with the [tutorials](../../../docs/tutorials/README.md)
+> — six guided walkthroughs from first query to Claude Code integration.
+
 `svf-harness` exposes SVF's program analyses (call graph, ICFG, points-to,
 sparse value-flow) as a query service an LLM agent can drive: a daemon builds
 `SVFIR → Andersen → SVFG` once for a set of LLVM bitcode modules and answers
@@ -185,7 +188,15 @@ The evidence record attached to every returned graph node:
 
 All commands from the repo root; the harness tests need `clang` on PATH, so
 source `setup.sh` first (ctest inherits the caller's environment — the
-`harness_integration` test only injects `SVF_HARNESS_BIN`, not a compiler):
+ctest entries only inject `SVF_HARNESS_BIN`, not a compiler).
+
+The ctest route (and example 05) needs the SVF Test-Suite cloned at the repo
+root — it both enables `BUILD_TESTING` and ships the real-program bitcode:
+
+```bash
+git clone https://github.com/SVF-tools/Test-Suite.git   # at the repo root
+cmake -S . -B Release-build                             # reconfigure to pick it up
+```
 
 ```bash
 # the python suite directly (33 tests)

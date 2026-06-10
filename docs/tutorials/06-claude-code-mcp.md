@@ -26,9 +26,12 @@ are pasted unedited. Only the English prose around them is illustrative.
 
 ## Steps
 
-### 1. Register the server — user scope
+### 1. Register the server — local scope (this project only)
 
-From the repo root (so `$PWD` expands to absolute paths):
+`claude mcp add` defaults to **local** scope: the registration applies only
+when you run `claude` inside this project; add `-s user` to make it
+available across all your projects. From the repo root (so `$PWD` expands
+to absolute paths):
 
 ```bash
 claude mcp add svf \
@@ -289,8 +292,9 @@ money shot — which returns the 6-step witness ending at the line-11 load.)
 ## What you learned
 
 - Two ways to register: `claude mcp add svf --env SVF_HARNESS_BIN=... --
-  <python> server.py` (user scope) or a checked-in `.mcp.json` with
-  hand-substituted placeholders (project scope).
+  <python> server.py` (local scope by default; `-s user` for all projects)
+  or a checked-in `.mcp.json` with hand-substituted placeholders
+  (project scope).
 - 13 tools; arguments go **nested under `"params"`** — the flat form
   silently drops them (a too-broad result is the symptom).
 - Schema-first: `load_program`, then `schema` once — it is the
