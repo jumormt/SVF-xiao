@@ -22,6 +22,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "Schema.h"
+#include "AnchorDoc.h"
 
 using json = nlohmann::json;
 
@@ -62,15 +63,11 @@ json method(const char* name, const char* description, json params,
                 {"returns", returns}};
 }
 
-/// Reusable description of a "variable anchor" object, accepted wherever a
-/// method needs to identify a program variable or value (defuse/pts/aliases
-/// var, vfpath source/sink).
-const char* kAnchorDesc =
-    "Variable anchor object. Use ONE of these shapes: "
-    "{\"file\": \"demo.c\", \"line\": 7, \"name\": \"b\"?} to pick the value "
-    "defined at a source line (name disambiguates when several values are "
-    "defined there); {\"func\": \"malloc\", \"ret\": true} for a function's "
-    "return value; {\"func\": \"memcpy\", \"arg\": 0} for a call argument.";
+/// Description of a "variable anchor" object, accepted wherever a method
+/// needs to identify a program variable or value (defuse/pts/aliases var,
+/// vfpath/reachable source/sink). Shared with the resolveVars() error
+/// messages via AnchorDoc.h so docs and errors cannot drift.
+const char* kAnchorDesc = kAnchorForms;
 
 json nodeKinds()
 {
@@ -469,7 +466,8 @@ json methods()
         "uses: [{stmt, at: <evidence node>}]}], total, truncated} — stmt is "
         "the SVFIR statement kind (Addr/Copy/Load/Store/Call/Ret/Gep/Phi/"
         "...), at is the ICFG node it sits on (file:line of the "
-        "instruction)"));
+        "instruction); defs and uses are each capped at 200 per var "
+        "(truncated=true when cut)"));
     a.push_back(method("pts",
         "Andersen's may-points-to set of each variable the anchor resolves "
         "to: the abstract objects (allocation sites) it can target. Answers "
@@ -496,31 +494,51 @@ json methods()
         "graph: HOW a value gets from A to B, step by step, with evidence "
         "per step. The core method for taint/use-after-free style questions "
         "(e.g. source = malloc return, sink = a dereference line). Each "
-        "step's `edge` label is one of edge_kinds.",
+        "step's `edge` label is one of edge_kinds; Call*/Ret* steps also "
+        "carry `callsite` evidence (the CallICFGNode crossed). SEARCH "
+        "STRATEGY + LIMITS: one breadth-first search from all source nodes "
+        "with a parent tree, so each path is shortest by edge count and "
+        "each DISTINCT sink SVFG node yields at most ONE path — k bounds "
+        "the number of distinct sink nodes reported, and other (longer or "
+        "differently-routed) paths to the same node are NOT enumerated. A "
+        "path is a MAY value flow (Andersen + memory-SSA "
+        "over-approximation), evidence to inspect, not proof of a bug.",
         json{{"source", param("object", kAnchorDesc, true)},
              {"sink", param("object",
-                 "Same anchor shapes as `source`; for sinks a bare "
-                 "{file, line} matches any value-flow node at that line.",
-                 true)},
+                 "Same anchor shapes as `source`, but resolved to value-flow "
+                 "USES as well as defs: a bare {file, line} matches every "
+                 "value-flow node at that source line (add \"name\" to "
+                 "filter by value name); a {func, ret/arg} form matches the "
+                 "var's definition node plus every value-flow node whose "
+                 "top-level value is that var.", true)},
              {"k", param("integer",
-                 "Max number of distinct paths to return (default 3).",
-                 false)},
+                 "Max number of distinct paths to return, in [1, 10] "
+                 "(default 1). At most one path per distinct sink node "
+                 "exists — see the method description.", false)},
              {"max_visited", param("integer",
                  "Search budget: max SVFG nodes to visit before giving up "
                  "(default 100000). Raise for large programs.", false)}},
-        "{paths: [{steps: [{node: <evidence>, edge, callsite?}]}], truncated}"));
+        "{paths: [{steps: [{node: <evidence>, edge: <edge_kinds name; null "
+        "on the first step>, callsite?: <evidence of the CallICFGNode, on "
+        "Call*/Ret* edges>}], length}], sources, sinks, visited, truncated} "
+        "— truncated=true means the visit budget ran out before the search "
+        "space was exhausted"));
     a.push_back(method("reachable",
         "Boolean value-flow reachability from one source to MANY sinks at "
-        "once (each with a witness path if reachable). Cheaper than calling "
-        "vfpath per sink when screening candidate sinks.",
+        "once (each with a shortest witness path if reachable). One shared "
+        "BFS — cheaper than calling vfpath per sink when screening "
+        "candidate sinks. Same may-analysis semantics and search limits as "
+        "vfpath.",
         json{{"source", param("object", kAnchorDesc, true)},
              {"sinks", param("array",
-                 "Array of sink anchors (same shapes as vfpath's sink).",
-                 true)},
+                 "Array of sink anchors (same shapes as vfpath's sink), "
+                 "capped at 20 per call.", true)},
              {"max_visited", param("integer",
                  "Search budget shared across sinks (default 100000).",
                  false)}},
-        "[{sink, reachable: bool, first_path?}]"));
+        "{results: [{sink: <echo of the anchor>, reachable: bool, "
+        "first_path?: {steps, length} (present only when reachable)}], "
+        "sources, visited, truncated}"));
     return a;
 }
 

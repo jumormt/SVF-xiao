@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "QueryEngine.h"
+#include "AnchorDoc.h"
 #include "Evidence.h"
 #include "Schema.h"
 #include "Graphs/CallGraph.h"
@@ -34,28 +35,8 @@ constexpr size_t kAliasCap = 50;
 /// cfg caps: nodes and edges are truncated separately.
 constexpr size_t kCfgNodeCap = 500;
 constexpr size_t kCfgEdgeCap = 1000;
-
-const char* kAnchorForms =
-    "accepted var anchor forms: "
-    "{\"file\": \"demo.c\", \"line\": 8} (all vars defined at that line; add "
-    "\"name\": \"b\" to filter by value-name substring), "
-    "{\"func\": \"malloc\", \"ret\": true} (return value at every callsite "
-    "of func), "
-    "{\"func\": \"memcpy\", \"arg\": 0} (actual argument at every callsite "
-    "of func)";
-
-/// True when ``locFile`` (full path from debug info) refers to the
-/// user-given ``wanted`` file: equal, or path-suffix at a '/' boundary.
-bool fileMatches(const std::string& locFile, const std::string& wanted)
-{
-    if (locFile.empty() || wanted.empty() || locFile.size() < wanted.size())
-        return false;
-    if (locFile.compare(locFile.size() - wanted.size(), wanted.size(),
-                        wanted) != 0)
-        return false;
-    return locFile.size() == wanted.size() ||
-           locFile[locFile.size() - wanted.size() - 1] == '/';
-}
+/// defuse: per-var cap on each of the defs and uses lists.
+constexpr size_t kDefUseCap = 200;
 
 /// SVFStmt kind name for defuse output, from the PEDGEK enum. A switch (not
 /// a toString() prefix): SVFStmt dumps start with "SVFStmt: [" rather than
@@ -299,11 +280,15 @@ std::vector<const SVFVar*> QueryEngine::resolveVars(const json& spec) const
         const std::string name = spec.value("name", "");
         // Lines in this file where SOME var is defined — error-hint material.
         std::set<int> definingLines;
+        // Vars at the requested line BEFORE the name filter; when the filter
+        // alone rejects everything, the error must say so (Task 4.3 review).
+        size_t unfiltered = 0;
         for (const auto& it : *pag->getICFG())
         {
             const ICFGNode* node = it.second;
             const json l = evidence::loc(node->getSourceLoc());
-            if (!fileMatches(l["file"].get_ref<const std::string&>(), file))
+            if (!evidence::fileMatches(l["file"].get_ref<const std::string&>(),
+                                       file))
                 continue;
             const int nodeLine = l["line"].get<int>();
             if (!node->getSVFStmts().empty() && nodeLine > 0)
@@ -315,6 +300,7 @@ std::vector<const SVFVar*> QueryEngine::resolveVars(const json& spec) const
                 const SVFVar* def = stmt->getDstNode();
                 if (!def)
                     continue;
+                ++unfiltered;
                 if (!name.empty() &&
                     def->getValueName().find(name) == std::string::npos)
                     continue;
@@ -323,6 +309,13 @@ std::vector<const SVFVar*> QueryEngine::resolveVars(const json& spec) const
         }
         if (out.empty())
         {
+            if (!name.empty() && unfiltered > 0)
+                throw std::runtime_error(
+                    std::to_string(unfiltered) + " var(s) at " + file + ":" +
+                    std::to_string(line) + " have empty/other value names "
+                    "(none matches '" + name + "'); the IR may have been "
+                    "built without -fno-discard-value-names — drop the name "
+                    "filter. " + kAnchorForms);
             std::string msg = "no variables";
             if (!name.empty())
                 msg += " named like '" + name + "'";
@@ -359,6 +352,15 @@ std::vector<const SVFVar*> QueryEngine::resolveVars(const json& spec) const
         const std::string fname = spec["func"].get<std::string>();
         const bool wantRet = spec.value("ret", false);
         const bool hasArg = spec.contains("arg");
+        // {func, name} is a plausible-but-wrong form an LLM will try; give it
+        // a targeted message instead of the generic ret/arg one (Task 4.3
+        // review carry-over).
+        if (!wantRet && !hasArg && spec.contains("name"))
+            throw std::runtime_error(
+                std::string("anchor form {func, name} is unsupported; use "
+                            "{file, line, name} to pick a value inside a "
+                            "function, or {func, ret/arg} for callsite "
+                            "values. ") + kAnchorForms);
         if (wantRet == hasArg) // both set, or neither
             throw std::runtime_error(
                 std::string("func anchor needs exactly one of \"ret\": true "
@@ -489,22 +491,32 @@ json QueryEngine::defuse(const json& params) const
 {
     std::vector<const SVFVar*> vars = resolveVars(requiredVarAnchor(params));
     const size_t total = vars.size();
-    const bool truncated = total > kVarCap;
+    bool truncated = total > kVarCap;
     if (truncated)
         vars.resize(kVarCap);
+    // Per-var defs/uses lists are individually capped at kDefUseCap, folded
+    // into the same `truncated` flag (Task 4.3 review carry-over).
+    auto emit = [&](const SVFStmt::SVFStmtSetTy& edges)
+    {
+        std::vector<const SVFStmt*> stmts = sortedStmts(edges);
+        if (stmts.size() > kDefUseCap)
+        {
+            stmts.resize(kDefUseCap);
+            truncated = true;
+        }
+        json arr = json::array();
+        for (const SVFStmt* s : stmts)
+            arr.push_back(stmtRecord(s));
+        return arr;
+    };
     json rows = json::array();
     for (const SVFVar* v : vars)
     {
         // In SVFIR the SVFStmts ARE the var's graph edges: in-edges define
         // the var (Addr/Copy/Load/... into it), out-edges consume it.
-        json defs = json::array(), uses = json::array();
-        for (const SVFStmt* s : sortedStmts(v->getInEdges()))
-            defs.push_back(stmtRecord(s));
-        for (const SVFStmt* s : sortedStmts(v->getOutEdges()))
-            uses.push_back(stmtRecord(s));
         rows.push_back({{"var", evidence::node(v)},
-                        {"defs", std::move(defs)},
-                        {"uses", std::move(uses)}});
+                        {"defs", emit(v->getInEdges())},
+                        {"uses", emit(v->getOutEdges())}});
     }
     return json{{"vars", std::move(rows)}, {"total", total},
                 {"truncated", truncated}};

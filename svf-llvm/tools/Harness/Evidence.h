@@ -21,4 +21,7 @@ nlohmann::json node(const SVF::SVFVar* n);
 ///   { "ln": 4, "file": "demo.c" }           (functions)
 /// Tolerant: missing keys -> line 0 / file ""; never throws.
 nlohmann::json loc(const std::string& svfSourceLoc);
+/// True when ``locFile`` (full path from debug info) refers to the
+/// user-given ``wanted`` file: equal, or path-suffix at a '/' boundary.
+bool fileMatches(const std::string& locFile, const std::string& wanted);
 }

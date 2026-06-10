@@ -13,6 +13,7 @@ class AndersenBase;
 class CallGraph;
 class CallGraphNode;
 class SVFVar;
+class VFGNode;
 }
 
 class QueryEngine
@@ -60,6 +61,17 @@ public:
     /// vars with no enclosing function get an empty list. Capped at 50
     /// aliases per var.
     nlohmann::json aliases(const nlohmann::json& params) const;
+    /// Value-flow paths from params["source"] to params["sink"] (anchors,
+    /// see resolveVars/resolveSinkNodes) over the SVFG: one multi-source BFS
+    /// with a parent tree, up to k (default 1, max 10) witness paths — at
+    /// most ONE per distinct sink SVFG node, shortest by edge count. Budget
+    /// params["max_visited"] (default 100000) caps dequeued nodes; on
+    /// exhaustion truncated=true. Bodies live in VFPath.cpp.
+    nlohmann::json vfpath(const nlohmann::json& params) const;
+    /// Batch reachability: one BFS from params["source"] to each of
+    /// params["sinks"] (array, capped at 20), returning per sink
+    /// {sink, reachable, first_path?}. Bodies live in VFPath.cpp.
+    nlohmann::json reachable(const nlohmann::json& params) const;
 
     // One instance per process — SVF state (LLVMModuleSet/PAG) is global.
     // Never throw from callbacks passed into SVF/LLVM code.
@@ -119,6 +131,19 @@ private:
     /// Shared by defuse/pts/aliases and (Task 5.1) vfpath/reachable anchors.
     std::vector<const SVF::SVFVar*>
     resolveVars(const nlohmann::json& spec) const;
+    /// vfpath/reachable SOURCE anchor -> SVFG def nodes: resolveVars(), then
+    /// each top-level ValVar's definition SVFG node (hasDefSVFGNode guard).
+    /// Throws when no resolved var has a def node. Sorted by node id.
+    std::vector<const SVF::VFGNode*>
+    resolveSourceNodes(const nlohmann::json& spec) const;
+    /// vfpath/reachable SINK anchor -> SVFG nodes. {file, line[, name]}:
+    /// every SVFG node attached to an ICFG node at that line (any value-flow
+    /// use or def there; name filters by top-level value name). {func,
+    /// ret/arg}: the resolved vars' def nodes plus every SVFG node whose
+    /// top-level value is one of the vars. Empty resolution throws with the
+    /// accepted forms (and nearest value-flow lines for file:line misses).
+    std::vector<const SVF::VFGNode*>
+    resolveSinkNodes(const nlohmann::json& spec) const;
 
     /// Module paths as given to the ctor; reported in schema().program.
     std::vector<std::string> modules;

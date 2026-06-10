@@ -98,6 +98,17 @@ json loc(const std::string& svfSourceLoc)
     return json{{"file", file}, {"line", intField(svfSourceLoc, "ln")}};
 }
 
+bool fileMatches(const std::string& locFile, const std::string& wanted)
+{
+    if (locFile.empty() || wanted.empty() || locFile.size() < wanted.size())
+        return false;
+    if (locFile.compare(locFile.size() - wanted.size(), wanted.size(),
+                        wanted) != 0)
+        return false;
+    return locFile.size() == wanted.size() ||
+           locFile[locFile.size() - wanted.size() - 1] == '/';
+}
+
 json node(const SVF::ICFGNode* n)
 {
     return record(n->getId(), n->toString(), n->getSourceLoc(), n->getFun());
@@ -105,7 +116,12 @@ json node(const SVF::ICFGNode* n)
 
 json node(const SVF::VFGNode* n)
 {
-    return record(n->getId(), n->toString(), n->getSourceLoc(), n->getFun());
+    // A VFGNode's own SVFValue::sourceLoc string is never populated by SVF
+    // (no override, member never set), so take the loc from its ICFG node —
+    // VFG::addVFGNode wires every value-flow node to one.
+    const SVF::ICFGNode* at = n->getICFGNode();
+    return record(n->getId(), n->toString(),
+                  at ? at->getSourceLoc() : n->getSourceLoc(), n->getFun());
 }
 
 json node(const SVF::SVFVar* n)

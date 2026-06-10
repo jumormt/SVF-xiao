@@ -164,6 +164,8 @@ const std::vector<QueryEngine::Method>& QueryEngine::methodTable()
         {"defuse", &QueryEngine::defuse},
         {"pts", &QueryEngine::pts},
         {"aliases", &QueryEngine::aliases},
+        {"vfpath", &QueryEngine::vfpath},
+        {"reachable", &QueryEngine::reachable},
     };
     return table;
 }

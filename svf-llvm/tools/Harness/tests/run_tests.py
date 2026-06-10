@@ -204,7 +204,8 @@ class HarnessTest(unittest.TestCase):
                 self.assertTrue(m["returns"], f"missing returns: {m['name']}")
         implemented = {m["name"] for m in j["methods"] if m["implemented"]}
         self.assertLessEqual({"schema", "summary", "functions",
-                              "callers", "callees"}, implemented)
+                              "callers", "callees", "cfg", "defuse", "pts",
+                              "aliases", "vfpath", "reachable"}, implemented)
         self.assertIn("evidence_record", j)
         self.assertIn("program", j)
         # Drift guard: callers/callees returns docs must describe the real shape.
@@ -223,6 +224,15 @@ class HarnessTest(unittest.TestCase):
                           f"{mname} returns doc missing 'vars'")
         self.assertIn("points_to", method_returns["pts"])
         self.assertIn("total_nodes", method_returns["cfg"])
+        # Drift guard: defuse per-var caps (Task 5.1 carry-over) + vfpath/
+        # reachable real shapes (Task 5.1).
+        self.assertIn("200", method_returns["defuse"])
+        for key in ("paths", "steps", "visited", "truncated"):
+            self.assertIn(key, method_returns["vfpath"],
+                          f"vfpath returns doc missing '{key}'")
+        for key in ("results", "first_path", "truncated"):
+            self.assertIn(key, method_returns["reachable"],
+                          f"reachable returns doc missing '{key}'")
 
     @unittest.skipUnless(
         os.path.isdir(os.path.join(HERE, "..", "..", "..", "..", "svf", "lib")),
@@ -354,6 +364,81 @@ class HarnessTest(unittest.TestCase):
             self.assertIn("file", msg)
             self.assertIn("999", msg)
             self.assertIn("nearest", msg)  # nearby defining lines are listed
+
+    def test_vfpath_malloc_to_use(self):
+        j = self.oneshot("vfpath", {
+            "source": {"func": "malloc", "ret": True},
+            "sink":   {"file": "demo.c", "line": 11},
+            "k": 3})
+        self.assertGreaterEqual(len(j["paths"]), 1)
+        p = j["paths"][0]
+        files = {s["node"]["loc"]["file"].split("/")[-1]
+                 for s in p["steps"] if s["node"]["loc"]["file"]}
+        self.assertEqual(files, {"demo.c"})
+        edge_kinds = [s["edge"] for s in p["steps"][1:]]
+        self.assertTrue(any("Ret" in k or "Call" in k for k in edge_kinds),
+                        edge_kinds)  # crosses the make_buf boundary
+        self.assertIn("truncated", j)
+
+    def test_reachable_batch(self):
+        # demo.c line 22 is `return a0 + a19;` inside long_ir_helper — it
+        # defines values, but they never flow from malloc.
+        j = self.oneshot("reachable", {
+            "source": {"func": "malloc", "ret": True},
+            "sinks": [{"file": "demo.c", "line": 11},
+                      {"file": "demo.c", "line": 22}]})
+        self.assertEqual(len(j["results"]), 2)
+        self.assertTrue(j["results"][0]["reachable"])
+        r0 = j["results"][0]
+        self.assertGreaterEqual(len(r0["first_path"]["steps"]), 2)
+
+    def test_vfpath_unreachable(self):
+        # long_ir_helper's locals never flow from malloc
+        j = self.oneshot("vfpath", {
+            "source": {"func": "malloc", "ret": True},
+            "sink": {"file": "demo.c", "line": 22}, "k": 1})
+        self.assertEqual(j["paths"], [])
+
+    def test_reachable_sink_cap(self):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            params = {"source": {"func": "malloc", "ret": True},
+                      "sinks": [{"file": "demo.c", "line": 11}] * 21}
+            out = subprocess.run([BIN, "--oneshot", "reachable", "--params",
+                                  json.dumps(params), ll],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            msg = json.loads(out.stdout)["error"]["message"]
+            self.assertIn("20", msg)  # the cap is named in the error
+
+    def test_anchor_name_filter_miss_hint(self):
+        # line 8 defines vars, but none named 'zzz': the error must blame the
+        # name filter (and mention -fno-discard-value-names), not the line.
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            out = subprocess.run([BIN, "--oneshot", "defuse", "--params",
+                                  json.dumps({"var": {"file": "demo.c",
+                                                      "line": 8,
+                                                      "name": "zzz"}}), ll],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            msg = json.loads(out.stdout)["error"]["message"]
+            self.assertIn("name filter", msg)
+            self.assertIn("-fno-discard-value-names", msg)
+
+    def test_func_name_anchor_unsupported(self):
+        # {func, name} is not an accepted form; the error must say so
+        # explicitly instead of the generic "needs ret or arg" message.
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            out = subprocess.run([BIN, "--oneshot", "defuse", "--params",
+                                  json.dumps({"var": {"func": "fill",
+                                                      "name": "p"}}), ll],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            msg = json.loads(out.stdout)["error"]["message"]
+            self.assertIn("{func, name}", msg)
+            self.assertIn("unsupported", msg)
 
     def test_duplicate_function_names_merged(self):
         j = self.oneshot("callers", {"func": "helper"},
