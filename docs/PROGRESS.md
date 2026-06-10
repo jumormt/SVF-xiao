@@ -19,15 +19,15 @@ value-flow paths with structured evidence.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
-| 2026-06-10 | tutorials | E1+ | in-progress | Design: `docs/designs/2026-06-10-tutorials.md`. Plan: `docs/plans/2026-06-10-02-tutorials.md`. Phase 1 done (scripts 01-04 + run_all green; tutorials 01-04 from real runs). Phases 2-3 (real-world+MCP, ctest+index) remain. |
+| 2026-06-10 | tutorials | E1+ | in-progress | Design: `docs/designs/2026-06-10-tutorials.md`. Plan: `docs/plans/2026-06-10-02-tutorials.md`. Phases 1-2 done (scripts 01-05 + run_all 5/5 PASS; tutorials 01-06 from real runs incl. MCP transcript + mcp-sample.mcp.json). Phase 3 (ctest harness_examples + docs index) remains. |
 | 2026-06-10 | svf-harness-thin-slice | E1 | done | **All 7 phases done, 2026-06-10.** 11 methods, daemon+CLI+MCP, 33 py tests, full regression 2267/2267, demo green. Summary: `docs/summaries/2026-06-10-svf-harness-thin-slice.md` |
 
 ## Next Steps
-- **tutorials Phase 2:** Task 2.1 (examples/05-real-world.sh + tutorial 05 on
-  Test-Suite bc.bc; RUN_BIG=1 stretch), then Task 2.2 (tutorial 06 MCP +
-  examples/mcp-sample.mcp.json).
-- Then: tutorials Phase 3 Task 3.1 (ctest harness_examples + docs/tutorials/README.md
-  index + Harness README link).
+- **tutorials Phase 3 Task 3.1:** CMakeLists `harness_examples` ctest running
+  examples/run_all.sh (BUILD_TESTING-gated, env like harness_integration,
+  RUN_BIG unset); verify `ctest -R harness_examples` serial from Release-build;
+  docs/tutorials/README.md index (link all 6 tutorials) + Harness README link;
+  full py suite re-check; then plan completion summary (`/ldd-summary`).
 - Then: E2 declarative query language L_Q (proposal Task 2.2).
 
 ## Known Issues
@@ -240,3 +240,25 @@ value-flow paths with structured evidence.
   degrades loc to empty but loc.func + ir keep results usable.
 - **Tests:** no code changed; suite remains green (33/33, regression 2267/2267)
 - **Blockers:** none. Verdict: merge.
+
+### 2026-06-10 (tutorials Phase 2)
+- **Focus:** tutorials plan Tasks 2.1 + 2.2 — real-world example/tutorial 05
+  (Test-Suite crux-bc) + MCP tutorial 06 + .mcp.json sample
+- **Completed:** examples/05-real-world.sh (bc.bc: timed serve, summary,
+  functions alloc|free with all-locs-empty assertion, callers free == 35,
+  vfpath malloc→free-arg0 k=2, pts malloc-ret; skip exit-0 when Test-Suite
+  absent, SVF_EX05_BC test hook; RUN_BIG=1 bash.bc stretch: xmalloc 0-callers,
+  sh_xmalloc 603/200 truncated, vfpath on 611k-node SVFG);
+  docs/tutorials/05-real-world-program.md (no-debug-info evidence degradation,
+  xmalloc self-correction loop + verified-against-IR sidebar, measured perf
+  table); docs/tutorials/06-claude-code-mcp.md (claude mcp add + .mcp.json
+  scopes, params-nesting trap demoed live, 3 question patterns, UAF transcript
+  with real in-memory-client outputs, troubleshooting);
+  examples/mcp-sample.mcp.json (placeholders via "_comment" key). Tutorial 04
+  Next-link updated. Commits c6f2e330, 6e59d652.
+- **Tests:** ex05 default PASS + RUN_BIG=1 PASS (57s bash load) + skip branch
+  exit 0; run_all.sh 5/5 PASS rc=0; py suite 33/33; mcp-sample JSON validated
+- **Files:** svf-llvm/tools/Harness/examples/{05-real-world.sh,
+  mcp-sample.mcp.json}(new), docs/tutorials/{05-real-world-program.md,
+  06-claude-code-mcp.md}(new), docs/tutorials/04-value-flow-witnesses.md
+- **Blockers:** none
