@@ -21,11 +21,10 @@
 #include "Graphs/SVFGEdge.h"
 #include "SVFIR/SVFIR.h"
 #include "SVFIR/SVFVariables.h"
+#include "Util/GeneralType.h"
 #include "Util/SVFUtil.h"
 #include <algorithm>
 #include <deque>
-#include <map>
-#include <set>
 #include <stdexcept>
 
 using namespace SVF;
@@ -39,6 +38,8 @@ constexpr size_t kDefaultMaxVisited = 100000;
 constexpr int kMaxPaths = 10;
 /// reachable: max sink anchors per call.
 constexpr size_t kSinkCap = 20;
+/// Per-path step cap: keep first half + last half, insert elision marker.
+constexpr size_t kPathStepCap = 500;
 
 /// Concrete SVFGEdge class name for a path step's `edge` label. isa<> on the
 /// CONCRETE classes only — never derive labels from toString() prefixes:
@@ -85,7 +86,7 @@ struct Search
 {
     /// node id -> (predecessor node, edge taken INTO the node); sources map
     /// to {nullptr, nullptr}. Doubles as the visited/discovered set.
-    std::map<NodeID, std::pair<const VFGNode*, const VFGEdge*>> parent;
+    SVF::Map<NodeID, std::pair<const VFGNode*, const VFGEdge*>> parent;
     size_t visited = 0;     ///< nodes dequeued (charged against the budget)
     bool truncated = false; ///< budget exhausted with frontier left
 };
@@ -95,7 +96,7 @@ struct Search
 /// stops the search early (enough hits collected).
 template <typename OnHit>
 Search bfs(const std::vector<const VFGNode*>& sources,
-           const std::set<NodeID>& targets, size_t budget, OnHit onHit)
+           const SVF::Set<NodeID>& targets, size_t budget, OnHit onHit)
 {
     Search s;
     std::deque<const VFGNode*> queue;
@@ -138,12 +139,37 @@ Search bfs(const std::vector<const VFGNode*>& sources,
     return s;
 }
 
+/// Apply middle elision to a steps array: keep the first `cap/2` and last
+/// `cap/2` steps, insert a {"elided_steps": N} marker between them.
+/// Returns the elided array and sets *truncated = true.
+/// If steps.size() <= cap, returns the array unchanged and leaves *truncated.
+json elideSteps(json steps, size_t cap, bool* truncated)
+{
+    if (steps.size() <= cap)
+        return steps;
+    const size_t half = cap / 2;                     // 250 for cap=500
+    const size_t elided = steps.size() - 2 * half;
+    json out = json::array();
+    for (size_t i = 0; i < half; ++i)
+        out.push_back(std::move(steps[i]));
+    out.push_back(json{{"elided_steps", elided}});
+    for (size_t i = steps.size() - half; i < steps.size(); ++i)
+        out.push_back(std::move(steps[i]));
+    *truncated = true;
+    return out;
+}
+
 /// Reconstruct the witness path ending at `sink` from the BFS parent tree:
 /// {steps: [{node, edge: null}, {node, edge, callsite?}, ...], length}.
 /// The first step's edge is null (it is the source); Call*/Ret* steps carry
 /// the CallICFGNode evidence of the crossed callsite.
-json buildPath(const Search& s, const VFGNode* sink, const SVFG* svfg)
+/// `maxSteps` caps the emitted steps via middle elision (cap/2 head + tail
+/// with an {"elided_steps": N} marker); absent/0 means use kPathStepCap.
+json buildPath(const Search& s, const VFGNode* sink, const SVFG* svfg,
+               size_t maxSteps = 0)
 {
+    if (maxSteps == 0)
+        maxSteps = kPathStepCap;
     std::vector<std::pair<const VFGNode*, const VFGEdge*>> rev;
     for (const VFGNode* cur = sink; cur;)
     {
@@ -162,7 +188,12 @@ json buildPath(const Search& s, const VFGNode* sink, const SVFG* svfg)
                 step["callsite"] = evidence::node(cs);
         steps.push_back(std::move(step));
     }
-    return json{{"steps", std::move(steps)}, {"length", rev.size()}};
+    bool truncated = false;
+    steps = elideSteps(std::move(steps), maxSteps, &truncated);
+    json path{{"steps", std::move(steps)}, {"length", rev.size()}};
+    if (truncated)
+        path["steps_truncated"] = true;
+    return path;
 }
 
 size_t budgetParam(const json& params)
@@ -173,6 +204,20 @@ size_t budgetParam(const json& params)
         params["max_visited"].get<long long>() < 1)
         throw std::runtime_error("max_visited must be a positive integer");
     return params["max_visited"].get<size_t>();
+}
+
+/// Optional max_steps param: range [10, 500], default kPathStepCap.
+size_t maxStepsParam(const json& params)
+{
+    if (!params.contains("max_steps"))
+        return kPathStepCap;
+    if (!params["max_steps"].is_number_integer())
+        throw std::runtime_error("max_steps must be an integer");
+    const long long v = params["max_steps"].get<long long>();
+    if (v < 10 || v > static_cast<long long>(kPathStepCap))
+        throw std::runtime_error(
+            "max_steps must be in [10, " + std::to_string(kPathStepCap) + "]");
+    return static_cast<size_t>(v);
 }
 
 const json& requiredAnchor(const json& params, const char* key)
@@ -349,9 +394,10 @@ json QueryEngine::vfpath(const json& params) const
         k = params["k"].get<int>();
     }
     const size_t budget = budgetParam(params);
+    const size_t maxSteps = maxStepsParam(params);
     const std::vector<const VFGNode*> sources = resolveSourceNodes(srcSpec);
     const std::vector<const VFGNode*> sinks = resolveSinkNodes(sinkSpec);
-    std::set<NodeID> targets;
+    SVF::Set<NodeID> targets;
     for (const VFGNode* n : sinks)
         targets.insert(n->getId());
 
@@ -363,7 +409,7 @@ json QueryEngine::vfpath(const json& params) const
     });
     json paths = json::array();
     for (const VFGNode* h : hits)
-        paths.push_back(buildPath(s, h, svfg));
+        paths.push_back(buildPath(s, h, svfg, maxSteps));
     return json{{"paths", std::move(paths)},
                 {"sources", sources.size()},
                 {"sinks", sinks.size()},
@@ -386,42 +432,68 @@ json QueryEngine::reachable(const json& params) const
             " (cap is " + std::to_string(kSinkCap) +
             " per call; split into batches)");
     const size_t budget = budgetParam(params);
+    const size_t maxSteps = maxStepsParam(params);
+    // SOURCE failure is fatal (invalidates the whole call).
     const std::vector<const VFGNode*> sources = resolveSourceNodes(srcSpec);
 
     // Sink specs may share SVFG nodes; map node -> spec indexes so one BFS
     // serves all sinks and the first hit per spec becomes its witness.
-    std::map<NodeID, std::vector<size_t>> nodeToSinks;
-    std::set<NodeID> targets;
+    // Per-sink resolution failures yield a result row with reachable=false
+    // and an "error" field rather than aborting the whole call.
+    SVF::Map<NodeID, std::vector<size_t>> nodeToSinks;
+    SVF::Set<NodeID> targets;
+    std::vector<std::string> sinkErrors(sinkSpecs.size());
+    size_t validSinks = 0;
     for (size_t i = 0; i < sinkSpecs.size(); ++i)
     {
-        for (const VFGNode* n : resolveSinkNodes(sinkSpecs[i]))
+        try
         {
-            nodeToSinks[n->getId()].push_back(i);
-            targets.insert(n->getId());
+            for (const VFGNode* n : resolveSinkNodes(sinkSpecs[i]))
+            {
+                nodeToSinks[n->getId()].push_back(i);
+                targets.insert(n->getId());
+            }
+            ++validSinks;
+        }
+        catch (const std::exception& e)
+        {
+            sinkErrors[i] = e.what();
         }
     }
 
     std::vector<const VFGNode*> witness(sinkSpecs.size(), nullptr);
-    size_t remaining = sinkSpecs.size();
-    const Search s = bfs(sources, targets, budget, [&](const VFGNode* n)
+    size_t remaining = validSinks;
+    Search s;
+    if (!targets.empty())
     {
-        for (size_t i : nodeToSinks[n->getId()])
+        s = bfs(sources, targets, budget, [&](const VFGNode* n)
         {
-            if (!witness[i])
+            for (size_t i : nodeToSinks[n->getId()])
             {
-                witness[i] = n;
-                --remaining;
+                if (!witness[i])
+                {
+                    witness[i] = n;
+                    if (--remaining == 0)
+                        return true;
+                }
             }
-        }
-        return remaining == 0;
-    });
+            return false;
+        });
+    }
     json results = json::array();
     for (size_t i = 0; i < sinkSpecs.size(); ++i)
     {
+        if (!sinkErrors[i].empty())
+        {
+            results.push_back(json{{"sink", sinkSpecs[i]},
+                                   {"reachable", false},
+                                   {"error", sinkErrors[i]}});
+            continue;
+        }
         json r{{"sink", sinkSpecs[i]},
                {"reachable", witness[i] != nullptr}};
         if (witness[i])
-            r["first_path"] = buildPath(s, witness[i], svfg);
+            r["first_path"] = buildPath(s, witness[i], svfg, maxSteps);
         results.push_back(std::move(r));
     }
     return json{{"results", std::move(results)},

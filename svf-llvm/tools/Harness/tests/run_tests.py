@@ -3,6 +3,8 @@ import json, os, shutil, socket, subprocess, sys, tempfile, time, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BIN = os.environ.get("SVF_HARNESS_BIN", "svf-harness")
+if not os.path.isfile(BIN) and shutil.which(BIN) is None:
+    sys.exit(f"set SVF_HARNESS_BIN=/path/to/Release-build/bin/svf-harness (got: {BIN!r})")
 CLANG = os.environ.get("CLANG", shutil.which("clang"))
 if not CLANG:
     sys.exit("error: clang not found on PATH; set CLANG=/path/to/clang")
@@ -439,6 +441,35 @@ class HarnessTest(unittest.TestCase):
             msg = json.loads(out.stdout)["error"]["message"]
             self.assertIn("{func, name}", msg)
             self.assertIn("unsupported", msg)
+
+    def test_reachable_tolerates_bad_sink(self):
+        # A bad sink (nonexistent line 999) must yield a per-sink error row,
+        # not abort the whole call — the good sink (line 11) must still report
+        # reachable=True.
+        j = self.oneshot("reachable", {
+            "source": {"func": "malloc", "ret": True},
+            "sinks": [{"file": "demo.c", "line": 11},
+                      {"file": "demo.c", "line": 999}]})
+        self.assertEqual(len(j["results"]), 2)
+        self.assertTrue(j["results"][0]["reachable"])
+        self.assertFalse(j["results"][1]["reachable"])
+        self.assertIn("error", j["results"][1])
+
+    def test_vfpath_step_elision(self):
+        # chain.c: alloc() returns malloc; hop0..hop9 each do a local
+        # store+load, threading the pointer; main dereferences it on line 25.
+        # The path length exceeds 10 steps (each hop adds store/load/phi/ret
+        # nodes), so max_steps=10 exercises middle elision.
+        j = self.oneshot("vfpath", {
+            "source": {"func": "malloc", "ret": True},
+            "sink":   {"file": "chain.c", "line": 25},
+            "k": 1, "max_steps": 10}, fixture="chain.c")
+        self.assertGreaterEqual(len(j["paths"]), 1)
+        p = j["paths"][0]
+        self.assertTrue(p.get("steps_truncated"), p)
+        markers = [s for s in p["steps"] if "elided_steps" in s]
+        self.assertEqual(len(markers), 1)
+        self.assertGreater(markers[0]["elided_steps"], 0)
 
     def test_duplicate_function_names_merged(self):
         j = self.oneshot("callers", {"func": "helper"},

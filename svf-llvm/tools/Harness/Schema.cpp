@@ -502,7 +502,11 @@ json methods()
         "the number of distinct sink nodes reported, and other (longer or "
         "differently-routed) paths to the same node are NOT enumerated. A "
         "path is a MAY value flow (Andersen + memory-SSA "
-        "over-approximation), evidence to inspect, not proof of a bug.",
+        "over-approximation), evidence to inspect, not proof of a bug. "
+        "STEP CAP: each path is capped at max_steps steps (default 500) "
+        "via middle elision — the first and last halves are kept and a "
+        "{\"elided_steps\": N} marker is inserted between them; the path "
+        "object gains steps_truncated=true when elision occurs.",
         json{{"source", param("object", kAnchorDesc, true)},
              {"sink", param("object",
                  "Same anchor shapes as `source`, but resolved to value-flow "
@@ -515,29 +519,43 @@ json methods()
                  "Max number of distinct paths to return, in [1, 10] "
                  "(default 1). At most one path per distinct sink node "
                  "exists — see the method description.", false)},
+             {"max_steps", param("integer",
+                 "Per-path step cap in [10, 500] (default 500). When a path "
+                 "exceeds this, the first cap/2 and last cap/2 steps are "
+                 "kept with an {\"elided_steps\": N} marker in between, and "
+                 "steps_truncated=true is set on the path object.", false)},
              {"max_visited", param("integer",
                  "Search budget: max SVFG nodes to visit before giving up "
                  "(default 100000). Raise for large programs.", false)}},
         "{paths: [{steps: [{node: <evidence>, edge: <edge_kinds name; null "
         "on the first step>, callsite?: <evidence of the CallICFGNode, on "
-        "Call*/Ret* edges>}], length}], sources, sinks, visited, truncated} "
+        "Call*/Ret* edges>}], length, steps_truncated?: true}], sources, "
+        "sinks, visited, truncated} "
         "— truncated=true means the visit budget ran out before the search "
-        "space was exhausted"));
+        "space was exhausted; steps_truncated=true on a path means its step "
+        "list was elided (see max_steps)"));
     a.push_back(method("reachable",
         "Boolean value-flow reachability from one source to MANY sinks at "
         "once (each with a shortest witness path if reachable). One shared "
         "BFS — cheaper than calling vfpath per sink when screening "
         "candidate sinks. Same may-analysis semantics and search limits as "
-        "vfpath.",
+        "vfpath. Unresolvable sinks (e.g. a nonexistent line) yield a "
+        "per-sink error row instead of aborting the whole call; only a "
+        "source resolution failure is fatal.",
         json{{"source", param("object", kAnchorDesc, true)},
              {"sinks", param("array",
                  "Array of sink anchors (same shapes as vfpath's sink), "
                  "capped at 20 per call.", true)},
+             {"max_steps", param("integer",
+                 "Per-path step cap in [10, 500] (default 500), same "
+                 "elision semantics as vfpath.", false)},
              {"max_visited", param("integer",
                  "Search budget shared across sinks (default 100000).",
                  false)}},
         "{results: [{sink: <echo of the anchor>, reachable: bool, "
-        "first_path?: {steps, length} (present only when reachable)}], "
+        "first_path?: {steps, length} (present only when reachable), "
+        "error?: string (present when the sink anchor could not be "
+        "resolved; reachable=false in this case)}], "
         "sources, visited, truncated}"));
     return a;
 }
