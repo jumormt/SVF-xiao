@@ -22,18 +22,18 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | in-progress | Design: `docs/designs/2026-06-10-svf-harness-thin-slice.md` (user-approved). Plan: `docs/plans/2026-06-10-01-svf-harness-thin-slice.md`. |
 
 ## Next Steps
-- **svf-harness-thin-slice Phase 4:** start Task 4.3 (cfg/defuse/pts/aliases),
-  Step 1 (failing tests: `cfg("use_after_free")` nodes with line numbers + intra
-  edges; `pts` of `b` → exactly one heap object at the malloc line; `aliases` of
-  `b` ⊇ fill's param `p`; `defuse` of `b` includes the free callsite + return
-  load; carry-over obligation: instruction-level locs via the `"fl"` evidence
-  path + one ir-truncation case). Needs the var-resolution helper
-  (`{file,line,name?}` / `{func,ret|arg}`) shared with Phase 5 — see plan
-  Task 4.3 bullets. Task 4.2 done (commit 70338a39, 17/17 tests): callers/callees
-  via CallGraphEdge direct/indirect callsite sets; reuse
-  `findFunction()` (CallGraphNode lookup + edit-distance hint) for Task 4.3's
-  func params; note indirect.c uses explicit stores (clang-10 memcpy-from-const
-  not resolved by SVF — see Task 4.2 notes).
+- **svf-harness-thin-slice Phase 5:** start Task 5.1 (vfpath + reachable),
+  Step 1 (failing test `test_vfpath_malloc_to_use`: source
+  `{func: malloc, ret: true}`, sink `{file: demo.c, line: 11}`, k=3 — full
+  sketch in plan). Reuse `resolveVars()` (Queries.cpp) for anchors: source
+  vars → `svfg->getDefSVFGNode(var)`; sinks need a new file:line → SVFG-node
+  resolver. BFS over SVFG out-edges with parent pointers + max_visited
+  budget; per-step edge labels via dyn_cast on the `Graphs/SVFGEdge.h`
+  concrete classes (names already in schema edge_kinds). Task 4.3 done
+  (commit ff2308a1, 24/24 tests): cfg/defuse/pts/aliases + shared
+  resolveVars; query bodies split into Queries.cpp (second TU of
+  QueryEngine) — see plan Task 4.3 notes for API findings and the v0
+  aliases same-function scope.
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -131,4 +131,26 @@ value-flow paths with structured evidence.
   unknown 'make_buff' → "did you mean: make_buf, ..."
 - **Files:** svf-llvm/tools/Harness/{QueryEngine.h,QueryEngine.cpp,
   tests/run_tests.py,tests/check_schema_kinds.py,tests/fixtures/indirect.c}
+- **Blockers:** none
+
+### 2026-06-10 (Task 4.3)
+- **Focus:** svf-harness Phase 4 Task 4.3 — cfg/defuse/pts/aliases + resolveVars
+- **Completed:** shared resolveVars() anchor helper ({file,line[,name]} /
+  {func,ret} / {func,arg}; dedup + id-sort; misses throw accepted-forms +
+  nearest-defining-lines hints); cfg (singular findFunction, ambiguity =
+  error, node/edge caps 500/1000); defuse (SVFStmt in/out edges as
+  {stmt kind, at: ICFG evidence}); pts (Andersen pts → ObjVar evidence);
+  aliases (v0 same-function ValVar scope, documented in schema, 50/var cap).
+  Query bodies split into Queries.cpp (second TU). Schema returns docs for
+  the 4 methods rewritten to real shapes + drift guards. demo.c gained a
+  20-arg call covering the Task 2.2 ir-truncation obligation.
+  Commit ff2308a1.
+- **Tests:** 24/24 harness python tests green (new: cfg_of_use_after_free,
+  cfg_ir_truncation, pts_of_b_contains_heap_obj, defuse_of_b,
+  aliases_of_malloc_ret, var_resolution_error_hint); manual: pts/defuse/
+  aliases of malloc-ret, free arg0 form, line-999/bad-form/arg-range errors,
+  cfg ambiguity on dup fixtures
+- **Files:** svf-llvm/tools/Harness/{Queries.cpp(new),QueryEngine.h,
+  QueryEngine.cpp,Schema.cpp,CMakeLists.txt,tests/run_tests.py,
+  tests/fixtures/demo.c}
 - **Blockers:** none

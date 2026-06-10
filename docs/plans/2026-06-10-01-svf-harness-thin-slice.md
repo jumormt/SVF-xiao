@@ -550,12 +550,12 @@ on at least one long node string.
 method bodies to `Queries.cpp` (planned refactor). Keep `QueryEngine.h` as the
 public facade; all five source files share the same CMake target.
 
-- [ ] **Step 1: Failing tests** — `cfg("use_after_free")` returns nodes with line
+- [x] **Step 1: Failing tests** — `cfg("use_after_free")` returns nodes with line
   numbers and intra edges; `pts` on variable `b` (resolve by `file:line` of the
   `make_buf` call) contains exactly one heap object whose loc points at the `malloc`
   line; `aliases` of `b` at least contains the `fill` parameter `p`; `defuse` of `b`
   includes the `free` callsite and the return load.
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
   - `cfg`: iterate function's ICFG nodes (`ICFG` + function filter; check
     `FunObjVar`→entry/exit APIs in `Graphs/ICFG.h`), emit nodes + intra edges.
   - var resolution helper (shared with Phase 5): `{"var": {"file": "...", "line": N,
@@ -567,7 +567,51 @@ public facade; all five source files share the same CMake target.
     `truncated`.
   - `defuse`: SVFStmt edges of the var (`SVFVar::getInEdges/getOutEdges` in
     `SVFIR/SVFVariables.h`).
-- [ ] **Step 3: PASS + Commit** — `harness: cfg/defuse/pts/aliases primitives`
+- [x] **Step 3: PASS + Commit** — `harness: cfg/defuse/pts/aliases primitives`
+  (commit ff2308a1, 24/24 tests green)
+
+**Task 4.3 implementation notes (commit ff2308a1):**
+- **Queries.cpp split (reviewer-planned):** query method bodies (`functions`,
+  `callEdges`, `schemaQ`, `resolveVars`, `cfg`, `defuse`, `pts`, `aliases`)
+  moved to a new `Queries.cpp` (same class, second TU); QueryEngine.cpp keeps
+  ctor/summary/findFunction(s)/methodTable/dispatch. CMake target gained the
+  file; no other build changes.
+- **resolveVars(spec)** (shared with Task 5.1 anchors): all three forms
+  implemented; result deduped + sorted by node id. file:line form scans ICFG
+  nodes whose `evidence::loc` file path-suffix-matches (at a '/' boundary) and
+  collects the **dst vars** of each node's `getSVFStmts()`; optional "name" is
+  a `getValueName()` substring filter. func form walks the CallGraphNode
+  in-edges' direct+indirect callsite sets (same machinery as callers); ret via
+  `cs->getRetICFGNode()` + `pag->callsiteHasRet/getCallSiteRet`, arg via
+  `cs->getArgument(N)`/`arg_size()`. Empty resolution throws with the accepted
+  forms and (file:line) up to 5 nearest defining lines.
+- **API notes (headers checked, no renames needed):** `AliasResult` is a plain
+  enum in `SVFIR/SVFType.h` (`SVF::NoAlias`); `alias(NodeID,NodeID)`/`getPts`
+  are non-const on PointerAnalysis (fine through the `ander` pointer member);
+  SVFStmt edge sets are `SVFStmt::SVFStmtSetTy`; SVFStmt kind names come from
+  a `PEDGEK` switch — toString() prefixes do NOT work for stmts (they print
+  "SVFStmt: [" mid-body, see check_schema_kinds notes).
+- **cfg:** singular `findFunction` (ambiguity → error, verified vs dup
+  fixtures); nodes = ICFG nodes with `getFun()==fun` (id-ordered map walk),
+  edges = their out-edges incl. Call/RetCFGEdge crossings; caps 500/1000,
+  `truncated` = either.
+- **defuse semantics (v0):** defs = SVFStmt in-edges, uses = out-edges of the
+  var. Note a Store INTO a pointer-typed var (e.g. `b` at line 8) appears as a
+  def — memory-def semantics, intended.
+- **aliases v0 scope** documented in Schema.cpp description: candidates =
+  ValVars of the var's own function only; no-function vars get empty lists.
+- **Fixture/lines:** demo.c lines verified: make_buf=4, `b =` 8, fill 9,
+  free 10, return b[0] 11. Appended (below the old code, line numbers stable)
+  `long_ir`/`long_ir_helper` with a 20-arg call whose CallICFGNode dump
+  exceeds the 200-byte ir cap → `test_cfg_ir_truncation` covers the Task 2.2
+  truncation obligation; instruction-level "fl" locs asserted in both the cfg
+  and defuse tests.
+- **Test deltas vs plan Step 1 sketch:** `pts`/`aliases` anchor on
+  {func: malloc, ret: true} (the make_buf-local malloc result) instead of `b`;
+  aliases asserts ≥1 same-function alias (resolves to make_buf's RetValPN) —
+  fill's `p` is out of v0 scope by design. Schema returns docs for the 4
+  methods rewritten to the real shapes; drift guards added to
+  test_schema_self_describing (vars/truncated/points_to/total_nodes).
 
 ## Phase 5: Value flow + path evidence
 
