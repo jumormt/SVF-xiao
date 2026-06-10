@@ -391,6 +391,12 @@ exercised by later tasks (callers/cfg). `--params` is stripped before
 
 ### Task 4.1: schema()
 
+**Review-decision (from Task 2.2 quality review):** evidence `kind` strings derive from
+`toString()` prefixes. `schema()` MUST enumerate `node_kinds` from the same source so the
+invariant "every evidence kind appears in schema().node_kinds" holds — include the
+`InterMSSAPHISVFGNode` aliases `FormalINPHISVFGNode`/`ActualOUTPHISVFGNode` which exist in
+no enum. Do NOT build node_kinds from GNodeK enums alone.
+
 **Files:** Create `Schema.h/.cpp`; modify `QueryEngine.cpp`; test in `run_tests.py`.
 
 - [ ] **Step 1: Failing test** — `schema()` returns `node_kinds` (≥ all ICFGNode +
@@ -439,6 +445,10 @@ int main(void) { return apply(0, 21); }
 - [ ] **Step 3: PASS + Commit** — `harness: call graph navigation with indirect calls`
 
 ### Task 4.3: cfg / defuse / pts / aliases
+
+**Test obligation (from Task 2.2 quality review):** assert that cfg/defuse results carry
+instruction-level locs (the `"fl"` key path of evidence::loc) and exercise ir-truncation
+on at least one long node string.
 
 - [ ] **Step 1: Failing tests** — `cfg("use_after_free")` returns nodes with line
   numbers and intra edges; `pts` on variable `b` (resolve by `file:line` of the
