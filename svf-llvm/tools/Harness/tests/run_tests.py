@@ -471,6 +471,22 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual(len(markers), 1)
         self.assertGreater(markers[0]["elided_steps"], 0)
 
+    MCP_PYTHON = os.environ.get("MCP_PYTHON",
+                                "/home/xiao/program/py311-mcp/bin/python")
+
+    @unittest.skipUnless(os.path.isfile(MCP_PYTHON),
+                         "MCP python (>=3.10 with `mcp`) not present; "
+                         "set MCP_PYTHON to enable")
+    def test_mcp_smoke(self):
+        smoke = os.path.abspath(os.path.join(
+            HERE, "..", "..", "..", "..", "mcp", "svf_harness_mcp",
+            "test_smoke.py"))
+        env = dict(os.environ, SVF_HARNESS_BIN=os.path.abspath(BIN)
+                   if os.path.isfile(BIN) else BIN)
+        out = subprocess.run([self.MCP_PYTHON, smoke], capture_output=True,
+                             text=True, env=env)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
     def test_duplicate_function_names_merged(self):
         j = self.oneshot("callers", {"func": "helper"},
                          fixture=["dup_a.c", "dup_b.c"])
