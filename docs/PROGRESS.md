@@ -29,11 +29,14 @@ value-flow paths with structured evidence.
   unavailable). Then `server.py` via FastMCP: `load_program` spawns
   `svf-harness serve` (binary from `SVF_HARNESS_BIN`), other tools
   registered dynamically from the daemon's `schema()` and forwarded over
-  the socket; surface JSON-RPC `hint` in errors. Task 5.1 done (commit
-  9f99dd43, 30/30 tests): vfpath/reachable in new VFPath.cpp (third TU) —
-  see plan Task 5.1 notes for the single-BFS k-paths strategy, the
-  VFGNode::getSourceLoc() empty-loc fix, and the 4 review carry-overs
-  (AnchorDoc.h, defuse caps, anchor error messages).
+  the socket; surface JSON-RPC `hint` in errors. Task 5.1 hardening done
+  (commit 9ca8b2c3, 32/32 tests): reachable per-sink error rows, vfpath
+  step elision (kPathStepCap=500, max_steps param [10,500]), SVF::Map/Set
+  containers, BIN existence check. Elision-test design decision: opted for
+  the `max_steps` optional param approach (rather than hidden debug method
+  or code-inspection only) because it also adds user-visible value for large
+  programs; chain.c fixture (10-hop store/load, 96-step path) exercises it
+  honestly with max_steps=10.
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -175,4 +178,21 @@ value-flow paths with structured evidence.
 - **Files:** svf-llvm/tools/Harness/{VFPath.cpp(new),AnchorDoc.h(new),
   Evidence.h,Evidence.cpp,Queries.cpp,QueryEngine.h,QueryEngine.cpp,
   Schema.cpp,CMakeLists.txt,tests/run_tests.py}
+- **Blockers:** none
+
+### 2026-06-10 (Task 5.1 hardening — review fixes)
+- **Focus:** code-review carry-overs: reachable per-sink errors, vfpath step
+  elision, SVF container hardening, BIN existence check
+- **Completed:** reachable() per-sink try/catch — bad sink → {reachable:false,
+  error} row, good sinks unaffected; buildPath() elideSteps() with
+  kPathStepCap=500 + optional max_steps param [10,500]; SVF::Map/SVF::Set for
+  Search::parent, targets, nodeToSinks (unordered, ordering from explicit
+  sort); BIN file/which check in run_tests.py; Schema.cpp returns docs
+  updated. Elision test: chose max_steps param approach (see Next Steps note
+  for design rationale). New fixture chain.c: 10-hop store/load chain
+  producing a 96-step path. Commit 9ca8b2c3.
+- **Tests:** 32/32 harness python tests green (new: reachable_tolerates_bad_sink,
+  vfpath_step_elision; test_schema_kind_invariant still skipped as before)
+- **Files:** svf-llvm/tools/Harness/{VFPath.cpp,Schema.cpp,tests/run_tests.py,
+  tests/fixtures/chain.c(new)}
 - **Blockers:** none
