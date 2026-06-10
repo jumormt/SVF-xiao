@@ -22,10 +22,9 @@ value-flow paths with structured evidence.
 | 2026-06-10 | svf-harness-thin-slice | E1 | done | **All 7 phases done, 2026-06-10.** 11 methods, daemon+CLI+MCP, 33 py tests, full regression 2267/2267, demo green. Summary: `docs/summaries/2026-06-10-svf-harness-thin-slice.md` |
 
 ## Next Steps
-- **Merge/push decision for `harness-v0`** (user): merge into focal and/or push to fork.
-- **Next epic candidates** (user picks): E2 declarative query language L_Q (proposal
-  Task 2.2) — natural next; or exercise the harness on a real codebase first
-  (recommended shakedown before E2).
+- **Next epic** (user picks): E2 declarative query language L_Q (proposal Task 2.2) is
+  the natural next; aliases-perf indexing (FUTURE.md) is the first perf item if real
+  targets grow.
 
 ## Known Issues
 - Test-Suite must run SERIALLY (`ctest` without `-j`): parallel runs corrupt shared
@@ -212,3 +211,14 @@ value-flow paths with structured evidence.
 - **Tests:** 33 python integration tests green; full Test-Suite 2267/2267 serial; demo PASSED
 - **Files:** svf-llvm/tools/Harness/* (~2400 LoC C++), mcp/svf_harness_mcp/*, docs/*
 - **Blockers:** none. Branch harness-v0 unpushed pending user decision.
+
+### 2026-06-10 (shakedown)
+- **Focus:** real-program shakedown of svf-harness (user-requested before merge)
+- **Completed:** bc.bc (187 fn): 2s load, ~30ms queries. bash.bc (2368 fn, 611k SVFG
+  nodes, 2.7GB RSS): 57s load, callers 49ms, vfpath 116ms, reachable batch 340ms,
+  aliases 7.1s (known v0 quadratic — FUTURE.md trigger now confirmed). Zero crashes,
+  zero wrong results (xmalloc 0-callers anomaly verified correct against llvm-dis:
+  this bash build routes all allocation through sh_xmalloc). No-debug-info bitcode
+  degrades loc to empty but loc.func + ir keep results usable.
+- **Tests:** no code changed; suite remains green (33/33, regression 2267/2267)
+- **Blockers:** none. Verdict: merge.

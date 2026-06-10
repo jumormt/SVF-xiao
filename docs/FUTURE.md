@@ -21,3 +21,10 @@ Items intentionally out of the v0 thin slice, with trigger conditions.
 | Destructor unlink guard (stat dev/ino match) against successor-daemon socket deletion | Kill/restart races observed in practice |
 | Socket in `$XDG_RUNTIME_DIR` + umask 0177 (multi-user hardening) | Harness used on shared machines |
 | Drain/SHUT_RD before oversize -32600 reply so client can actually read it | An MCP/client actually needs the structured oversize error |
+
+## Perf (confirmed in bash.bc shakedown 2026-06-10)
+
+| Item | Trigger |
+|------|---------|
+| Lazy function→ValVars index for `aliases` (7.1s on a 603-callsite anchor in bash.bc) | aliases used routinely on large programs |
+| Better no-debug-info diagnosis ("module lacks -g" instead of "no vars at line N") | LLM sessions on release bitcode |
