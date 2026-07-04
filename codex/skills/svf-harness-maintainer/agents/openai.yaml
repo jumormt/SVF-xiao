@@ -1,0 +1,4 @@
+interface:
+  display_name: "SVF Harness Maintainer"
+  short_description: "Develop and verify SVF harness surfaces"
+  default_prompt: "Use $svf-harness-maintainer to add and test a new svf-harness query surface."

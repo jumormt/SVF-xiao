@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
+
+harness_bin="${SVF_HARNESS_BIN:-$repo_root/Release-build/bin/svf-harness}"
+if [[ ! -x "$harness_bin" ]]; then
+  cat >&2 <<EOF
+svf-harness binary not found or not executable:
+  $harness_bin
+
+Build it first:
+  cmake --build Release-build --target svf-harness -j2
+
+Or override the path:
+  SVF_HARNESS_BIN=/path/to/svf-harness codex
+EOF
+  exit 127
+fi
+
+python_candidates=()
+if [[ -n "${SVF_MCP_PYTHON:-}" ]]; then
+  python_candidates+=("$SVF_MCP_PYTHON")
+fi
+python_candidates+=(
+  "$repo_root/.venv/bin/python"
+  "$repo_root/venv/bin/python"
+  "${CODEX_HOME:-$HOME/.codex}/venvs/svf-mcp/bin/python"
+  "$HOME/program/py311-mcp/bin/python"
+  python3
+  python
+)
+
+python_bin=""
+for candidate in "${python_candidates[@]}"; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    if "$candidate" -c 'from mcp.server.fastmcp import FastMCP' >/dev/null 2>&1; then
+      python_bin="$(command -v "$candidate")"
+      break
+    fi
+  fi
+done
+
+if [[ -z "$python_bin" ]]; then
+  cat >&2 <<EOF
+Could not find a Python interpreter with the MCP SDK FastMCP server module.
+
+Install it in your preferred environment:
+  python3 -m pip install mcp
+
+Or point Codex at one explicitly:
+  SVF_MCP_PYTHON=/path/to/python-with-mcp codex
+EOF
+  exit 127
+fi
+
+export SVF_HARNESS_BIN="$harness_bin"
+cd "$repo_root"
+exec "$python_bin" "$repo_root/mcp/svf_harness_mcp/server.py"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "SVF Program Analysis"
+  short_description: "Natural-language SVF harness workflows"
+  default_prompt: "Use $svf-program-analysis to analyze this LLVM bitcode with svf-harness."

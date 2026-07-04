@@ -1,12 +1,9 @@
-# Project-scoped Codex configuration for the SVF-xiao checkout.
-# Codex loads this only after the project is trusted.
+# Project-scoped Codex configuration for any trusted SVF-xiao checkout.
+# Codex resolves relative project-config paths from this .codex/ directory.
+# The wrapper discovers the repo root, Python interpreter, and harness binary.
 
 [mcp_servers.svf]
-command = "/home/xiao/program/py311-mcp/bin/python"
-args = ["/home/xiao/project/SVF-xiao/mcp/svf_harness_mcp/server.py"]
-cwd = "/home/xiao/project/SVF-xiao"
+command = "bash"
+args = ["-lc", 'repo_root="$(git rev-parse --show-toplevel)" && cd "$repo_root" && exec .codex/bin/svf-mcp-server']
 startup_timeout_sec = 20
 tool_timeout_sec = 650
-
-[mcp_servers.svf.env]
-SVF_HARNESS_BIN = "/home/xiao/project/SVF-xiao/Release-build/bin/svf-harness"

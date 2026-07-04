@@ -11,30 +11,48 @@ graph_edges node neighbors analysis_config`).
 
 Guided walkthroughs (including a Codex/Claude Code MCP tutorial with question
 patterns and a sample session): [`docs/tutorials/`](../../docs/tutorials/README.md).
+For full query coverage plus Codex MCP and skills usage, use the mdBook source
+in [`docs/harness-book/`](../../docs/harness-book/).
 
 ## Setup for Codex
 
 Requires python >= 3.10 with the `mcp` SDK (`pip install mcp`) and a built
 `svf-harness` binary (see `svf-llvm/tools/Harness/`).
 
-This checkout includes a project-scoped Codex config at `.codex/config.toml`
-for this machine:
+This checkout includes a project-scoped Codex config at `.codex/config.toml`.
+It uses a repo-local wrapper rather than machine-specific absolute paths:
 
 ```toml
 [mcp_servers.svf]
-command = "/home/xiao/program/py311-mcp/bin/python"
-args = ["/home/xiao/project/SVF-xiao/mcp/svf_harness_mcp/server.py"]
-cwd = "/home/xiao/project/SVF-xiao"
+command = "bin/svf-mcp-server"
 startup_timeout_sec = 20
 tool_timeout_sec = 650
-
-[mcp_servers.svf.env]
-SVF_HARNESS_BIN = "/home/xiao/project/SVF-xiao/Release-build/bin/svf-harness"
 ```
 
 Codex loads project `.codex/config.toml` only after the project is trusted. In
 Codex, run `/mcp` in the TUI or `codex mcp list` from the repo root to inspect
 the active `svf` server.
+
+The wrapper discovers:
+
+- the repo root from `.codex/bin/svf-mcp-server`;
+- `Release-build/bin/svf-harness`, unless `SVF_HARNESS_BIN` overrides it;
+- a Python interpreter that can import `mcp.server.fastmcp`, unless
+  `SVF_MCP_PYTHON` overrides it.
+
+Install the bundled Codex skills for this user:
+
+```bash
+bash codex/install-codex-assets.sh
+```
+
+If your default `python3` cannot load the MCP FastMCP server module, create the
+venv path that the wrapper checks automatically:
+
+```bash
+python3 -m venv "${CODEX_HOME:-$HOME/.codex}/venvs/svf-mcp"
+"${CODEX_HOME:-$HOME/.codex}/venvs/svf-mcp/bin/python" -m pip install mcp
+```
 
 To add the same server to your user-level Codex config instead:
 
@@ -43,9 +61,6 @@ codex mcp add svf \
     --env SVF_HARNESS_BIN=/path/to/SVF-xiao/Release-build/bin/svf-harness \
     -- /path/to/python-with-mcp /path/to/SVF-xiao/mcp/svf_harness_mcp/server.py
 ```
-
-On this machine: python is `/home/xiao/program/py311-mcp/bin/python`, repo is
-`/home/xiao/project/SVF-xiao`.
 
 ## Setup for Claude Code
 
@@ -126,7 +141,7 @@ Variable anchors accepted by `defuse`/`pts`/`aliases`/`vfpath`/`reachable`:
 
 ```bash
 SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness \
-    /home/xiao/program/py311-mcp/bin/python mcp/svf_harness_mcp/test_smoke.py -v
+    python3 mcp/svf_harness_mcp/test_smoke.py -v
 ```
 
 Also hooked into the C++ suite runner (`svf-llvm/tools/Harness/tests/

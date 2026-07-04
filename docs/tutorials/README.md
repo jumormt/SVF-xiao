@@ -4,6 +4,11 @@ Six hands-on tutorials for `svf-harness`, the LLM-friendly query daemon/CLI
 over SVF's analyses. Read them in order — each builds on the previous one's
 vocabulary (evidence records, anchors, witness paths).
 
+For full API coverage, including all 28 current daemon methods, Codex MCP, and
+Codex skills usage, use the mdBook source in
+[`../harness-book/`](../harness-book/). This directory remains the
+script-backed walkthrough set.
+
 | # | Tutorial | What you'll learn |
 |---|----------|-------------------|
 | 01 | [Getting started](01-getting-started.md) | Compile C to LLVM IR, start the daemon, first queries (`summary`, `functions`), shut down — and the pay-once-at-serve cost model. |

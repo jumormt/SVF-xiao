@@ -12,6 +12,8 @@ doxygen/
 .*
 !.codex/
 !.codex/config.toml
+!.codex/bin/
+!.codex/bin/svf-mcp-server
 !.config.in
 !.config.cmake.in
 !.gitignore
@@ -28,3 +30,4 @@ doxygen/
 cmake-build-debug/
 compile_commands.json
 __pycache__/
+docs/harness-book/book/

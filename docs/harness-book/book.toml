@@ -1,0 +1,14 @@
+[book]
+title = "SVF Harness Tutorial"
+authors = ["SVF-xiao maintainers"]
+description = "A practical guide to querying SVF analyses through svf-harness, Codex MCP, and Codex skills."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/jumormt/SVF-xiao"
+edit-url-template = "https://github.com/jumormt/SVF-xiao/edit/focal/docs/harness-book/{path}"

@@ -21,7 +21,7 @@ This machine is Ubuntu 20.04 focal.
 - Harness tests:
   `SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness python3 svf-llvm/tools/Harness/tests/run_tests.py -v`
 - MCP smoke:
-  `SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness /home/xiao/program/py311-mcp/bin/python mcp/svf_harness_mcp/test_smoke.py -v`
+  `SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness python3 mcp/svf_harness_mcp/test_smoke.py -v`
 - Examples:
   `SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness bash svf-llvm/tools/Harness/examples/run_all.sh`
 - CTest harness entries:

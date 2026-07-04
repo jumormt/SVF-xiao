@@ -2,6 +2,8 @@
 
 > **New here?** Start with the [tutorials](../../../docs/tutorials/README.md)
 > — six guided walkthroughs from first query to Codex/Claude Code integration.
+> For full API coverage, use the mdBook source in
+> [`docs/harness-book/`](../../../docs/harness-book/).
 
 `svf-harness` exposes SVF's program analyses (call graph, ICFG, points-to,
 sparse value-flow) as a query service an LLM agent can drive: a daemon builds
