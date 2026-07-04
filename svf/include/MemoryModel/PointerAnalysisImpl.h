@@ -31,6 +31,7 @@
 #define INCLUDE_MEMORYMODEL_POINTERANALYSISIMPL_H_
 
 #include <Graphs/ConsG.h>
+#include "MemoryModel/PTATY.h"
 #include "MemoryModel/PointerAnalysis.h"
 
 namespace SVF
@@ -60,15 +61,8 @@ public:
     typedef PersistentIncDFPTData<NodeID, NodeSet, NodeID, PointsTo> PersIncDFPTDataTy;
     typedef PersistentVersionedPTData<NodeID, NodeSet, NodeID, PointsTo, VersionedVar, Set<VersionedVar>> PersVersionedPTDataTy;
 
-    /// How the PTData used is implemented.
-    enum PTBackingType
-    {
-        Mutable,
-        Persistent,
-    };
-
     /// Constructor
-    BVDataPTAImpl(SVFIR* pag, PointerAnalysis::PTATY type, bool alias_check = true);
+    BVDataPTAImpl(SVFIR* pag, PTATY type, bool alias_check = true);
 
     /// Destructor
     ~BVDataPTAImpl() override = default;
@@ -80,7 +74,7 @@ public:
 
     static inline bool classof(const PointerAnalysis *pta)
     {
-        return pta->getImplTy() == BVDataImpl;
+        return pta->getImplTy() == PTAImplTy::BVDataImpl;
     }
 
     /// Get points-to and reverse points-to
@@ -227,6 +221,12 @@ public:
     /// Interface expose to users of our pointer analysis, given two pts
     virtual AliasResult alias(const PointsTo& pts1, const PointsTo& pts2);
 
+    /// Convenience bool wrappers: return true if the two operands may/must/partial alias
+    inline bool mayAlias(const PointsTo& pts1, const PointsTo& pts2)
+    {
+        return alias(pts1, pts2)!= AliasResult::NoAlias;
+    }
+
     /// dump and debug, print out conditional pts
     //@{
     void dumpCPts() override
@@ -257,14 +257,14 @@ public:
     typedef Map<NodeID,CPtSet> PtrToCPtsMap;	 /// map a pointer to its conditional points-to set
 
     /// Constructor
-    CondPTAImpl(SVFIR* pag, PointerAnalysis::PTATY type) : PointerAnalysis(pag, type), normalized(false)
+    CondPTAImpl(SVFIR* pag, PTATY type) : PointerAnalysis(pag, type), normalized(false)
     {
-        if (type == PathS_DDA || type == Cxt_DDA)
+        if (type == PTATY::PathS_DDA || type == PTATY::Cxt_DDA)
             ptD = new MutPTDataTy();
         else
             assert(false && "no points-to data available");
 
-        ptaImplTy = CondImpl;
+        ptaImplTy = PTAImplTy::CondImpl;
     }
 
     /// Destructor
@@ -275,7 +275,7 @@ public:
 
     static inline bool classof(const PointerAnalysis *pta)
     {
-        return pta->getImplTy() == CondImpl;
+        return pta->getImplTy() == PTAImplTy::CondImpl;
     }
 
     /// Release memory
@@ -527,7 +527,7 @@ public:
         expandFIObjs(pts2,cpts2);
         if (containBlackHoleNode(cpts1) || containBlackHoleNode(cpts2))
             return AliasResult::MayAlias;
-        else if(this->getAnalysisTy()==PathS_DDA && contains(cpts1,cpts2) && contains(cpts2,cpts1))
+        else if(this->getAnalysisTy() == PTATY::PathS_DDA && contains(cpts1,cpts2) && contains(cpts2,cpts1))
         {
             return AliasResult::MustAlias;
         }

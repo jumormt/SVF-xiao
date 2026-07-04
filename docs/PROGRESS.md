@@ -24,6 +24,7 @@ representative Test-Suite bitcodes directly.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
+| 2026-07-04 | upstream-ci-merge | Infra | done | **Done 2026-07-04.** Merged `upstream/master` to pick up macOS CI Xcode `latest-stable` workflow fixes and current upstream SVF core maintenance changes. Merge had no conflicts; harness build, harness tests 64/64, MCP smoke 4/4, examples 5/5, mdBook checks, and artifact cleanup passed. Plan: `docs/plans/2026-07-04-12-upstream-ci-merge.md` |
 | 2026-07-04 | harness-tutorial-redesign | Docs | done | **Done 2026-07-04.** Rebuilt `docs/harness-book/` into a two-layer tutorial: task-driven walkthroughs plus full 28-method query cookbook with stronger coverage checks. Coverage checker, mdBook build, examples 5/5, and artifact cleanup passed. Plan: `docs/plans/2026-07-04-11-harness-tutorial-redesign.md`; design: `docs/designs/2026-07-04-harness-tutorial-redesign.md` |
 | 2026-07-04 | codex-mcp-startup | Infra | done | **Done 2026-07-04.** Fixed project-scoped Codex `svf` MCP startup from nested workspaces by launching through `bash -lc`, deriving the Git repo root, and execing `.codex/bin/svf-mcp-server`; wrapper now also discovers `$HOME/program/py311-mcp/bin/python`. MCP smoke 4/4 passed. Plan: `docs/plans/2026-07-04-10-codex-mcp-startup.md` |
 | 2026-07-04 | codex-portable-assets | Infra | done | **Done 2026-07-04.** Replaced machine-specific Codex MCP config with repo-local wrapper, vendored installable SVF Codex skills under `codex/skills/`, added `codex/install-codex-assets.sh`, and updated MCP/mdBook/AGENTS guidance. Plan: `docs/plans/2026-07-04-09-codex-portable-assets.md` |
@@ -32,7 +33,7 @@ representative Test-Suite bitcodes directly.
 | archived | completed plans through 2026-07-04 | mixed | done | Historical completed plans are archived in `docs/plans/SESSION-LOG-ARCHIVE.md`; detailed plan files remain in `docs/plans/`. |
 
 ## Next Steps
-- **Review and publish tutorial book** — inspect the rebuilt `docs/harness-book/` output, then include it in the next docs commit/PR with the existing Codex portable-assets changes.
+- **Watch `svf-build` after upstream merge** — confirm the pushed merge clears the macOS `mac-setup` Xcode failure; if it reaches later build/test failures, inspect the new failing job logs separately.
 - **Codex portable-assets follow-up** — after push, ask another checkout/user to run `bash codex/install-codex-assets.sh`, trust the repo, build `svf-harness`, and confirm `codex mcp list` plus `$svf-program-analysis` invocation.
 - **Next B/C slice** — choose between AE detector bug summaries, MTA lock/race diagnostics, or deeper DDA/SABER diagnostics after tutorial work.
 - **E2 declarative query language L_Q** (proposal Task 2.2) — still deferred unless user redirects.
@@ -68,6 +69,27 @@ representative Test-Suite bitcodes directly.
 - Post-completion summaries remain in `docs/summaries/`.
 
 ## Session Log
+
+### 2026-07-04 (Upstream CI merge)
+- **Focus:** address failing GitHub Actions `svf-build #1122` on `focal`.
+- **Completed:** inspected the public Actions job and found the macOS job
+  failed in `mac-setup` before compilation with `Could not find Xcode version
+  that satisfied version spec: '16.0.0'`. Fetched `upstream/master`, confirmed
+  upstream already changed the build workflow to `XCODE_VERSION:
+  latest-stable` and `xcode-select -p` based symlink discovery, and merged
+  `upstream/master` into `focal` with no conflicts. The merge also brings
+  recent upstream SVF core maintenance changes.
+- **Tests:** `env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c 'source
+  ./setup.sh > /dev/null && cmake --build Release-build --target svf-harness
+  -j2'` passed; harness Python suite passed 64/64; MCP smoke passed 4/4;
+  tutorial examples passed 5/5; mdBook coverage checker passed 28/28 methods;
+  mdBook build passed; generated Test-Suite artifact count cleaned back to 0.
+- **Files:** upstream merge touched `.github/workflows/*`, `build.sh`,
+  `setup.sh`, `cmake/Modules/FindZ3.cmake`, and upstream SVF core/LLVM files;
+  LDD recorded in `docs/plans/2026-07-04-12-upstream-ci-merge.md` and
+  `docs/PROGRESS.md`.
+- **Blockers:** local machine lacks `gh`, so CI log inspection used the public
+  GitHub Actions web/API surfaces instead.
 
 ### 2026-07-04 (Harness tutorial redesign)
 - **Focus:** respond to feedback that the current `svf-harness` tutorial is too thin.
