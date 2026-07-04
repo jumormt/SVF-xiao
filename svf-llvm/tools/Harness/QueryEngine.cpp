@@ -5,12 +5,17 @@
 //
 //===----------------------------------------------------------------------===//
 #include "QueryEngine.h"
+#include "CFL/CFLAlias.h"
+#include "DDA/DDAClient.h"
+#include "DDA/FlowDDA.h"
 #include "Graphs/CallGraph.h"
 #include "Graphs/SVFG.h"
+#include "MTA/MTA.h"
 #include "SVF-LLVM/LLVMModule.h"
 #include "SVF-LLVM/LLVMUtil.h"
 #include "SVF-LLVM/SVFIRBuilder.h"
 #include "WPA/Andersen.h"
+#include "Util/Options.h"
 #include <algorithm>
 #include <fstream>
 #include <set>
@@ -19,7 +24,99 @@
 using namespace SVF;
 using json = nlohmann::json;
 
+QueryEngine::HarnessConfig::HarnessConfig()
+    : pointerAnalysis("andersen-wave-diff"),
+      svfgMode("full"),
+      svfgIndirectCalls(Options::SVFGWithIndirectCall()),
+      svfgPostOpts(Options::OPTSVFG())
+{
+}
+
+QueryEngine::HarnessConfig QueryEngine::HarnessConfig::fromJson(const json& j)
+{
+    HarnessConfig c;
+    if (j.is_null())
+        return c;
+    if (!j.is_object())
+        throw std::runtime_error("analysis config must be a JSON object");
+    if (j.contains("pointer_analysis"))
+    {
+        if (!j["pointer_analysis"].is_string())
+            throw std::runtime_error("pointer_analysis must be a string");
+        c.pointerAnalysis = j["pointer_analysis"].get<std::string>();
+        if (c.pointerAnalysis != "andersen-wave-diff")
+            throw std::runtime_error("unknown pointer_analysis '" +
+                                     c.pointerAnalysis +
+                                     "' (supported: andersen-wave-diff)");
+    }
+    if (j.contains("svfg"))
+    {
+        const json& s = j["svfg"];
+        if (!s.is_object())
+            throw std::runtime_error("svfg config must be an object");
+        if (s.contains("mode"))
+        {
+            if (!s["mode"].is_string())
+                throw std::runtime_error("svfg.mode must be a string");
+            c.svfgMode = s["mode"].get<std::string>();
+            if (c.svfgMode != "full" && c.svfgMode != "ptr-only")
+                throw std::runtime_error("unknown svfg.mode '" + c.svfgMode +
+                                         "' (supported: full, ptr-only)");
+        }
+        if (s.contains("indirect_calls"))
+        {
+            if (!s["indirect_calls"].is_boolean())
+                throw std::runtime_error("svfg.indirect_calls must be a boolean");
+            c.svfgIndirectCalls = s["indirect_calls"].get<bool>();
+        }
+        if (s.contains("post_opts"))
+        {
+            if (!s["post_opts"].is_boolean())
+                throw std::runtime_error("svfg.post_opts must be a boolean");
+            c.svfgPostOpts = s["post_opts"].get<bool>();
+        }
+    }
+    return c;
+}
+
+json QueryEngine::HarnessConfig::toJson() const
+{
+    return json{
+        {"pointer_analysis", json{
+            {"active", pointerAnalysis},
+            {"supported", json::array({"andersen-wave-diff"})},
+        }},
+        {"svfg", json{
+            {"mode", svfgMode},
+            {"supported_modes", json::array({"full", "ptr-only"})},
+            {"indirect_calls", svfgIndirectCalls},
+            {"post_opts", svfgPostOpts},
+        }},
+        {"surfaces", json::array({
+            {{"name", "wpa"}, {"status", "active-core"},
+             {"notes", "Harness currently runs AndersenWaveDiff directly; broader WPA selections are planned."}},
+            {{"name", "dda"}, {"status", "supported"},
+             {"notes", "Lazy FlowDDA surface is available via dda_pts and dda_aliases."}},
+            {{"name", "cfl"}, {"status", "supported"},
+             {"notes", "Lazy CFLAlias surface is available via cfl_pts and cfl_aliases."}},
+            {{"name", "saber"}, {"status", "supported"},
+             {"notes", "SABER checker summaries are available via saber_leaks, saber_double_frees, and saber_file_leaks."}},
+            {{"name", "mta"}, {"status", "supported"},
+             {"notes", "Lazy MTA thread/MHP summaries are available via mta_summary and mta_mhp."}},
+            {{"name", "ae"}, {"status", "planned"},
+             {"notes", "Abstract execution surfaces are planned after checker output contracts are designed."}},
+        })},
+    };
+}
+
 QueryEngine::QueryEngine(const std::vector<std::string>& moduleNames)
+    : QueryEngine(moduleNames, HarnessConfig())
+{
+}
+
+QueryEngine::QueryEngine(const std::vector<std::string>& moduleNames,
+                         const HarnessConfig& cfg)
+    : config(cfg)
 {
     if (moduleNames.empty())
         throw std::runtime_error("no input bitcode module given");
@@ -47,8 +144,18 @@ QueryEngine::QueryEngine(const std::vector<std::string>& moduleNames)
     callgraph = ander->getCallGraph();
     // svfBuilder is a member: it owns the SVFG via unique_ptr and must
     // outlive our svfg pointer (a stack-local builder left it dangling).
-    svfg = svfBuilder.buildFullSVFG(ander);
+    svfBuilder = std::make_unique<SVFGBuilder>(config.svfgIndirectCalls,
+                                               config.svfgPostOpts);
+    if (config.svfgMode == "full")
+        svfg = svfBuilder->buildFullSVFG(ander);
+    else if (config.svfgMode == "ptr-only")
+        svfg = svfBuilder->buildPTROnlySVFG(ander);
+    else
+        throw std::runtime_error("unknown svfg.mode '" + config.svfgMode +
+                                 "' (supported: full, ptr-only)");
 }
+
+QueryEngine::~QueryEngine() = default;
 
 json QueryEngine::summary() const
 {
@@ -62,6 +169,36 @@ json QueryEngine::summary() const
 
 namespace
 {
+std::string findDefaultCFLGrammar()
+{
+    std::vector<std::string> candidates;
+#ifdef SVF_HARNESS_CFL_GRAMMAR_DIR
+    candidates.push_back(std::string(SVF_HARNESS_CFL_GRAMMAR_DIR) +
+                         "/PAGGrammar.txt");
+#endif
+    candidates.push_back("svf/include/CFL/grammar/PAGGrammar.txt");
+    candidates.push_back("../svf/include/CFL/grammar/PAGGrammar.txt");
+    for (const std::string& path : candidates)
+        if (std::ifstream(path).good())
+            return path;
+    throw std::runtime_error(
+        "cannot locate CFL grammar PAGGrammar.txt; set SVF's -grammar option");
+}
+
+void ensureCFLDefaults()
+{
+    if (Options::GrammarFilename().empty())
+        const_cast<Option<std::string>&>(Options::GrammarFilename)
+            .setValue(findDefaultCFLGrammar());
+    const_cast<Option<bool>&>(Options::EnableAliasCheck).setValue(false);
+}
+
+void ensureDDADefaults()
+{
+    // Query mode must keep stdout as a single JSON document.
+    const_cast<Option<bool>&>(Options::PStat).setValue(false);
+}
+
 /// Iterative two-row Levenshtein distance for the unknown-function hint.
 /// Inputs are capped at 64 chars so a pathological name stays O(1)-ish.
 size_t editDistance(const std::string& fullA, const std::string& fullB)
@@ -164,8 +301,23 @@ const std::vector<QueryEngine::Method>& QueryEngine::methodTable()
         {"defuse", &QueryEngine::defuse},
         {"pts", &QueryEngine::pts},
         {"aliases", &QueryEngine::aliases},
+        {"cfl_pts", &QueryEngine::cflPts},
+        {"cfl_aliases", &QueryEngine::cflAliases},
+        {"dda_pts", &QueryEngine::ddaPts},
+        {"dda_aliases", &QueryEngine::ddaAliases},
+        {"saber_leaks", &QueryEngine::saberLeaks},
+        {"saber_double_frees", &QueryEngine::saberDoubleFrees},
+        {"saber_file_leaks", &QueryEngine::saberFileLeaks},
+        {"mta_summary", &QueryEngine::mtaSummary},
+        {"mta_mhp", &QueryEngine::mtaMHP},
         {"vfpath", &QueryEngine::vfpath},
         {"reachable", &QueryEngine::reachable},
+        {"graphs", &QueryEngine::graphs},
+        {"graph_nodes", &QueryEngine::graphNodes},
+        {"graph_edges", &QueryEngine::graphEdges},
+        {"node", &QueryEngine::nodeQ},
+        {"neighbors", &QueryEngine::neighbors},
+        {"analysis_config", &QueryEngine::analysisConfig},
     };
     return table;
 }
@@ -184,4 +336,32 @@ json QueryEngine::dispatch(const std::string& m, const json& p)
         if (m == entry.name)
             return (this->*entry.handler)(p);
     throw std::runtime_error("unknown method: " + m);
+}
+
+json QueryEngine::analysisConfig(const json&) const
+{
+    return config.toJson();
+}
+
+CFLAlias* QueryEngine::getCFLAlias() const
+{
+    if (!cflAlias)
+    {
+        ensureCFLDefaults();
+        cflAlias = std::make_unique<CFLAlias>(pag);
+        cflAlias->analyze();
+    }
+    return cflAlias.get();
+}
+
+FlowDDA* QueryEngine::getFlowDDA() const
+{
+    if (!flowDDA)
+    {
+        ensureDDADefaults();
+        ddaClient = std::make_unique<DDAClient>();
+        flowDDA = std::make_unique<FlowDDA>(pag, ddaClient.get());
+        flowDDA->initialize();
+    }
+    return flowDDA.get();
 }

@@ -23,11 +23,11 @@ using harness::dumpJson;
 
 static const char* kUsage =
     "svf-harness — LLM-friendly SVF query daemon/CLI\n"
-    "  svf-harness serve <bitcode...> [--socket PATH]   start daemon\n"
+    "  svf-harness serve <bitcode...> [--socket PATH] [--analysis-config JSON]   start daemon\n"
     "  svf-harness <method> [args] [--socket PATH]      query the daemon\n"
-    "  svf-harness --oneshot <method> [--params JSON] <bitcode...>  build state + run one query\n"
+    "  svf-harness --oneshot <method> [--params JSON] [--analysis-config JSON] <bitcode...>  build state + run one query\n"
     "  svf-harness shutdown [--socket PATH]             stop the daemon\n"
-    "Methods: schema summary functions callers callees cfg defuse pts aliases vfpath reachable\n";
+    "Methods: schema summary functions callers callees cfg defuse pts aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp vfpath reachable graphs graph_nodes graph_edges node neighbors analysis_config\n";
 
 /// Oneshot error contract: print {"error":{code,message}} on stdout, return 1.
 static int jsonError(const std::string& message, int code = -32000)
@@ -57,6 +57,25 @@ static std::string parseParamsArg(int argc, char** argv, int i, json* out)
     if (p.is_discarded())
         return std::string("invalid --params JSON: ") + argv[i + 1];
     *out = std::move(p);
+    return "";
+}
+
+static std::string parseAnalysisConfigArg(int argc, char** argv, int i,
+                                          QueryEngine::HarnessConfig* out)
+{
+    if (i + 1 >= argc)
+        return "--analysis-config requires a JSON argument";
+    json p = json::parse(argv[i + 1], /*cb=*/nullptr, /*allow_exceptions=*/false);
+    if (p.is_discarded())
+        return std::string("invalid --analysis-config JSON: ") + argv[i + 1];
+    try
+    {
+        *out = QueryEngine::HarnessConfig::fromJson(p);
+    }
+    catch (const std::exception& e)
+    {
+        return e.what();
+    }
     return "";
 }
 
@@ -103,6 +122,7 @@ static std::string resolveSocketPath(const std::string& explicitPath,
 static int runServe(int argc, char** argv)
 {
     std::string socketArg;
+    QueryEngine::HarnessConfig config;
     // Shifted argv for OptionBase: program name + args minus --socket PATH.
     // Stats forced off: daemon stdout must stay clean.
     static char statOff[] = "-stat=false";
@@ -123,6 +143,17 @@ static int runServe(int argc, char** argv)
             ++i;
             continue;
         }
+        if (std::strcmp(argv[i], "--analysis-config") == 0)
+        {
+            std::string err = parseAnalysisConfigArg(argc, argv, i, &config);
+            if (!err.empty())
+            {
+                std::fprintf(stderr, "svf-harness: %s\n", err.c_str());
+                return 1;
+            }
+            ++i;
+            continue;
+        }
         shifted.push_back(argv[i]);
     }
     std::vector<std::string> moduleNameVec = OptionBase::parseOptions(
@@ -130,7 +161,7 @@ static int runServe(int argc, char** argv)
         "svf-harness serve", "[options] <input-bitcode...>");
     try
     {
-        QueryEngine engine(moduleNameVec);
+        QueryEngine engine(moduleNameVec, config);
         std::string path = resolveSocketPath(socketArg, moduleNameVec);
         HarnessServer server(engine, path);
         std::fprintf(stderr, "svf-harness: listening on %s\n", path.c_str());
@@ -183,6 +214,7 @@ static int runClient(int argc, char** argv)
     std::string method = argv[1];
     std::string socketArg;
     json params = json::object();
+    QueryEngine::HarnessConfig config;
     for (int i = 2; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--params") == 0)
@@ -285,6 +317,7 @@ static int runOneshot(int argc, char** argv)
     // Extract `--params <json>` (not an SVF option; OptionBase would reject
     // it). Defaults to an empty object; invalid JSON => standard JSON error.
     json params = json::object();
+    QueryEngine::HarnessConfig config;
     // Shifted argv: program name + everything after the method name.
     // Stats are forced off: oneshot stdout must be pure JSON.
     static char statOff[] = "-stat=false";
@@ -301,6 +334,14 @@ static int runOneshot(int argc, char** argv)
             ++i; // skip the JSON value
             continue;
         }
+        if (std::strcmp(argv[i], "--analysis-config") == 0)
+        {
+            std::string err = parseAnalysisConfigArg(argc, argv, i, &config);
+            if (!err.empty())
+                return jsonError(err);
+            ++i;
+            continue;
+        }
         shifted.push_back(argv[i]);
     }
     std::vector<std::string> moduleNameVec = OptionBase::parseOptions(
@@ -308,7 +349,7 @@ static int runOneshot(int argc, char** argv)
         "svf-harness oneshot", "[options] <input-bitcode...>");
     try
     {
-        QueryEngine engine(moduleNameVec);
+        QueryEngine engine(moduleNameVec, config);
         std::puts(dumpJson(engine.dispatch(method, params)).c_str());
         return 0;
     }

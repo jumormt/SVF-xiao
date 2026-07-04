@@ -2,6 +2,7 @@
 #pragma once
 #include "MSSA/SVFGBuilder.h"
 #include "nlohmann/json.hpp"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -10,8 +11,13 @@ namespace SVF
 class SVFIR;
 class SVFG;
 class AndersenBase;
+class CFLAlias;
 class CallGraph;
 class CallGraphNode;
+class DDAClient;
+class FlowDDA;
+class LeakChecker;
+class MTA;
 class SVFVar;
 class VFGNode;
 }
@@ -19,8 +25,23 @@ class VFGNode;
 class QueryEngine
 {
 public:
+    struct HarnessConfig
+    {
+        std::string pointerAnalysis;
+        std::string svfgMode;
+        bool svfgIndirectCalls;
+        bool svfgPostOpts;
+
+        HarnessConfig();
+        static HarnessConfig fromJson(const nlohmann::json& j);
+        nlohmann::json toJson() const;
+    };
+
     /// Builds LLVM modules -> SVFIR -> Andersen -> SVFG. Throws std::runtime_error on bad input.
     explicit QueryEngine(const std::vector<std::string>& moduleNames);
+    QueryEngine(const std::vector<std::string>& moduleNames,
+                const HarnessConfig& config);
+    ~QueryEngine();
     nlohmann::json dispatch(const std::string& method, const nlohmann::json& params);
     /// Names of all dispatchable methods, in registration order. Backed by the
     /// same table dispatch() uses, so the two can never drift apart.
@@ -61,6 +82,28 @@ public:
     /// vars with no enclosing function get an empty list. Capped at 50
     /// aliases per var.
     nlohmann::json aliases(const nlohmann::json& params) const;
+    /// CFLAlias may-points-to set of each var resolved from params["var"].
+    /// Same output shape as pts(), with analysis="cfl-alias".
+    nlohmann::json cflPts(const nlohmann::json& params) const;
+    /// CFLAlias may-aliases of each var resolved from params["var"]. Same
+    /// same-function candidate scope as aliases(), with analysis="cfl-alias".
+    nlohmann::json cflAliases(const nlohmann::json& params) const;
+    /// FlowDDA may-points-to set of each var resolved from params["var"].
+    /// Same output shape as pts(), with analysis="flowdda".
+    nlohmann::json ddaPts(const nlohmann::json& params) const;
+    /// FlowDDA may-aliases of each var resolved from params["var"]. Same
+    /// same-function candidate scope as aliases(), with analysis="flowdda".
+    nlohmann::json ddaAliases(const nlohmann::json& params) const;
+    /// SABER memory leak checker summary.
+    nlohmann::json saberLeaks(const nlohmann::json& params) const;
+    /// SABER double-free checker summary.
+    nlohmann::json saberDoubleFrees(const nlohmann::json& params) const;
+    /// SABER file open/close leak checker summary.
+    nlohmann::json saberFileLeaks(const nlohmann::json& params) const;
+    /// MTA thread creation / MHP summary.
+    nlohmann::json mtaSummary(const nlohmann::json& params) const;
+    /// MTA may-happen-in-parallel query between two source-location anchors.
+    nlohmann::json mtaMHP(const nlohmann::json& params) const;
     /// Value-flow paths from params["source"] to params["sink"] (anchors,
     /// see resolveVars/resolveSinkNodes) over the SVFG: one multi-source BFS
     /// with a parent tree, up to k (default 1, max 10) witness paths — at
@@ -72,6 +115,18 @@ public:
     /// params["sinks"] (array, capped at 20), returning per sink
     /// {sink, reachable, first_path?}. Bodies live in VFPath.cpp.
     nlohmann::json reachable(const nlohmann::json& params) const;
+    /// Inventory of graph surfaces currently loaded by the daemon.
+    nlohmann::json graphs(const nlohmann::json& params) const;
+    /// Generic node listing for icfg/svfg/svfir/callgraph.
+    nlohmann::json graphNodes(const nlohmann::json& params) const;
+    /// Generic edge listing for icfg/svfg/svfir/callgraph.
+    nlohmann::json graphEdges(const nlohmann::json& params) const;
+    /// Fetch one graph node by graph + id.
+    nlohmann::json nodeQ(const nlohmann::json& params) const;
+    /// Fetch incoming/outgoing edges around one graph node.
+    nlohmann::json neighbors(const nlohmann::json& params) const;
+    /// Active analysis configuration plus supported/planned precision surfaces.
+    nlohmann::json analysisConfig(const nlohmann::json& params) const;
 
     // One instance per process — SVF state (LLVMModuleSet/PAG) is global.
     // Never throw from callbacks passed into SVF/LLVM code.
@@ -144,12 +199,33 @@ private:
     /// accepted forms (and nearest value-flow lines for file:line misses).
     std::vector<const SVF::VFGNode*>
     resolveSinkNodes(const nlohmann::json& spec) const;
+    /// Lazily construct and solve CFLAlias on first CFL-backed query.
+    SVF::CFLAlias* getCFLAlias() const;
+    /// Lazily construct FlowDDA on first DDA-backed query. DDAClient must
+    /// outlive FlowDDA because the analysis stores a raw client pointer.
+    SVF::FlowDDA* getFlowDDA() const;
+    /// Run one SABER checker and cache its JSON summary for this daemon.
+    nlohmann::json runSaberChecker(const std::string& checker) const;
+    /// Lazily run SVF's MTA analysis. MTA writes dot/progress output
+    /// internally, so the implementation isolates those side effects.
+    SVF::MTA* getMTA() const;
 
     /// Module paths as given to the ctor; reported in schema().program.
     std::vector<std::string> modules;
+    HarnessConfig config;
     SVF::SVFIR* pag = nullptr;
     SVF::AndersenBase* ander = nullptr;
-    SVF::SVFGBuilder svfBuilder; // owns the SVFG; must outlive svfg
+    std::unique_ptr<SVF::SVFGBuilder> svfBuilder; // owns the SVFG; must outlive svfg
     SVF::SVFG* svfg = nullptr;
     SVF::CallGraph* callgraph = nullptr;
+    mutable std::unique_ptr<SVF::CFLAlias> cflAlias;
+    mutable std::unique_ptr<SVF::DDAClient> ddaClient;
+    mutable std::unique_ptr<SVF::FlowDDA> flowDDA;
+    mutable bool saberLeaksReady = false;
+    mutable bool saberDoubleFreesReady = false;
+    mutable bool saberFileLeaksReady = false;
+    mutable nlohmann::json saberLeaksCache;
+    mutable nlohmann::json saberDoubleFreesCache;
+    mutable nlohmann::json saberFileLeaksCache;
+    mutable std::unique_ptr<SVF::MTA> mta;
 };

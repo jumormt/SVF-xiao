@@ -2,6 +2,17 @@
 import json, os, shutil, socket, subprocess, sys, tempfile, time, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
+TEST_SUITE_BC_ROOT = os.path.join(PROJECT_ROOT, "Test-Suite", "test_cases_bc")
+TEST_SUITE_CRUX_BC = os.path.join(TEST_SUITE_BC_ROOT, "crux-bc", "bc.bc")
+TEST_SUITE_CPP_ARRAY_BC = os.path.join(
+    TEST_SUITE_BC_ROOT, "basic_cpp_tests", "array-3.cpp.bc")
+TEST_SUITE_MEM_LEAK_BC = os.path.join(
+    TEST_SUITE_BC_ROOT, "mem_leak", "malloc0.c.bc")
+TEST_SUITE_DOUBLE_FREE_BC = os.path.join(
+    TEST_SUITE_BC_ROOT, "double_free", "df0.c.bc")
+TEST_SUITE_MTA_SIMPLE_BC = os.path.join(
+    TEST_SUITE_BC_ROOT, "mta", "succ_cxt_simple_2.c.bc")
 BIN = os.environ.get("SVF_HARNESS_BIN", "svf-harness")
 if not os.path.isfile(BIN) and shutil.which(BIN) is None:
     sys.exit(f"set SVF_HARNESS_BIN=/path/to/Release-build/bin/svf-harness (got: {BIN!r})")
@@ -26,6 +37,26 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual(out.returncode, 0)
         self.assertIn("svf-harness", out.stdout)
 
+    def test_cli_help_methods_match_schema(self):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            help_out = subprocess.run([BIN, "--help"],
+                                      capture_output=True, text=True)
+            self.assertEqual(help_out.returncode, 0)
+            methods_lines = [line for line in help_out.stdout.splitlines()
+                             if line.startswith("Methods:")]
+            self.assertEqual(len(methods_lines), 1, help_out.stdout)
+            help_methods = methods_lines[0].split(":", 1)[1].split()
+
+            schema_out = subprocess.run([BIN, "--oneshot", "schema", ll],
+                                        capture_output=True, text=True)
+            self.assertEqual(schema_out.returncode, 0,
+                             schema_out.stderr + schema_out.stdout)
+            schema = json.loads(schema_out.stdout)
+            schema_methods = [m["name"] for m in schema["methods"]
+                              if m.get("implemented")]
+            self.assertEqual(help_methods, schema_methods)
+
     def test_fixture_compiles(self):
         with tempfile.TemporaryDirectory() as td:
             ll = build_fixture(td)
@@ -44,7 +75,7 @@ class HarnessTest(unittest.TestCase):
             self.assertGreaterEqual(j["functions"], 4)
             self.assertIn("icfg_nodes", j); self.assertIn("svfg_nodes", j)
 
-    def oneshot(self, method, params, fixture="demo.c"):
+    def oneshot(self, method, params, fixture="demo.c", analysis_config=None):
         """Run a one-shot query.
 
         ``fixture`` may be a single filename (str) or a list of filenames for
@@ -56,11 +87,25 @@ class HarnessTest(unittest.TestCase):
                 lls = build_fixtures(td, fixture)
             else:
                 lls = [build_fixture(td, fixture)]
-            out = subprocess.run([BIN, "--oneshot", method, "--params",
-                                  json.dumps(params)] + lls,
-                                 capture_output=True, text=True)
+            cmd = [BIN, "--oneshot", method, "--params", json.dumps(params)]
+            if analysis_config is not None:
+                cmd += ["--analysis-config", json.dumps(analysis_config)]
+            cmd += lls
+            out = subprocess.run(cmd, capture_output=True, text=True)
             self.assertEqual(out.returncode, 0, f"stderr={out.stderr} stdout={out.stdout}")
             return json.loads(out.stdout)
+
+    def oneshot_bitcode(self, method, params, bitcode_paths,
+                        analysis_config=None):
+        """Run a one-shot query against existing LLVM bitcode/IR files."""
+        cmd = [BIN, "--oneshot", method, "--params", json.dumps(params)]
+        if analysis_config is not None:
+            cmd += ["--analysis-config", json.dumps(analysis_config)]
+        cmd += bitcode_paths
+        out = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0,
+                         f"stderr={out.stderr} stdout={out.stdout}")
+        return json.loads(out.stdout)
 
     def test_functions_lists_fixture_funcs(self):
         j = self.oneshot("functions", {"pattern": "use_after_free"})
@@ -197,7 +242,7 @@ class HarnessTest(unittest.TestCase):
             self.assertTrue(k["description"], f"missing description: {k['name']}")
         edge_names = {e["name"] for e in j["edge_kinds"]}
         self.assertLessEqual({"IntraCFGEdge", "CallCFGEdge", "RetCFGEdge"}, edge_names)
-        self.assertEqual(len(j["methods"]), 11)
+        self.assertEqual(len(j["methods"]), 26)
         for m in j["methods"]:
             self.assertTrue(m["description"]); self.assertIn("params", m)
             if m["implemented"]:
@@ -207,7 +252,15 @@ class HarnessTest(unittest.TestCase):
         implemented = {m["name"] for m in j["methods"] if m["implemented"]}
         self.assertLessEqual({"schema", "summary", "functions",
                               "callers", "callees", "cfg", "defuse", "pts",
-                              "aliases", "vfpath", "reachable"}, implemented)
+                              "aliases", "cfl_pts", "cfl_aliases",
+                              "dda_pts", "dda_aliases",
+                              "saber_leaks", "saber_double_frees",
+                              "saber_file_leaks",
+                              "mta_summary", "mta_mhp",
+                              "vfpath", "reachable",
+                              "graphs", "graph_nodes", "graph_edges",
+                              "node", "neighbors", "analysis_config"},
+                             implemented)
         self.assertIn("evidence_record", j)
         self.assertIn("program", j)
         # Drift guard: callers/callees returns docs must describe the real shape.
@@ -225,6 +278,17 @@ class HarnessTest(unittest.TestCase):
             self.assertIn("vars", method_returns[mname],
                           f"{mname} returns doc missing 'vars'")
         self.assertIn("points_to", method_returns["pts"])
+        self.assertIn("points_to", method_returns["cfl_pts"])
+        self.assertIn("aliases", method_returns["cfl_aliases"])
+        self.assertIn("points_to", method_returns["dda_pts"])
+        self.assertIn("aliases", method_returns["dda_aliases"])
+        for mname in ("saber_leaks", "saber_double_frees",
+                      "saber_file_leaks"):
+            self.assertIn("bugs", method_returns[mname])
+            self.assertIn("checker", method_returns[mname])
+        self.assertIn("fork_sites", method_returns["mta_summary"])
+        self.assertIn("threads", method_returns["mta_summary"])
+        self.assertIn("may_happen_in_parallel", method_returns["mta_mhp"])
         self.assertIn("total_nodes", method_returns["cfg"])
         # Drift guard: defuse per-var caps (Task 5.1 carry-over) + vfpath/
         # reachable real shapes (Task 5.1).
@@ -235,6 +299,137 @@ class HarnessTest(unittest.TestCase):
         for key in ("results", "first_path", "truncated"):
             self.assertIn(key, method_returns["reachable"],
                           f"reachable returns doc missing '{key}'")
+
+    def test_schema_graph_query_methods(self):
+        j = self.oneshot("schema", {})
+        methods = j["methods"]
+        method_names = [m["name"] for m in methods if m["implemented"]]
+        self.assertEqual(method_names[-6:-1],
+                         ["graphs", "graph_nodes", "graph_edges",
+                          "node", "neighbors"])
+        by_name = {m["name"]: m for m in methods}
+        for name in ("graphs", "graph_nodes", "graph_edges", "node",
+                     "neighbors"):
+            m = by_name[name]
+            self.assertTrue(m["description"], name)
+            self.assertIsInstance(m["params"], dict)
+            self.assertTrue(m["returns"], name)
+
+    def test_schema_analysis_config_method(self):
+        j = self.oneshot("schema", {})
+        methods = [m["name"] for m in j["methods"] if m["implemented"]]
+        self.assertEqual(methods[-1], "analysis_config")
+        m = {m["name"]: m for m in j["methods"]}["analysis_config"]
+        self.assertTrue(m["description"])
+        self.assertIsInstance(m["params"], dict)
+        self.assertTrue(m["returns"])
+        self.assertIn("analysis_config", j["program"])
+
+    def test_analysis_config_default(self):
+        j = self.oneshot("analysis_config", {})
+        self.assertEqual(j["pointer_analysis"]["active"], "andersen-wave-diff")
+        self.assertEqual(j["svfg"]["mode"], "full")
+        self.assertIn("ptr-only", j["svfg"]["supported_modes"])
+        planned = {s["name"]: s["status"] for s in j["surfaces"]}
+        self.assertEqual(planned["cfl"], "supported")
+        self.assertEqual(planned["dda"], "supported")
+        self.assertEqual(planned["saber"], "supported")
+        self.assertEqual(planned["mta"], "supported")
+        self.assertEqual(planned["ae"], "planned")
+
+    def test_schema_cfl_methods(self):
+        j = self.oneshot("schema", {})
+        methods = {m["name"]: m for m in j["methods"]}
+        for name in ("cfl_pts", "cfl_aliases"):
+            self.assertIn(name, methods)
+            self.assertTrue(methods[name]["implemented"])
+            self.assertIn("var", methods[name]["params"])
+            self.assertIn("cfl", methods[name]["description"].lower())
+
+    def test_schema_dda_methods(self):
+        j = self.oneshot("schema", {})
+        methods = {m["name"]: m for m in j["methods"]}
+        for name in ("dda_pts", "dda_aliases"):
+            self.assertIn(name, methods)
+            self.assertTrue(methods[name]["implemented"])
+            self.assertIn("var", methods[name]["params"])
+            self.assertIn("dda", methods[name]["description"].lower())
+
+    def test_schema_saber_methods(self):
+        j = self.oneshot("schema", {})
+        methods = {m["name"]: m for m in j["methods"]}
+        for name in ("saber_leaks", "saber_double_frees",
+                     "saber_file_leaks"):
+            self.assertIn(name, methods)
+            self.assertTrue(methods[name]["implemented"])
+            self.assertIsInstance(methods[name]["params"], dict)
+            self.assertIn("saber", methods[name]["description"].lower())
+
+    def test_schema_mta_methods(self):
+        j = self.oneshot("schema", {})
+        methods = {m["name"]: m for m in j["methods"]}
+        for name in ("mta_summary", "mta_mhp"):
+            self.assertIn(name, methods)
+            self.assertTrue(methods[name]["implemented"])
+            self.assertIsInstance(methods[name]["params"], dict)
+            self.assertIn("mta", methods[name]["description"].lower())
+
+    def test_cfl_pts_of_malloc_ret_contains_heap_obj(self):
+        j = self.oneshot("cfl_pts", {"var": {"func": "malloc", "ret": True}})
+        self.assertEqual(j["analysis"], "cfl-alias")
+        self.assertGreaterEqual(len(j["vars"]), 1)
+        objs = [o for v in j["vars"] for o in v["points_to"]]
+        self.assertTrue(any(o["kind"] == "HeapObjVar" for o in objs), objs)
+        heap = [o for o in objs if o["kind"] == "HeapObjVar"][0]
+        self.assertEqual(heap["loc"]["line"], 4)
+
+    def test_cfl_aliases_of_malloc_ret(self):
+        j = self.oneshot("cfl_aliases",
+                         {"var": {"func": "malloc", "ret": True}})
+        self.assertEqual(j["analysis"], "cfl-alias")
+        self.assertGreaterEqual(len(j["vars"]), 1)
+        self.assertTrue(j["vars"][0]["aliases"], j)
+        var_id = j["vars"][0]["var"]["id"]
+        self.assertTrue(all(a["id"] != var_id for a in j["vars"][0]["aliases"]))
+
+    def test_dda_pts_of_malloc_ret_contains_heap_obj(self):
+        j = self.oneshot("dda_pts", {"var": {"func": "malloc", "ret": True}})
+        self.assertEqual(j["analysis"], "flowdda")
+        self.assertGreaterEqual(len(j["vars"]), 1)
+        objs = [o for v in j["vars"] for o in v["points_to"]]
+        self.assertTrue(any(o["kind"] == "HeapObjVar" for o in objs), objs)
+        heap = [o for o in objs if o["kind"] == "HeapObjVar"][0]
+        self.assertEqual(heap["loc"]["line"], 4)
+
+    def test_dda_aliases_of_malloc_ret(self):
+        j = self.oneshot("dda_aliases",
+                         {"var": {"func": "malloc", "ret": True}})
+        self.assertEqual(j["analysis"], "flowdda")
+        self.assertGreaterEqual(len(j["vars"]), 1)
+        self.assertTrue(j["vars"][0]["aliases"], j)
+        var_id = j["vars"][0]["var"]["id"]
+        self.assertTrue(all(a["id"] != var_id for a in j["vars"][0]["aliases"]))
+
+    def test_svfg_ptr_only_config_reported(self):
+        cfg = {"svfg": {"mode": "ptr-only"}}
+        j = self.oneshot("analysis_config", {}, analysis_config=cfg)
+        self.assertEqual(j["svfg"]["mode"], "ptr-only")
+        graphs = self.oneshot("graphs", {}, analysis_config=cfg)
+        by_name = {g["name"]: g for g in graphs["graphs"]}
+        self.assertGreater(by_name["svfg"]["nodes"], 0)
+        self.assertGreater(by_name["svfg"]["edges"], 0)
+
+    def test_invalid_analysis_config_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            ll = build_fixture(td)
+            out = subprocess.run([BIN, "--oneshot", "analysis_config",
+                                  "--analysis-config",
+                                  json.dumps({"svfg": {"mode": "wat"}}),
+                                  ll],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            j = json.loads(out.stdout)
+            self.assertIn("unknown svfg.mode", j["error"]["message"])
 
     @unittest.skipUnless(
         os.path.isdir(os.path.join(HERE, "..", "..", "..", "..", "svf", "lib")),
@@ -262,6 +457,186 @@ class HarnessTest(unittest.TestCase):
                 self.assertLess(before["svfg_nodes"], 10000)  # demo fixture is tiny
             finally:
                 self.client(sock, "shutdown", {}); srv.wait(timeout=10)
+
+    def test_graphs_inventory(self):
+        j = self.oneshot("graphs", {})
+        by_name = {g["name"]: g for g in j["graphs"]}
+        self.assertLessEqual({"icfg", "svfg", "svfir", "callgraph"},
+                             set(by_name))
+        self.assertGreater(by_name["icfg"]["nodes"], 0)
+        self.assertGreater(by_name["svfg"]["edges"], 0)
+        self.assertGreater(by_name["svfir"]["nodes"], 0)
+        self.assertGreater(by_name["callgraph"]["edges"], 0)
+
+    def test_graph_nodes_svfg_load_filter(self):
+        j = self.oneshot("graph_nodes", {"graph": "svfg",
+                                          "kind": "LoadVFGNode",
+                                          "func": "use_after_free",
+                                          "limit": 10})
+        self.assertEqual(j["graph"], "svfg")
+        self.assertGreaterEqual(j["total"], 1)
+        self.assertTrue(all(n["kind"] == "LoadVFGNode" for n in j["nodes"]))
+        self.assertTrue(any(n["loc"]["line"] == 11 for n in j["nodes"]), j)
+
+    def test_graph_edges_icfg_kind_filter(self):
+        j = self.oneshot("graph_edges", {"graph": "icfg",
+                                          "kind": "IntraCFGEdge",
+                                          "limit": 5})
+        self.assertEqual(j["graph"], "icfg")
+        self.assertGreater(j["total"], 0)
+        self.assertTrue(j["truncated"])
+        self.assertTrue(all(e["kind"] == "IntraCFGEdge" for e in j["edges"]))
+        for e in j["edges"]:
+            self.assertIn("src", e); self.assertIn("dst", e)
+
+    def test_graph_node_and_neighbors_roundtrip(self):
+        loads = self.oneshot("graph_nodes", {"graph": "svfg",
+                                             "kind": "LoadVFGNode",
+                                             "func": "use_after_free",
+                                             "limit": 10})
+        target = [n for n in loads["nodes"] if n["loc"]["line"] == 11][0]
+        one = self.oneshot("node", {"graph": "svfg", "id": target["id"]})
+        self.assertEqual(one["node"], target)
+        nbrs = self.oneshot("neighbors", {"graph": "svfg",
+                                           "id": target["id"]})
+        self.assertEqual(nbrs["node"], target)
+        self.assertTrue(nbrs.get("in_edges") or nbrs.get("out_edges"), nbrs)
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_CRUX_BC),
+                         "Test-Suite crux-bc bitcode not present")
+    def test_testsuite_crux_bc_summary_and_graphs(self):
+        summary = self.oneshot_bitcode("summary", {}, [TEST_SUITE_CRUX_BC])
+        self.assertGreater(summary["functions"], 100)
+        self.assertGreater(summary["svfg_nodes"], 1000)
+
+        graphs = self.oneshot_bitcode("graphs", {}, [TEST_SUITE_CRUX_BC])
+        by_name = {g["name"]: g for g in graphs["graphs"]}
+        self.assertLessEqual({"icfg", "svfg", "svfir", "callgraph"},
+                             set(by_name))
+        self.assertGreater(by_name["svfg"]["nodes"], 1000)
+        self.assertGreater(by_name["svfg"]["edges"], 1000)
+
+        funcs = self.oneshot_bitcode("functions", {"pattern": "free|malloc"},
+                                     [TEST_SUITE_CRUX_BC])
+        self.assertGreater(funcs["total"], 0)
+
+        nodes = self.oneshot_bitcode("graph_nodes",
+                                     {"graph": "svfg", "limit": 25},
+                                     [TEST_SUITE_CRUX_BC])
+        self.assertEqual(nodes["graph"], "svfg")
+        self.assertEqual(len(nodes["nodes"]), 25)
+        self.assertTrue(nodes["truncated"])
+
+        ptr_graphs = self.oneshot_bitcode(
+            "graphs", {}, [TEST_SUITE_CRUX_BC],
+            analysis_config={"svfg": {"mode": "ptr-only"}})
+        ptr_svfg = {g["name"]: g for g in ptr_graphs["graphs"]}["svfg"]
+        self.assertGreater(ptr_svfg["nodes"], 0)
+        self.assertLess(ptr_svfg["nodes"], by_name["svfg"]["nodes"])
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_CPP_ARRAY_BC),
+                         "Test-Suite C++ array bitcode not present")
+    def test_testsuite_cpp_callgraph_smoke(self):
+        summary = self.oneshot_bitcode("summary", {},
+                                       [TEST_SUITE_CPP_ARRAY_BC])
+        self.assertGreater(summary["functions"], 0)
+        self.assertGreater(summary["icfg_nodes"], 0)
+
+        funcs = self.oneshot_bitcode("functions", {"pattern": "main"},
+                                     [TEST_SUITE_CPP_ARRAY_BC])
+        self.assertTrue(any(f["name"] == "main" for f in funcs["functions"]),
+                        funcs)
+
+        nodes = self.oneshot_bitcode("graph_nodes",
+                                     {"graph": "callgraph", "limit": 10},
+                                     [TEST_SUITE_CPP_ARRAY_BC])
+        self.assertEqual(nodes["graph"], "callgraph")
+        self.assertGreater(nodes["total"], 0)
+
+        edges = self.oneshot_bitcode("graph_edges",
+                                     {"graph": "callgraph", "limit": 20},
+                                     [TEST_SUITE_CPP_ARRAY_BC])
+        self.assertEqual(edges["graph"], "callgraph")
+        self.assertIn("edges", edges)
+        self.assertGreater(edges["total"], 0)
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_CPP_ARRAY_BC),
+                         "Test-Suite C++ array bitcode not present")
+    def test_testsuite_cpp_cfl_operator_new_smoke(self):
+        j = self.oneshot_bitcode("cfl_pts",
+                                 {"var": {"func": "_Znwm", "ret": True}},
+                                 [TEST_SUITE_CPP_ARRAY_BC])
+        self.assertEqual(j["analysis"], "cfl-alias")
+        self.assertGreater(j["total"], 0)
+        objs = [o for v in j["vars"] for o in v["points_to"]]
+        self.assertTrue(any(o["kind"] == "HeapObjVar" for o in objs), objs)
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_CPP_ARRAY_BC),
+                         "Test-Suite C++ array bitcode not present")
+    def test_testsuite_cpp_dda_operator_new_smoke(self):
+        j = self.oneshot_bitcode("dda_pts",
+                                 {"var": {"func": "_Znwm", "ret": True}},
+                                 [TEST_SUITE_CPP_ARRAY_BC])
+        self.assertEqual(j["analysis"], "flowdda")
+        self.assertGreater(j["total"], 0)
+        objs = [o for v in j["vars"] for o in v["points_to"]]
+        self.assertTrue(any(o["kind"] == "HeapObjVar" for o in objs), objs)
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_MEM_LEAK_BC),
+                         "Test-Suite mem_leak malloc0 bitcode not present")
+    def test_testsuite_saber_leak_smoke(self):
+        j = self.oneshot_bitcode("saber_leaks", {}, [TEST_SUITE_MEM_LEAK_BC])
+        self.assertEqual(j["checker"], "leak")
+        self.assertGreaterEqual(j["total"], 2, j)
+        self.assertGreater(j["sources"], 0)
+        bug_types = {b["type"] for b in j["bugs"]}
+        self.assertIn("Never Free", bug_types)
+        locs = [b["loc"] for b in j["bugs"]]
+        self.assertTrue(any(loc["file"].endswith("malloc0.c") and
+                            loc["line"] in (12, 13) for loc in locs), locs)
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_DOUBLE_FREE_BC),
+                         "Test-Suite double_free df0 bitcode not present")
+    def test_testsuite_saber_double_free_smoke(self):
+        j = self.oneshot_bitcode("saber_double_frees", {},
+                                 [TEST_SUITE_DOUBLE_FREE_BC])
+        self.assertEqual(j["checker"], "double-free")
+        self.assertGreaterEqual(j["total"], 1, j)
+        self.assertGreater(j["sources"], 0)
+        bug_types = {b["type"] for b in j["bugs"]}
+        self.assertIn("Double Free", bug_types)
+
+    def test_mta_summary_fixture(self):
+        j = self.oneshot("mta_summary", {}, fixture="thread_mhp.c")
+        self.assertEqual(j["analysis"], "mta")
+        self.assertGreaterEqual(j["threads"], 2, j)
+        self.assertGreaterEqual(j["fork_sites"], 1, j)
+        self.assertGreaterEqual(j["join_sites"], 1, j)
+        self.assertTrue(j["forks"], j)
+        self.assertTrue(j["joins"], j)
+        self.assertTrue(j["forks"][0]["callsite"]["loc"]["file"].endswith(
+            "thread_mhp.c"))
+
+    def test_mta_mhp_fixture(self):
+        j = self.oneshot("mta_mhp",
+                         {"left": {"file": "thread_mhp.c", "line": 6},
+                          "right": {"file": "thread_mhp.c", "line": 12}},
+                         fixture="thread_mhp.c")
+        self.assertEqual(j["analysis"], "mta")
+        self.assertGreaterEqual(j["left_matches"], 1, j)
+        self.assertGreaterEqual(j["right_matches"], 1, j)
+        self.assertTrue(j["may_happen_in_parallel"], j)
+        self.assertTrue(j["witnesses"], j)
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_MTA_SIMPLE_BC),
+                         "Test-Suite MTA simple bitcode not present")
+    def test_testsuite_mta_summary_smoke(self):
+        j = self.oneshot_bitcode("mta_summary", {},
+                                 [TEST_SUITE_MTA_SIMPLE_BC])
+        self.assertEqual(j["analysis"], "mta")
+        self.assertGreaterEqual(j["threads"], 2, j)
+        self.assertGreaterEqual(j["fork_sites"], 1, j)
+        self.assertGreaterEqual(j["join_sites"], 1, j)
 
     def test_callers_of_fill(self):
         j = self.oneshot("callers", {"func": "fill"})

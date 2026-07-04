@@ -333,9 +333,6 @@ json nodeKinds()
     a.push_back(nodeKind("IntrinsicValVar", "svfir",
         "The value of an LLVM intrinsic (llvm.dbg.*, llvm.memcpy handles "
         "etc.). Usually analysis plumbing, not user logic."));
-    a.push_back(nodeKind("BasicBlockValVar", "svfir",
-        "A basic-block address value (blockaddress / computed goto target). "
-        "Rare; only relevant for indirect-branch reasoning."));
     a.push_back(nodeKind("AsmPCValVar", "svfir",
         "A program-counter-like value from inline assembly. Opaque to the "
         "analysis; flows through it are unmodeled."));
@@ -489,6 +486,96 @@ json methods()
         "{vars: [{var: <evidence node>, aliases: [<evidence node>]}], total, "
         "truncated} (capped at 50 aliases per var; the var itself is "
         "excluded)"));
+    a.push_back(method("cfl_pts",
+        "CFLAlias-backed may-points-to set of each variable the anchor "
+        "resolves to. This is a separate SVF precision surface from the "
+        "default Andersen `pts` query, built lazily on first use. Use it to "
+        "compare CFL and Andersen object targets for the same anchor.",
+        json{{"var", param("object", kAnchorDesc, true)}},
+        "{analysis: 'cfl-alias', vars: [{var: <evidence node>, points_to: "
+        "[<evidence node>]}], total, truncated} (CFL reachability targets "
+        "usually include allocation ObjVars, but may also include related "
+        "ValVar/ArgValVar propagation nodes depending on the grammar result)"));
+    a.push_back(method("cfl_aliases",
+        "CFLAlias-backed may-alias candidates for each variable the anchor "
+        "resolves to. Candidate scope intentionally matches `aliases` v0: "
+        "ValVars in the variable's own function, excluding the var itself. "
+        "Use it to compare CFL and Andersen alias answers under one stable "
+        "output contract.",
+        json{{"var", param("object", kAnchorDesc, true)}},
+        "{analysis: 'cfl-alias', vars: [{var: <evidence node>, aliases: "
+        "[<evidence node>]}], total, truncated} (capped at 50 aliases per "
+        "var; the var itself is excluded)"));
+    a.push_back(method("dda_pts",
+        "FlowDDA-backed demand-driven may-points-to set of each variable the "
+        "anchor resolves to. The FlowDDA engine is built lazily on first use "
+        "and each requested pointer is solved demand-by-demand. Use it to "
+        "compare flow-sensitive DDA targets against Andersen and CFLAlias.",
+        json{{"var", param("object", kAnchorDesc, true)}},
+        "{analysis: 'flowdda', vars: [{var: <evidence node>, points_to: "
+        "[<evidence node>]}], total, truncated} (points_to entries are the "
+        "abstract objects FlowDDA derives for valid top-level pointer vars)"));
+    a.push_back(method("dda_aliases",
+        "FlowDDA-backed demand-driven may-alias candidates for each variable "
+        "the anchor resolves to. Candidate scope intentionally matches "
+        "`aliases` v0: ValVars in the variable's own function, excluding the "
+        "var itself. Use it to compare flow-sensitive DDA alias answers under "
+        "one stable output contract.",
+        json{{"var", param("object", kAnchorDesc, true)}},
+        "{analysis: 'flowdda', vars: [{var: <evidence node>, aliases: "
+        "[<evidence node>]}], total, truncated} (capped at 50 aliases per "
+        "var; the var itself is excluded)"));
+    a.push_back(method("saber_leaks",
+        "SABER memory-leak checker summary. Runs SVF's source-sink leak "
+        "checker lazily and returns structured bug records instead of terminal "
+        "text. Use this when asking which allocations may never be freed or "
+        "may only be conditionally freed.",
+        json::object(),
+        "{checker: 'leak', bugs: [{type, function, loc, events, "
+        "description}], total, truncated, sources, sinks} (bugs capped at 200; "
+        "loc is the source allocation site for leak bugs)"));
+    a.push_back(method("saber_double_frees",
+        "SABER double-free checker summary. Runs SVF's source-sink "
+        "double-free checker lazily and returns structured bug records with "
+        "source allocation locations and conditional event information where "
+        "SABER provides it.",
+        json::object(),
+        "{checker: 'double-free', bugs: [{type, function, loc, events, "
+        "description}], total, truncated, sources, sinks} (bugs capped at "
+        "200)"));
+    a.push_back(method("saber_file_leaks",
+        "SABER file open/close checker summary. Runs SVF's file-resource "
+        "checker lazily and reports file handles that may never be closed or "
+        "may only be conditionally closed.",
+        json::object(),
+        "{checker: 'file', bugs: [{type, function, loc, events, description}], "
+        "total, truncated, sources, sinks} (bugs capped at 200; loc is the "
+        "file-open source site)"));
+    a.push_back(method("mta_summary",
+        "MTA thread creation and MHP summary. Runs SVF's multithreaded "
+        "analysis lazily and returns fork/join sites, thread-creation-tree "
+        "counts, representative thread records, and MHP query counters.",
+        json::object(),
+        "{analysis: 'mta', threads, tct_edges, max_context, fork_sites, "
+        "join_sites, par_for_sites, fork_edges, join_edges, mhp_queries, "
+        "mhp_pairs, forks: [{callsite, targets}], joins: [{callsite, "
+        "routines}], thread_records: [{id, forksite, in_loop, in_cycle, "
+        "multi_forked}], truncated} (arrays capped at 200)"));
+    a.push_back(method("mta_mhp",
+        "MTA may-happen-in-parallel query between two source-location "
+        "anchors. Each anchor resolves to ICFG nodes at {file,line}, "
+        "optionally filtered by node kind, then MTA checks every capped pair "
+        "and returns true when any pair may run in parallel.",
+        json{{"left", param("object",
+                 "Source-location anchor: {file: string, line: integer, "
+                 "kind?: string}. File matches by path suffix.", true)},
+             {"right", param("object",
+                 "Source-location anchor: {file: string, line: integer, "
+                 "kind?: string}. File matches by path suffix.", true)}},
+        "{analysis: 'mta', left_matches, right_matches, pairs_checked, "
+        "may_happen_in_parallel, witnesses: [{left: <evidence node>, right: "
+        "<evidence node>, same_thread: bool}], truncated} (anchors capped at "
+        "50 nodes each; witnesses capped at 20)"));
     a.push_back(method("vfpath",
         "Value-flow paths from a source to a sink over the sparse value-flow "
         "graph: HOW a value gets from A to B, step by step, with evidence "
@@ -557,6 +644,75 @@ json methods()
         "error?: string (present when the sink anchor could not be "
         "resolved; reachable=false in this case)}], "
         "sources, visited, truncated}"));
+    a.push_back(method("graphs",
+        "List the graph surfaces currently available in this daemon and "
+        "their node/edge counts. These are the already-built v0 graphs: "
+        "ICFG, SVFG, SVFIR/PAG, and Andersen's resolved call graph.",
+        json::object(),
+        "{graphs: [{name: icfg|svfg|svfir|callgraph, nodes, edges}]}"));
+    a.push_back(method("graph_nodes",
+        "Browse nodes in one graph with stable id order. Use this to inspect "
+        "SVFG/PAG/ICFG/callgraph structure directly before drilling into "
+        "edges or neighbors.",
+        json{{"graph", param("string",
+                 "One of: icfg, svfg, svfir, callgraph.", true)},
+             {"kind", param("string",
+                 "Optional node kind filter, e.g. LoadVFGNode, ValVar, "
+                 "CallICFGNode, CallGraphNode.", false)},
+             {"func", param("string",
+                 "Optional function-name filter where the node evidence has "
+                 "a function (or callgraph node function).", false)},
+             {"offset", param("integer",
+                 "Zero-based row offset for pagination (default 0).", false)},
+             {"limit", param("integer",
+                 "Max rows to return in [1, 1000] (default 100).", false)}},
+        "{graph, nodes: [<evidence node> or CallGraphNode record], total, "
+        "offset, limit, truncated}"));
+    a.push_back(method("graph_edges",
+        "Browse edges in one graph with stable (src,dst,kind) order. ICFG "
+        "uses IntraCFGEdge/CallCFGEdge/RetCFGEdge, SVFG uses edge_kinds "
+        "names, SVFIR uses SVFStmt kinds, and callgraph edges are one row "
+        "per direct/indirect callsite.",
+        json{{"graph", param("string",
+                 "One of: icfg, svfg, svfir, callgraph.", true)},
+             {"kind", param("string",
+                 "Optional edge kind filter, e.g. IntraCFGEdge, "
+                 "IntraDirSVFGEdge, Store, DirectCallGraphEdge.", false)},
+             {"offset", param("integer",
+                 "Zero-based row offset for pagination (default 0).", false)},
+             {"limit", param("integer",
+                 "Max rows to return in [1, 1000] (default 100).", false)}},
+        "{graph, edges: [{src, dst, kind, callsite?, direct?, stmt_id?}], "
+        "total, offset, limit, truncated}"));
+    a.push_back(method("node",
+        "Fetch a single node record by graph and id. Node ids are stable only "
+        "within the currently loaded daemon/program instance.",
+        json{{"graph", param("string",
+                 "One of: icfg, svfg, svfir, callgraph.", true)},
+             {"id", param("integer",
+                 "Node id in the selected graph.", true)}},
+        "{graph, node: <evidence node> or CallGraphNode record}"));
+    a.push_back(method("neighbors",
+        "Fetch incoming and/or outgoing edges around one graph node. This is "
+        "the lowest-cost way to locally walk ICFG/SVFG/SVFIR/callgraph "
+        "structure without dumping the whole graph.",
+        json{{"graph", param("string",
+                 "One of: icfg, svfg, svfir, callgraph.", true)},
+             {"id", param("integer",
+                 "Node id in the selected graph.", true)},
+             {"direction", param("string",
+                 "One of in, out, both (default both).", false)}},
+        "{graph, id, node, in_edges?: [{src,dst,kind,...}], "
+        "out_edges?: [{src,dst,kind,...}]}"));
+    a.push_back(method("analysis_config",
+        "Return the active harness analysis configuration and the supported "
+        "or planned precision/subanalysis surfaces. Use this to confirm "
+        "whether the daemon was built with full or pointer-only SVFG before "
+        "interpreting SVFG-dependent answers.",
+        json::object(),
+        "{pointer_analysis: {active, supported}, svfg: {mode, "
+        "supported_modes, indirect_calls, post_opts}, surfaces: "
+        "[{name, status, notes}]}"));
     return a;
 }
 

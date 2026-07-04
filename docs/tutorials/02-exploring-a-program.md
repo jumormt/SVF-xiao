@@ -23,7 +23,7 @@ We will also compile a second fixture, `indirect.c`, along the way.
 ### 1. `schema` — ask the tool what it can do
 
 Before anything else, ask the harness to describe itself. The full output is
-large (it documents every method, all 67 node kinds, all 10 edge kinds, and
+large (it documents every method, all 66 node kinds, all 10 edge kinds, and
 the evidence-record contract), so extract the headline:
 
 ```bash
@@ -39,8 +39,8 @@ print("edge_kinds:", len(j["edge_kinds"]), "documented edge kinds")
 Real output:
 
 ```
-methods:    schema, summary, functions, callers, callees, cfg, defuse, pts, aliases, vfpath, reachable
-node_kinds: 67 documented evidence kinds
+methods:    schema, summary, functions, callers, callees, cfg, defuse, pts, aliases, cfl_pts, cfl_aliases, dda_pts, dda_aliases, saber_leaks, saber_double_frees, saber_file_leaks, mta_summary, mta_mhp, vfpath, reachable, graphs, graph_nodes, graph_edges, node, neighbors, analysis_config
+node_kinds: 66 documented evidence kinds
 edge_kinds: 10 documented edge kinds
 ```
 
@@ -125,7 +125,7 @@ Real output (paths abbreviated):
 
 **Interpretation.** Each call edge comes with a `callsite` — your first
 **evidence record**. Every graph node any method returns has this same
-shape: `kind` (one of the 67 `node_kinds`), `id` (stable only within this
+shape: `kind` (one of the 66 `node_kinds`), `id` (stable only within this
 daemon instance — don't persist it), `loc` (source mapping), and `ir` (SVF's
 textual dump of the node, truncated to ~200 bytes with a trailing `…` when
 longer; that ellipsis in the output above is the harness's own truncation

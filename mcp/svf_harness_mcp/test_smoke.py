@@ -33,12 +33,18 @@ FIXTURE = os.path.abspath(os.path.join(
     "demo.c"))
 CLANG = os.environ.get("CLANG", shutil.which("clang"))
 
-EXPECTED_TOOLS = {
-    "load_program", "unload_program",
-    # the 11 daemon methods
+LIFECYCLE_TOOLS = {"load_program", "unload_program"}
+EXPECTED_QUERY_TOOLS = {
     "schema", "summary", "functions", "callers", "callees", "cfg",
-    "defuse", "pts", "aliases", "vfpath", "reachable",
+    "defuse", "pts", "aliases", "cfl_pts", "cfl_aliases",
+    "dda_pts", "dda_aliases",
+    "saber_leaks", "saber_double_frees", "saber_file_leaks",
+    "mta_summary", "mta_mhp",
+    "vfpath", "reachable",
+    "graphs", "graph_nodes", "graph_edges", "node", "neighbors",
+    "analysis_config",
 }
+EXPECTED_TOOLS = LIFECYCLE_TOOLS | EXPECTED_QUERY_TOOLS
 
 
 def build_fixture(tmpdir):
@@ -91,7 +97,7 @@ class McpSmokeTest(unittest.TestCase):
         async def scenario(session):
             tools = (await session.list_tools()).tools
             self.assertEqual({t.name for t in tools}, EXPECTED_TOOLS)
-            self.assertEqual(len(tools), 13)
+            self.assertEqual(len(tools), 28)
             for t in tools:
                 self.assertTrue(t.description, f"missing description: {t.name}")
         self.run_session(scenario)
@@ -103,15 +109,26 @@ class McpSmokeTest(unittest.TestCase):
                 ll = build_fixture(td)
                 try:
                     loaded = await self.call(session, "load_program",
-                                             {"bitcode_paths": [ll]})
+                                             {"bitcode_paths": [ll],
+                                              "analysis_config": {
+                                                  "svfg": {"mode": "ptr-only"}}})
                     self.assertNotIn("error", loaded)
                     self.assertGreaterEqual(loaded["functions"], 4)
                     self.assertEqual(loaded["modules"], [ll])
                     self.assertTrue(os.path.exists(loaded["socket_path"]))
+                    self.assertEqual(loaded["analysis_config"]["svfg"]["mode"],
+                                     "ptr-only")
 
                     summary = await self.call(session, "summary", {})
                     for key in ("functions", "icfg_nodes", "svfg_nodes"):
                         self.assertEqual(summary[key], loaded[key], key)
+
+                    schema = await self.call(session, "schema", {})
+                    schema_methods = {m["name"] for m in schema["methods"]
+                                      if m.get("implemented")}
+                    tools = (await session.list_tools()).tools
+                    query_tools = {t.name for t in tools} - LIFECYCLE_TOOLS
+                    self.assertEqual(query_tools, schema_methods)
 
                     # the money shot: malloc return -> use at demo.c:11
                     vf = await self.call(session, "vfpath", {"params": {

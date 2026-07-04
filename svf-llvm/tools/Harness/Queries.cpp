@@ -9,7 +9,10 @@
 #include "AnchorDoc.h"
 #include "Evidence.h"
 #include "Schema.h"
+#include "CFL/CFLAlias.h"
+#include "DDA/FlowDDA.h"
 #include "Graphs/CallGraph.h"
+#include "Graphs/CFLGraph.h"
 #include "Graphs/ICFG.h"
 #include "Graphs/SVFG.h"
 #include "SVFIR/SVFIR.h"
@@ -250,7 +253,9 @@ json QueryEngine::schemaQ(const json&) const
         m["implemented"] =
             std::find(impl.begin(), impl.end(), name) != impl.end();
     }
-    j["program"] = json{{"modules", modules}, {"summary", summary()}};
+    j["program"] = json{{"modules", modules},
+                        {"summary", summary()},
+                        {"analysis_config", analysisConfig(json::object())}};
     return j;
 }
 
@@ -583,5 +588,150 @@ json QueryEngine::aliases(const json& params) const
                         {"aliases", std::move(arr)}});
     }
     return json{{"vars", std::move(rows)}, {"total", total},
+                {"truncated", truncated}};
+}
+
+json QueryEngine::cflPts(const json& params) const
+{
+    CFLAlias* cfl = getCFLAlias();
+    std::vector<const SVFVar*> vars = resolveVars(requiredVarAnchor(params));
+    const size_t total = vars.size();
+    const bool truncated = total > kVarCap;
+    if (truncated)
+        vars.resize(kVarCap);
+    json rows = json::array();
+    for (const SVFVar* v : vars)
+    {
+        json objs = json::array();
+        for (NodeID objId : cfl->getCFLPts(v->getId()))
+            objs.push_back(evidence::node(pag->getGNode(objId)));
+        rows.push_back({{"var", evidence::node(v)},
+                        {"points_to", std::move(objs)}});
+    }
+    return json{{"analysis", "cfl-alias"},
+                {"vars", std::move(rows)},
+                {"total", total},
+                {"truncated", truncated}};
+}
+
+json QueryEngine::cflAliases(const json& params) const
+{
+    CFLAlias* cfl = getCFLAlias();
+    std::vector<const SVFVar*> vars = resolveVars(requiredVarAnchor(params));
+    const size_t total = vars.size();
+    bool truncated = total > kVarCap;
+    if (truncated)
+        vars.resize(kVarCap);
+    json rows = json::array();
+    for (const SVFVar* v : vars)
+    {
+        json arr = json::array();
+        size_t kept = 0;
+        if (const FunObjVar* fn = v->getFunction())
+        {
+            for (const auto& it : *pag)
+            {
+                const SVFVar* cand = it.second;
+                if (cand->getId() == v->getId())
+                    continue;
+                if (!SVFUtil::isa<ValVar>(cand) || cand->getFunction() != fn)
+                    continue;
+                const CFLGraph* graph = cfl->getCFLGraph();
+                if (!graph->hasGNode(v->getId()) ||
+                    !graph->hasGNode(cand->getId()))
+                    continue;
+                if (cfl->alias(v->getId(), cand->getId()) == NoAlias)
+                    continue;
+                if (kept == kAliasCap)
+                {
+                    truncated = true;
+                    break;
+                }
+                arr.push_back(evidence::node(cand));
+                ++kept;
+            }
+        }
+        rows.push_back({{"var", evidence::node(v)},
+                        {"aliases", std::move(arr)}});
+    }
+    return json{{"analysis", "cfl-alias"},
+                {"vars", std::move(rows)},
+                {"total", total},
+                {"truncated", truncated}};
+}
+
+json QueryEngine::ddaPts(const json& params) const
+{
+    FlowDDA* dda = getFlowDDA();
+    std::vector<const SVFVar*> vars = resolveVars(requiredVarAnchor(params));
+    const size_t total = vars.size();
+    const bool truncated = total > kVarCap;
+    if (truncated)
+        vars.resize(kVarCap);
+    json rows = json::array();
+    for (const SVFVar* v : vars)
+    {
+        json objs = json::array();
+        if (pag->isValidTopLevelPtr(v))
+        {
+            dda->computeDDAPts(v->getId());
+            for (NodeID objId : dda->getPts(v->getId()))
+                objs.push_back(evidence::node(pag->getGNode(objId)));
+        }
+        rows.push_back({{"var", evidence::node(v)},
+                        {"points_to", std::move(objs)}});
+    }
+    return json{{"analysis", "flowdda"},
+                {"vars", std::move(rows)},
+                {"total", total},
+                {"truncated", truncated}};
+}
+
+json QueryEngine::ddaAliases(const json& params) const
+{
+    FlowDDA* dda = getFlowDDA();
+    std::vector<const SVFVar*> vars = resolveVars(requiredVarAnchor(params));
+    const size_t total = vars.size();
+    bool truncated = total > kVarCap;
+    if (truncated)
+        vars.resize(kVarCap);
+    json rows = json::array();
+    for (const SVFVar* v : vars)
+    {
+        json arr = json::array();
+        size_t kept = 0;
+        if (pag->isValidTopLevelPtr(v))
+        {
+            dda->computeDDAPts(v->getId());
+            if (const FunObjVar* fn = v->getFunction())
+            {
+                for (const auto& it : *pag)
+                {
+                    const SVFVar* cand = it.second;
+                    if (cand->getId() == v->getId())
+                        continue;
+                    if (!SVFUtil::isa<ValVar>(cand) ||
+                        cand->getFunction() != fn ||
+                        !pag->isValidTopLevelPtr(cand))
+                        continue;
+                    dda->computeDDAPts(cand->getId());
+                    if (dda->alias(v->getId(), cand->getId()) == NoAlias)
+                        continue;
+                    if (kept == kAliasCap)
+                    {
+                        truncated = true;
+                        break;
+                    }
+                    arr.push_back(evidence::node(cand));
+                    ++kept;
+                }
+            }
+        }
+        rows.push_back({{"var", evidence::node(v)},
+                        {"aliases", std::move(arr)}});
+    }
+    return json{{"analysis", "flowdda"},
+                {"vars", std::move(rows)},
+                {"total", total},
                 {"truncated", truncated}};
 }

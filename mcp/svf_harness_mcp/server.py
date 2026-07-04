@@ -8,7 +8,7 @@ installed, e.g. /home/xiao/program/py311-mcp/bin/python):
         -- /path/to/python /path/to/SVF-xiao/mcp/svf_harness_mcp/server.py
 
 No daemon is spawned at startup: call the `load_program` tool with bitcode
-paths first; it spawns `svf-harness serve` and the 11 query tools then forward
+paths first; it spawns `svf-harness serve` and the 24 query tools then forward
 JSON-RPC over its Unix socket. Call the `schema` tool for the authoritative
 self-describing contract of every method.
 """
@@ -128,12 +128,14 @@ def _shutdown_daemon() -> None:
 
 
 @app.tool()
-async def load_program(bitcode_paths: list[str]) -> dict[str, Any]:
+async def load_program(bitcode_paths: list[str],
+                       analysis_config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Load LLVM bitcode module(s) into a fresh svf-harness daemon.
 
-    Builds the analysis state (SVFIR, Andersen points-to, SVFG) once; the 11
+    Builds the analysis state (SVFIR, Andersen points-to, SVFG) once; the 26
     query tools then answer from it. Replaces any previously loaded daemon.
-    Returns the program summary plus socket_path and modules.
+    Optional analysis_config is forwarded to svf-harness --analysis-config.
+    Returns the program summary plus analysis_config, socket_path, and modules.
     """
     async with _get_lifecycle_lock():
         paths = [os.path.abspath(p) for p in bitcode_paths]
@@ -149,9 +151,11 @@ async def load_program(bitcode_paths: list[str]) -> dict[str, Any]:
         tmpdir = tempfile.mkdtemp(prefix="svf-mcp-")
         sock = os.path.join(tmpdir, f"svf-{os.getpid()}.sock")
         log_path = os.path.join(tmpdir, "daemon.log")
+        cmd = [binary, "serve", *paths, "--socket", sock]
+        if analysis_config is not None:
+            cmd += ["--analysis-config", json.dumps(analysis_config)]
         with open(log_path, "wb") as log:
-            proc = subprocess.Popen([binary, "serve", *paths, "--socket", sock],
-                                    stdout=log, stderr=log,
+            proc = subprocess.Popen(cmd, stdout=log, stderr=log,
                                     preexec_fn=_set_pdeathsig)
         _state.update(proc=proc, tmpdir=tmpdir, modules=paths)
         deadline = time.time() + _LOAD_TIMEOUT_S
@@ -174,7 +178,12 @@ async def load_program(bitcode_paths: list[str]) -> dict[str, Any]:
             summary = {"raw": summary}
         if "error" in summary:
             return summary
-        return {**summary, "socket_path": sock, "modules": paths}
+        active_config = await anyio.to_thread.run_sync(
+            lambda: _rpc("analysis_config", {}, _LOAD_TIMEOUT_S))
+        if isinstance(active_config, dict) and "error" in active_config:
+            return active_config
+        return {**summary, "analysis_config": active_config,
+                "socket_path": sock, "modules": paths}
 
 
 @app.tool()
@@ -186,7 +195,7 @@ async def unload_program() -> dict[str, Any]:
         return {"ok": True, "was_loaded": had}
 
 
-# The 11 daemon query methods, exposed as one thin wrapper tool each.
+# The 26 daemon query methods, exposed as one thin wrapper tool each.
 # Design (see README.md): tools are registered statically at import time so
 # MCP clients see them on connect, but each carries only a short docstring —
 # the daemon's `schema` tool is the single authoritative source of truth for
@@ -232,6 +241,43 @@ _METHODS: dict[str, str] = {
                f'Arguments go nested under "params": '
                f'{{"params": {{"var": {_ANCHOR}}}}}. '
                "See the `schema` tool for the authoritative contract.",
+    "cfl_pts": f"CFLAlias-backed points-to set of a variable. "
+               f'Arguments go nested under "params": '
+               f'{{"params": {{"var": {_ANCHOR}}}}}. '
+               "See the `schema` tool for the authoritative contract.",
+    "cfl_aliases": f"CFLAlias-backed may-aliases of a variable "
+                   f"(same-function scope). "
+                   f'Arguments go nested under "params": '
+                   f'{{"params": {{"var": {_ANCHOR}}}}}. '
+                   "See the `schema` tool for the authoritative contract.",
+    "dda_pts": f"FlowDDA-backed demand-driven points-to set of a variable. "
+               f'Arguments go nested under "params": '
+               f'{{"params": {{"var": {_ANCHOR}}}}}. '
+               "See the `schema` tool for the authoritative contract.",
+    "dda_aliases": f"FlowDDA-backed demand-driven may-aliases of a variable "
+                   f"(same-function scope). "
+                   f'Arguments go nested under "params": '
+                   f'{{"params": {{"var": {_ANCHOR}}}}}. '
+                   "See the `schema` tool for the authoritative contract.",
+    "saber_leaks": "SABER memory-leak checker summary. "
+                   'Arguments go nested under "params": {} (none). '
+                   "See the `schema` tool for the authoritative contract.",
+    "saber_double_frees": "SABER double-free checker summary. "
+                          'Arguments go nested under "params": {} (none). '
+                          "See the `schema` tool for the authoritative contract.",
+    "saber_file_leaks": "SABER file open/close checker summary. "
+                        'Arguments go nested under "params": {} (none). '
+                        "See the `schema` tool for the authoritative contract.",
+    "mta_summary": "MTA thread creation / MHP summary: fork sites, join sites, "
+                   "TCT thread counts, and representative thread records. "
+                   'Arguments go nested under "params": {} (none). '
+                   "See the `schema` tool for the authoritative contract.",
+    "mta_mhp": "MTA may-happen-in-parallel query between two source-location "
+               "anchors. "
+               'Arguments go nested under "params": '
+               '{"params": {"left": {"file": "foo.c", "line": 10}, '
+               '"right": {"file": "foo.c", "line": 20}}}. '
+               "See the `schema` tool for the authoritative contract.",
     "vfpath": f"Value-flow witness paths source→sink over the SVFG. "
               f'Arguments go nested under "params": '
               f'{{"params": {{"source": {_ANCHOR}, "sink": {_ANCHOR}, '
@@ -242,6 +288,30 @@ _METHODS: dict[str, str] = {
                  f'Arguments go nested under "params": '
                  f'{{"params": {{"source": {_ANCHOR}, "sinks": [{_ANCHOR}]}}}}. '
                  "See the `schema` tool for the authoritative contract.",
+    "graphs": "List available graph surfaces and counts. "
+              'Arguments go nested under "params": {} (none). '
+              "See the `schema` tool for the authoritative contract.",
+    "graph_nodes": "Browse nodes in icfg/svfg/svfir/callgraph. "
+                   'Arguments go nested under "params": '
+                   '{"params": {"graph": "svfg", "kind": "LoadVFGNode", '
+                   '"limit": 20}}. '
+                   "See the `schema` tool for the authoritative contract.",
+    "graph_edges": "Browse edges in icfg/svfg/svfir/callgraph. "
+                   'Arguments go nested under "params": '
+                   '{"params": {"graph": "icfg", "kind": "IntraCFGEdge", '
+                   '"limit": 20}}. '
+                   "See the `schema` tool for the authoritative contract.",
+    "node": "Fetch one graph node by graph and id. "
+            'Arguments go nested under "params": '
+            '{"params": {"graph": "svfg", "id": 68}}. '
+            "See the `schema` tool for the authoritative contract.",
+    "neighbors": "Fetch incoming/outgoing edges around one graph node. "
+                 'Arguments go nested under "params": '
+                 '{"params": {"graph": "svfg", "id": 68, "direction": "both"}}. '
+                 "See the `schema` tool for the authoritative contract.",
+    "analysis_config": "Active analysis configuration and planned precision surfaces. "
+                       'Arguments go nested under "params": {} (none). '
+                       "See the `schema` tool for the authoritative contract.",
 }
 
 

@@ -114,12 +114,13 @@ and exit 1. Stdout is always pure JSON; diagnostics go to stderr.
 
 ## Method reference
 
-Eleven methods: `schema summary functions callers callees cfg defuse pts
-aliases vfpath reachable`. **The authoritative reference is the tool itself**
-— `svf-harness schema` returns full documentation for every method (params,
-return shapes, semantics, caps), all 67 node kinds, 10 edge kinds, the
-evidence-record contract, and the loaded program; this README deliberately
-does not duplicate it. Trimmed excerpts of what `schema` returns:
+Twenty-six methods: `schema summary functions callers callees cfg defuse pts
+aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp vfpath reachable graphs graph_nodes graph_edges
+node neighbors analysis_config`. **The authoritative reference is the tool itself** — `svf-harness schema` returns
+full documentation for every method (params, return shapes, semantics, caps),
+all 66 node kinds, 10 edge kinds, the evidence-record contract, and the loaded
+program; this README deliberately does not duplicate it. Trimmed excerpts of
+what `schema` returns:
 
 A node kind entry:
 
@@ -165,6 +166,21 @@ The evidence record attached to every returned graph node:
     "ir": "The node's SVF textual dump (class name + statement text). Truncated to ~200 bytes with a trailing … (horizontal ellipsis) when longer; truncation never splits a UTF-8 codepoint."
   }
 }
+```
+
+Graph browsing examples:
+
+```bash
+svf-harness graphs --socket /tmp/h.sock
+svf-harness graph_nodes --params '{"graph":"svfg","kind":"LoadVFGNode","func":"use_after_free","limit":5}' --socket /tmp/h.sock
+svf-harness neighbors --params '{"graph":"svfg","id":68,"direction":"both"}' --socket /tmp/h.sock
+```
+
+SVFG construction config examples:
+
+```bash
+svf-harness --oneshot analysis_config --analysis-config '{"svfg":{"mode":"ptr-only"}}' /tmp/demo.ll
+svf-harness serve /tmp/demo.ll --socket /tmp/h.sock --analysis-config '{"svfg":{"mode":"ptr-only","indirect_calls":true,"post_opts":false}}'
 ```
 
 ## Known quirks

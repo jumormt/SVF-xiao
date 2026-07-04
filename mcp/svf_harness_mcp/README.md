@@ -4,9 +4,10 @@ A thin [MCP](https://modelcontextprotocol.io) adapter over the `svf-harness`
 daemon socket. It does **no analysis itself**: `load_program` spawns
 `svf-harness serve <bitcode...>` (which builds SVFIR → Andersen points-to →
 SVFG once), and every query tool is a one-line forward of JSON-RPC 2.0 over
-the daemon's Unix socket. 13 tools total: `load_program`, `unload_program`,
-and the 11 daemon methods (`schema summary functions callers callees cfg
-defuse pts aliases vfpath reachable`).
+the daemon's Unix socket. 28 tools total: `load_program`, `unload_program`,
+and the 26 daemon methods (`schema summary functions callers callees cfg
+defuse pts aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp vfpath reachable graphs graph_nodes
+graph_edges node neighbors analysis_config`).
 
 Guided walkthroughs (including a full Claude Code MCP tutorial with question
 patterns and a sample session): [`docs/tutorials/`](../../docs/tutorials/README.md).
@@ -31,10 +32,10 @@ MCP clients list tools **at connect time**, before any program is loaded, so
 registering the query tools dynamically from the daemon's `schema()` response
 (only available after `load_program`) would leave the client blind. Instead:
 
-- The 11 query tools are registered **statically at import time**, each with a
+- The 24 query tools are registered **statically at import time**, each with a
   short docstring naming the common param keys.
 - The daemon's self-describing **`schema` tool stays the single authoritative
-  contract**: full param docs, return shapes, all 67 node kinds, 10 edge
+  contract**: full param docs, return shapes, all 66 node kinds, 10 edge
   kinds, and the evidence record format. Per-tool docstrings deliberately
   defer to it instead of mirroring it (no drift to maintain).
 - Each query tool takes one generic argument, `params: dict`, forwarded
@@ -48,18 +49,26 @@ all come back as structured `{"error": ...}` values the LLM can react to.
 ## Example session
 
 ```text
-load_program {"bitcode_paths": ["/tmp/demo.ll"]}
+load_program {"bitcode_paths": ["/tmp/demo.ll"],
+              "analysis_config": {"svfg": {"mode": "ptr-only"}}}
   -> {"functions": 9, "icfg_nodes": 93, "pag_nodes": 183, "svfg_nodes": 223,
+      "analysis_config": {"pointer_analysis": {...}, "svfg": {"mode": "ptr-only", ...}, ...},
       "socket_path": "/tmp/svf-mcp-xxxx/svf-1234.sock", "modules": [...]}
 
 schema {}            # the authoritative contract for everything below
-  -> {"methods": [...11 methods with params/returns...], "node_kinds": [...],
+  -> {"methods": [...26 methods with params/returns...], "node_kinds": [...],
       "edge_kinds": [...], "evidence_record": {...}, "program": {...}}
 
 vfpath {"params": {"source": {"func": "malloc", "ret": true},
                    "sink": {"file": "demo.c", "line": 11}, "k": 1}}
   -> {"paths": [{"steps": [... malloc ret -> store -> load at line 11,
       each step with kind/id/loc/ir evidence ...]}], "truncated": false}
+
+graph_nodes {"params": {"graph": "svfg", "kind": "LoadVFGNode",
+                        "func": "use_after_free", "limit": 5}}
+  -> {"graph": "svfg", "nodes": [{"kind": "LoadVFGNode", "id": 66,
+      "loc": {"func": "use_after_free", ...}, "ir": "..."}], "total": 4,
+      "offset": 0, "limit": 5, "truncated": false}
 ```
 
 Variable anchors accepted by `defuse`/`pts`/`aliases`/`vfpath`/`reachable`:
