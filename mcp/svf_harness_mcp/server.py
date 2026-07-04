@@ -8,7 +8,7 @@ installed, e.g. /home/xiao/program/py311-mcp/bin/python):
         -- /path/to/python /path/to/SVF-xiao/mcp/svf_harness_mcp/server.py
 
 No daemon is spawned at startup: call the `load_program` tool with bitcode
-paths first; it spawns `svf-harness serve` and the 24 query tools then forward
+paths first; it spawns `svf-harness serve` and the 28 query tools then forward
 JSON-RPC over its Unix socket. Call the `schema` tool for the authoritative
 self-describing contract of every method.
 """
@@ -132,7 +132,7 @@ async def load_program(bitcode_paths: list[str],
                        analysis_config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Load LLVM bitcode module(s) into a fresh svf-harness daemon.
 
-    Builds the analysis state (SVFIR, Andersen points-to, SVFG) once; the 26
+    Builds the analysis state (SVFIR, Andersen points-to, SVFG) once; the 28
     query tools then answer from it. Replaces any previously loaded daemon.
     Optional analysis_config is forwarded to svf-harness --analysis-config.
     Returns the program summary plus analysis_config, socket_path, and modules.
@@ -195,7 +195,7 @@ async def unload_program() -> dict[str, Any]:
         return {"ok": True, "was_loaded": had}
 
 
-# The 26 daemon query methods, exposed as one thin wrapper tool each.
+# The 28 daemon query methods, exposed as one thin wrapper tool each.
 # Design (see README.md): tools are registered statically at import time so
 # MCP clients see them on connect, but each carries only a short docstring —
 # the daemon's `schema` tool is the single authoritative source of truth for
@@ -278,6 +278,14 @@ _METHODS: dict[str, str] = {
                '{"params": {"left": {"file": "foo.c", "line": 10}, '
                '"right": {"file": "foo.c", "line": 20}}}. '
                "See the `schema` tool for the authoritative contract.",
+    "ae_summary": "Abstract Execution trace/state-size summary. "
+                  'Arguments go nested under "params": {} (none). '
+                  "See the `schema` tool for the authoritative contract.",
+    "ae_state": "Abstract Execution state at a source-location anchor. "
+                'Arguments go nested under "params": '
+                '{"params": {"at": {"file": "foo.c", "line": 10}, '
+                '"limit": 50}}. '
+                "See the `schema` tool for the authoritative contract.",
     "vfpath": f"Value-flow witness paths source→sink over the SVFG. "
               f'Arguments go nested under "params": '
               f'{{"params": {{"source": {_ANCHOR}, "sink": {_ANCHOR}, '

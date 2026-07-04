@@ -103,8 +103,8 @@ json QueryEngine::HarnessConfig::toJson() const
              {"notes", "SABER checker summaries are available via saber_leaks, saber_double_frees, and saber_file_leaks."}},
             {{"name", "mta"}, {"status", "supported"},
              {"notes", "Lazy MTA thread/MHP summaries are available via mta_summary and mta_mhp."}},
-            {{"name", "ae"}, {"status", "planned"},
-             {"notes", "Abstract execution surfaces are planned after checker output contracts are designed."}},
+            {{"name", "ae"}, {"status", "supported"},
+             {"notes", "Lazy Abstract Execution trace/state inspection is available via ae_summary and ae_state. Detector bug summaries are future work."}},
         })},
     };
 }
@@ -310,6 +310,8 @@ const std::vector<QueryEngine::Method>& QueryEngine::methodTable()
         {"saber_file_leaks", &QueryEngine::saberFileLeaks},
         {"mta_summary", &QueryEngine::mtaSummary},
         {"mta_mhp", &QueryEngine::mtaMHP},
+        {"ae_summary", &QueryEngine::aeSummary},
+        {"ae_state", &QueryEngine::aeState},
         {"vfpath", &QueryEngine::vfpath},
         {"reachable", &QueryEngine::reachable},
         {"graphs", &QueryEngine::graphs},

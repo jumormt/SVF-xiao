@@ -13,6 +13,8 @@ TEST_SUITE_DOUBLE_FREE_BC = os.path.join(
     TEST_SUITE_BC_ROOT, "double_free", "df0.c.bc")
 TEST_SUITE_MTA_SIMPLE_BC = os.path.join(
     TEST_SUITE_BC_ROOT, "mta", "succ_cxt_simple_2.c.bc")
+TEST_SUITE_AE_RECURSION_BC = os.path.join(
+    TEST_SUITE_BC_ROOT, "ae_assert_tests", "BUF_OVERFLOW_test_47-0.c.bc")
 BIN = os.environ.get("SVF_HARNESS_BIN", "svf-harness")
 if not os.path.isfile(BIN) and shutil.which(BIN) is None:
     sys.exit(f"set SVF_HARNESS_BIN=/path/to/Release-build/bin/svf-harness (got: {BIN!r})")
@@ -242,7 +244,7 @@ class HarnessTest(unittest.TestCase):
             self.assertTrue(k["description"], f"missing description: {k['name']}")
         edge_names = {e["name"] for e in j["edge_kinds"]}
         self.assertLessEqual({"IntraCFGEdge", "CallCFGEdge", "RetCFGEdge"}, edge_names)
-        self.assertEqual(len(j["methods"]), 26)
+        self.assertEqual(len(j["methods"]), 28)
         for m in j["methods"]:
             self.assertTrue(m["description"]); self.assertIn("params", m)
             if m["implemented"]:
@@ -257,6 +259,7 @@ class HarnessTest(unittest.TestCase):
                               "saber_leaks", "saber_double_frees",
                               "saber_file_leaks",
                               "mta_summary", "mta_mhp",
+                              "ae_summary", "ae_state",
                               "vfpath", "reachable",
                               "graphs", "graph_nodes", "graph_edges",
                               "node", "neighbors", "analysis_config"},
@@ -289,6 +292,8 @@ class HarnessTest(unittest.TestCase):
         self.assertIn("fork_sites", method_returns["mta_summary"])
         self.assertIn("threads", method_returns["mta_summary"])
         self.assertIn("may_happen_in_parallel", method_returns["mta_mhp"])
+        self.assertIn("trace_nodes", method_returns["ae_summary"])
+        self.assertIn("states", method_returns["ae_state"])
         self.assertIn("total_nodes", method_returns["cfg"])
         # Drift guard: defuse per-var caps (Task 5.1 carry-over) + vfpath/
         # reachable real shapes (Task 5.1).
@@ -335,7 +340,7 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual(planned["dda"], "supported")
         self.assertEqual(planned["saber"], "supported")
         self.assertEqual(planned["mta"], "supported")
-        self.assertEqual(planned["ae"], "planned")
+        self.assertEqual(planned["ae"], "supported")
 
     def test_schema_cfl_methods(self):
         j = self.oneshot("schema", {})
@@ -373,6 +378,15 @@ class HarnessTest(unittest.TestCase):
             self.assertTrue(methods[name]["implemented"])
             self.assertIsInstance(methods[name]["params"], dict)
             self.assertIn("mta", methods[name]["description"].lower())
+
+    def test_schema_ae_methods(self):
+        j = self.oneshot("schema", {})
+        methods = {m["name"]: m for m in j["methods"]}
+        for name in ("ae_summary", "ae_state"):
+            self.assertIn(name, methods)
+            self.assertTrue(methods[name]["implemented"])
+            self.assertIsInstance(methods[name]["params"], dict)
+            self.assertIn("abstract", methods[name]["description"].lower())
 
     def test_cfl_pts_of_malloc_ret_contains_heap_obj(self):
         j = self.oneshot("cfl_pts", {"var": {"func": "malloc", "ret": True}})
@@ -637,6 +651,33 @@ class HarnessTest(unittest.TestCase):
         self.assertGreaterEqual(j["threads"], 2, j)
         self.assertGreaterEqual(j["fork_sites"], 1, j)
         self.assertGreaterEqual(j["join_sites"], 1, j)
+
+    def test_ae_summary_fixture(self):
+        j = self.oneshot("ae_summary", {}, fixture="ae_state.c")
+        self.assertEqual(j["analysis"], "ae")
+        self.assertGreater(j["trace_nodes"], 0, j)
+        self.assertGreater(j["total_icfg_nodes"], 0, j)
+        self.assertGreater(j["var_entries"], 0, j)
+
+    def test_ae_state_fixture(self):
+        j = self.oneshot("ae_state",
+                         {"at": {"file": "ae_state.c", "line": 10}},
+                         fixture="ae_state.c")
+        self.assertEqual(j["analysis"], "ae")
+        self.assertGreaterEqual(j["matches"], 1, j)
+        self.assertTrue(j["states"], j)
+        state = j["states"][0]["state"]
+        self.assertGreater(state["vars_total"], 0, j)
+        self.assertIn("vars", state)
+
+    @unittest.skipUnless(os.path.isfile(TEST_SUITE_AE_RECURSION_BC),
+                         "Test-Suite AE recursion bitcode not present")
+    def test_testsuite_ae_summary_smoke(self):
+        j = self.oneshot_bitcode("ae_summary", {},
+                                 [TEST_SUITE_AE_RECURSION_BC])
+        self.assertEqual(j["analysis"], "ae")
+        self.assertGreater(j["trace_nodes"], 0, j)
+        self.assertGreater(j["total_icfg_nodes"], 0, j)
 
     def test_callers_of_fill(self):
         j = self.oneshot("callers", {"func": "fill"})

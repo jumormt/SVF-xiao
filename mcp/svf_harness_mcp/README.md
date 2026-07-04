@@ -4,9 +4,9 @@ A thin [MCP](https://modelcontextprotocol.io) adapter over the `svf-harness`
 daemon socket. It does **no analysis itself**: `load_program` spawns
 `svf-harness serve <bitcode...>` (which builds SVFIR → Andersen points-to →
 SVFG once), and every query tool is a one-line forward of JSON-RPC 2.0 over
-the daemon's Unix socket. 28 tools total: `load_program`, `unload_program`,
-and the 26 daemon methods (`schema summary functions callers callees cfg
-defuse pts aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp vfpath reachable graphs graph_nodes
+the daemon's Unix socket. 30 tools total: `load_program`, `unload_program`,
+and the 28 daemon methods (`schema summary functions callers callees cfg
+defuse pts aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp ae_summary ae_state vfpath reachable graphs graph_nodes
 graph_edges node neighbors analysis_config`).
 
 Guided walkthroughs (including a full Claude Code MCP tutorial with question
@@ -32,7 +32,7 @@ MCP clients list tools **at connect time**, before any program is loaded, so
 registering the query tools dynamically from the daemon's `schema()` response
 (only available after `load_program`) would leave the client blind. Instead:
 
-- The 24 query tools are registered **statically at import time**, each with a
+- The 28 query tools are registered **statically at import time**, each with a
   short docstring naming the common param keys.
 - The daemon's self-describing **`schema` tool stays the single authoritative
   contract**: full param docs, return shapes, all 66 node kinds, 10 edge

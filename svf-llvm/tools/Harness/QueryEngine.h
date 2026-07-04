@@ -11,6 +11,7 @@ namespace SVF
 class SVFIR;
 class SVFG;
 class AndersenBase;
+class AbstractInterpretation;
 class CFLAlias;
 class CallGraph;
 class CallGraphNode;
@@ -104,6 +105,10 @@ public:
     nlohmann::json mtaSummary(const nlohmann::json& params) const;
     /// MTA may-happen-in-parallel query between two source-location anchors.
     nlohmann::json mtaMHP(const nlohmann::json& params) const;
+    /// Abstract Execution trace coverage and state-size summary.
+    nlohmann::json aeSummary(const nlohmann::json& params) const;
+    /// Abstract Execution state at source-location anchors.
+    nlohmann::json aeState(const nlohmann::json& params) const;
     /// Value-flow paths from params["source"] to params["sink"] (anchors,
     /// see resolveVars/resolveSinkNodes) over the SVFG: one multi-source BFS
     /// with a parent tree, up to k (default 1, max 10) witness paths — at
@@ -209,6 +214,9 @@ private:
     /// Lazily run SVF's MTA analysis. MTA writes dot/progress output
     /// internally, so the implementation isolates those side effects.
     SVF::MTA* getMTA() const;
+    /// Lazily run SVF's Abstract Execution. The AE engine is a process-wide
+    /// singleton; the harness daemon runs one program per process.
+    SVF::AbstractInterpretation* getAE() const;
 
     /// Module paths as given to the ctor; reported in schema().program.
     std::vector<std::string> modules;
@@ -228,4 +236,6 @@ private:
     mutable nlohmann::json saberDoubleFreesCache;
     mutable nlohmann::json saberFileLeaksCache;
     mutable std::unique_ptr<SVF::MTA> mta;
+    mutable SVF::AbstractInterpretation* ae = nullptr;
+    mutable bool aeReady = false;
 };

@@ -576,6 +576,30 @@ json methods()
         "may_happen_in_parallel, witnesses: [{left: <evidence node>, right: "
         "<evidence node>, same_thread: bool}], truncated} (anchors capped at "
         "50 nodes each; witnesses capped at 20)"));
+    a.push_back(method("ae_summary",
+        "Abstract Execution trace and state-size summary. Runs SVF AE lazily "
+        "and reports how much of the ICFG has abstract states plus the total "
+        "number of variable and memory-address abstract-value entries. This "
+        "is the coarse entry point before drilling into `ae_state`.",
+        json::object(),
+        "{analysis: 'ae', sparsity, entry, recursion, trace_nodes, "
+        "total_icfg_nodes, icfg_coverage_percent, analyzed_functions, "
+        "total_functions, var_entries, addr_entries}"));
+    a.push_back(method("ae_state",
+        "Abstract Execution state at source-location anchors. The `at` "
+        "anchor resolves to ICFG nodes at {file,line}, optionally filtered "
+        "by node kind, and each result reports whether AE has a state plus "
+        "capped variable/address abstract values.",
+        json{{"at", param("object",
+                 "Source-location anchor: {file: string, line: integer, "
+                 "kind?: string}. File matches by path suffix.", true)},
+             {"limit", param("integer",
+                 "Max variable and address entries per state in [1, 500] "
+                 "(default 50).", false)}},
+        "{analysis: 'ae', matches, states: [{node: <evidence node>, "
+        "has_state: bool, state?: {vars_total, addrs_total, vars: "
+        "[{id, value, var?}], addrs: [{id, value, var?}], text, truncated}}], "
+        "limit, truncated} (nodes capped at 50)"));
     a.push_back(method("vfpath",
         "Value-flow paths from a source to a sink over the sparse value-flow "
         "graph: HOW a value gets from A to B, step by step, with evidence "

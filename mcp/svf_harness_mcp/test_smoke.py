@@ -40,6 +40,7 @@ EXPECTED_QUERY_TOOLS = {
     "dda_pts", "dda_aliases",
     "saber_leaks", "saber_double_frees", "saber_file_leaks",
     "mta_summary", "mta_mhp",
+    "ae_summary", "ae_state",
     "vfpath", "reachable",
     "graphs", "graph_nodes", "graph_edges", "node", "neighbors",
     "analysis_config",
@@ -97,7 +98,7 @@ class McpSmokeTest(unittest.TestCase):
         async def scenario(session):
             tools = (await session.list_tools()).tools
             self.assertEqual({t.name for t in tools}, EXPECTED_TOOLS)
-            self.assertEqual(len(tools), 28)
+            self.assertEqual(len(tools), 30)
             for t in tools:
                 self.assertTrue(t.description, f"missing description: {t.name}")
         self.run_session(scenario)

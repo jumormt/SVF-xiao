@@ -10,9 +10,9 @@ knowledge base), synthesis layer (NL-driven tool synthesis).
 analysis configuration, SVFG construction can switch between `full` and
 `ptr-only`, and CFLAlias plus FlowDDA are available through lazy
 `cfl_pts`/`cfl_aliases`, `dda_pts`/`dda_aliases`, SABER checker summary
-queries, and MTA thread/MHP summaries. Full clean Test-Suite is green after
-graph/config changes, and harness tests load representative Test-Suite bitcodes
-directly. AE remains a planned follow-up surface.
+queries, MTA thread/MHP summaries, and AE trace/state inspection. Full clean
+Test-Suite is green after graph/config changes, and harness tests load
+representative Test-Suite bitcodes directly.
 
 ## Epics
 - [x] E1: svf-harness thin slice (v0) — daemon/CLI/MCP, 11 query methods, evidence v0
@@ -23,6 +23,7 @@ directly. AE remains a planned follow-up surface.
 ## Plans Index (active/recent)
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
+| 2026-07-04 | harness-ae-surface | E3+E4 | done | **Done 2026-07-04.** Added lazy AE-backed `ae_summary`/`ae_state`, schema/help/MCP docs, config surface status, focused fixture + Test-Suite AE smoke tests; focused AE+MCP 6/6, full harness 64/64, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-06-harness-ae-surface.md` |
 | 2026-07-04 | harness-mta-surface | E3 | done | **Done 2026-07-04.** Added lazy MTA-backed `mta_summary`/`mta_mhp`, schema/help/MCP docs, config surface status, focused fixture + Test-Suite MTA smoke tests; focused MTA 6/6, full harness 60/60, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-05-harness-mta-surface.md` |
 | 2026-07-04 | harness-saber-surface | E3 | done | **Done 2026-07-04.** Added SABER-backed `saber_leaks`/`saber_double_frees`/`saber_file_leaks`, schema/help/MCP docs, config surface status, focused Test-Suite leak + double-free smoke tests; focused SABER 4/4, full harness 56/56, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-04-harness-saber-surface.md` |
 | 2026-07-04 | harness-dda-surface | E3 | done | **Done 2026-07-04.** Added lazy FlowDDA-backed `dda_pts`/`dda_aliases`, schema/help/MCP docs, config surface status, focused fixture + Test-Suite smoke tests; focused DDA 5/5, full harness 53/53, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-03-harness-dda-surface.md` |
@@ -34,8 +35,8 @@ directly. AE remains a planned follow-up surface.
 | 2026-06-10 | svf-harness-thin-slice | E1 | done | **All 7 phases done, 2026-06-10.** 11 methods, daemon+CLI+MCP, 33 py tests, full regression 2267/2267, demo green. Summary: `docs/summaries/2026-06-10-svf-harness-thin-slice.md` |
 
 ## Next Steps
-- **Next B/C slice** — pick the next high-value precision/checker surface:
-  likely AE traces, MTA lock/race diagnostics, or deeper DDA/SABER diagnostics.
+- **Next B/C slice** — choose between AE detector bug summaries, MTA lock/race
+  diagnostics, or deeper DDA/SABER diagnostics.
 - **Broader Test-Suite query sweep** — optional next hardening step: run selected
   graph/query methods beyond `summary` across a stratified Test-Suite subset.
 - **E2 declarative query language L_Q** (proposal Task 2.2) — still deferred
@@ -60,7 +61,7 @@ directly. AE remains a planned follow-up surface.
 | Category | Decision |
 |----------|----------|
 | Architecture | C++ in-tree tool (`svf-llvm/tools/Harness`), daemon + light CLI over Unix socket JSON-RPC; MCP = thin Python wrapper |
-| Precision | Default AndersenWaveDiff + full SVFG; `analysis_config` supports SVFG `full`/`ptr-only`; lazy CFLAlias, FlowDDA, SABER, and MTA query surfaces are available |
+| Precision | Default AndersenWaveDiff + full SVFG; `analysis_config` supports SVFG `full`/`ptr-only`; lazy CFLAlias, FlowDDA, SABER, MTA, and AE query surfaces are available |
 | Output | JSON only; every node carries kind/id/loc/ir evidence record |
 | Testing | ctest-style integration tests on Test-Suite .bc cases; serial ctest only |
 | JSON lib | vendored nlohmann/json single header |
@@ -508,3 +509,33 @@ directly. AE remains a planned follow-up surface.
   current harness stays an in-memory SVF daemon.
 - **Tests:** N/A docs-only.
 - **Files:** `docs/FUTURE.md`, `docs/PROGRESS.md`
+
+### 2026-07-04 (AE surface)
+- **Focus:** turn AE from a planned `analysis_config.surfaces` item into real
+  trace/state inspection queries.
+- **Completed:** added `AEQueries.cpp`; added `ae_summary` and `ae_state`
+  daemon/CLI/MCP methods. `ae_summary` runs SVF Abstract Execution lazily and
+  returns trace coverage, analyzed-function count, AE mode/config strings, and
+  aggregate abstract-state entry counts. `ae_state` resolves `{file,line[,kind]}`
+  ICFG anchors and returns capped variable/address abstract values with node
+  evidence and raw AE state text. AE stdout/stderr is silenced during lazy run
+  to preserve JSON-only harness output. Detector bug summaries remain future
+  work because existing AE detector reporters are private and need a stable
+  structured contract before exposure. Schema/help/docs now list 28 daemon
+  methods and 30 MCP tools; config surface `ae` reports `supported`.
+- **Tests:** red AE/MCP tests observed first; build target `svf-harness`;
+  focused AE+MCP 6/6; full harness Python suite 64/64; standalone MCP smoke
+  4/4 using `/home/xiao/program/py311-mcp/bin/python`; examples 5/5; ctest
+  `-R 'harness_(integration|examples)'` 2/2 with `harness_integration` 2270
+  and `harness_examples` 2271 after current CMake numbering. Generated
+  Test-Suite `.pre*.bc` artifacts from AE/C++/crux/SABER/MTA smoke cases were
+  removed; final generated artifact count is 0.
+- **Files:** `svf-llvm/tools/Harness/{AEQueries.cpp,QueryEngine.h,
+  QueryEngine.cpp,Schema.cpp,CMakeLists.txt,svf-harness.cpp,README.md}`,
+  `svf-llvm/tools/Harness/tests/{run_tests.py,fixtures/ae_state.c}`,
+  `svf-llvm/tools/Harness/examples/02-exploring.sh`,
+  `mcp/svf_harness_mcp/{server.py,test_smoke.py,README.md}`,
+  `docs/tutorials/{02-exploring-a-program.md,06-claude-code-mcp.md}`,
+  `docs/plans/2026-07-04-06-harness-ae-surface.md`
+- **Blockers:** none; next likely E3/E4 slices are AE detector bug summaries,
+  MTA lock/race diagnostics, or richer DDA/SABER diagnostics.

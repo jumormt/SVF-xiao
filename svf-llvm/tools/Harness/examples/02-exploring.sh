@@ -71,10 +71,10 @@ methods = [m["name"] for m in j["methods"]]
 print("methods:   ", ", ".join(methods))
 print("node_kinds:", len(j["node_kinds"]), "documented evidence kinds")
 print("edge_kinds:", len(j["edge_kinds"]), "documented edge kinds")
-assert len(methods) == 26, f"expected 26 methods, got {len(methods)}"
+assert len(methods) == 28, f"expected 28 methods, got {len(methods)}"
 nkinds = len(j["node_kinds"])
 assert nkinds == 66, f"expected 66 node kinds, got {nkinds}"
-print("ok: 26 methods, 66 node kinds")
+print("ok: 28 methods, 66 node kinds")
 '
 
 step 'functions(pattern=".*free.*") — regex search over function names'

@@ -27,7 +27,7 @@ static const char* kUsage =
     "  svf-harness <method> [args] [--socket PATH]      query the daemon\n"
     "  svf-harness --oneshot <method> [--params JSON] [--analysis-config JSON] <bitcode...>  build state + run one query\n"
     "  svf-harness shutdown [--socket PATH]             stop the daemon\n"
-    "Methods: schema summary functions callers callees cfg defuse pts aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp vfpath reachable graphs graph_nodes graph_edges node neighbors analysis_config\n";
+    "Methods: schema summary functions callers callees cfg defuse pts aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp ae_summary ae_state vfpath reachable graphs graph_nodes graph_edges node neighbors analysis_config\n";
 
 /// Oneshot error contract: print {"error":{code,message}} on stdout, return 1.
 static int jsonError(const std::string& message, int code = -32000)

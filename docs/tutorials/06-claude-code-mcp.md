@@ -46,7 +46,7 @@ happens at registration or connect — the wrapper is a thin adapter and
 starts no daemon until you load a program.
 
 Verify with `claude mcp list`, or `/mcp` inside a session — you should see
-`svf` connected with 28 tools.
+`svf` connected with 30 tools.
 
 ### 2. Alternative: project-scope `.mcp.json`
 
@@ -78,12 +78,12 @@ Claude Code will prompt once to approve the project server.
 
 ### 3. The tool surface — and the one trap
 
-The server exposes **28 tools**: `load_program` / `unload_program`
-(lifecycle), plus the 26 daemon methods you already know — `schema`,
+The server exposes **30 tools**: `load_program` / `unload_program`
+(lifecycle), plus the 28 daemon methods you already know — `schema`,
 `summary`, `functions`, `callers`, `callees`, `cfg`, `defuse`, `pts`,
 `aliases`, `cfl_pts`, `cfl_aliases`, `dda_pts`, `dda_aliases`,
 `saber_leaks`, `saber_double_frees`, `saber_file_leaks`, `mta_summary`,
-`mta_mhp`, `vfpath`, `reachable`, `graphs`,
+`mta_mhp`, `ae_summary`, `ae_state`, `vfpath`, `reachable`, `graphs`,
 `graph_nodes`, `graph_edges`, `node`, `neighbors`, `analysis_config`.
 
 Two design facts (rationale in
@@ -116,7 +116,7 @@ tool runs with empty params. Demonstrated for real on demo.ll:
 If a result looks suspiciously unfiltered, check the nesting first.
 
 **Fact 2 — `schema` is the contract; docstrings are only signposts.** The
-24 query tools are registered statically (MCP clients list tools before
+28 query tools are registered statically (MCP clients list tools before
 any program is loaded), so their docstrings are deliberately short. The
 schema-first workflow an LLM should follow — and that you should put in
 your `CLAUDE.md` or prompt for serious sessions: after `load_program`,
@@ -298,7 +298,7 @@ money shot — which returns the 6-step witness ending at the line-11 load.)
   <python> server.py` (local scope by default; `-s user` for all projects)
   or a checked-in `.mcp.json` with hand-substituted placeholders
   (project scope).
-- 28 tools; arguments go **nested under `"params"`** — the flat form
+- 30 tools; arguments go **nested under `"params"`** — the flat form
   silently drops them (a too-broad result is the symptom).
 - Schema-first: `load_program`, then `schema` once — it is the
   authoritative contract the short docstrings defer to.

@@ -114,8 +114,8 @@ and exit 1. Stdout is always pure JSON; diagnostics go to stderr.
 
 ## Method reference
 
-Twenty-six methods: `schema summary functions callers callees cfg defuse pts
-aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp vfpath reachable graphs graph_nodes graph_edges
+Twenty-eight methods: `schema summary functions callers callees cfg defuse pts
+aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp ae_summary ae_state vfpath reachable graphs graph_nodes graph_edges
 node neighbors analysis_config`. **The authoritative reference is the tool itself** — `svf-harness schema` returns
 full documentation for every method (params, return shapes, semantics, caps),
 all 66 node kinds, 10 edge kinds, the evidence-record contract, and the loaded

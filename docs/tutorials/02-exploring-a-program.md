@@ -39,7 +39,7 @@ print("edge_kinds:", len(j["edge_kinds"]), "documented edge kinds")
 Real output:
 
 ```
-methods:    schema, summary, functions, callers, callees, cfg, defuse, pts, aliases, cfl_pts, cfl_aliases, dda_pts, dda_aliases, saber_leaks, saber_double_frees, saber_file_leaks, mta_summary, mta_mhp, vfpath, reachable, graphs, graph_nodes, graph_edges, node, neighbors, analysis_config
+methods:    schema, summary, functions, callers, callees, cfg, defuse, pts, aliases, cfl_pts, cfl_aliases, dda_pts, dda_aliases, saber_leaks, saber_double_frees, saber_file_leaks, mta_summary, mta_mhp, ae_summary, ae_state, vfpath, reachable, graphs, graph_nodes, graph_edges, node, neighbors, analysis_config
 node_kinds: 66 documented evidence kinds
 edge_kinds: 10 documented edge kinds
 ```
