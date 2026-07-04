@@ -539,3 +539,35 @@ representative Test-Suite bitcodes directly.
   `docs/plans/2026-07-04-06-harness-ae-surface.md`
 - **Blockers:** none; next likely E3/E4 slices are AE detector bug summaries,
   MTA lock/race diagnostics, or richer DDA/SABER diagnostics.
+
+### 2026-07-04 (skill verification sweep)
+- **Focus:** user-requested full test of the SVF harness skills: maintainer
+  verification flow plus program-analysis wrapper flow.
+- **Completed:** read and followed `svf-harness-maintainer` and
+  `svf-program-analysis` skill instructions; rebuilt `svf-harness`; ran the
+  full harness, MCP, examples, CTest, and wrapper query paths. During wrapper
+  smoke testing, an intermediate check used a nonexistent generated fixture path
+  and produced a JSON error object that the ad hoc parser misread as schema;
+  rerunning against freshly compiled `/tmp/svf-harness-skill-demo.ll` confirmed
+  the current schema shape is still `{methods, node_kinds, edge_kinds, ...}`.
+  Then tested the `svf-program-analysis` skill as intended: natural-language
+  questions routed to focused harness queries for demo use-after-free
+  value-flow, indirect-call resolution, SABER leak/double-free summaries, MTA
+  MHP, and AE state inspection.
+- **Tests:** `cmake --build Release-build --target svf-harness -j2` passed;
+  `SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness python3
+  svf-llvm/tools/Harness/tests/run_tests.py -v` passed 64/64; standalone MCP
+  smoke with `/home/xiao/program/py311-mcp/bin/python` passed 4/4; examples
+  `run_all.sh` passed 5/5; CTest `-R 'harness_(integration|examples)'` passed
+  2/2; program-analysis wrapper `schema` reported 28 methods and 66 node kinds;
+  wrapper `vfpath` from `malloc` return to `demo.c:11` reported 1 witness path
+  of length 6. Natural-language analysis smokes: `demo.c` malloc-ret to
+  `b[0]` returned a 6-step SVFG witness; `indirect.c` `apply` resolved
+  indirect callees `dbl` and `neg`; `malloc0.c.bc` reported 2 SABER leaks;
+  `df0.c.bc` reported 1 SABER double-free; `thread_mhp.c` line 6 vs line 13
+  returned `may_happen_in_parallel: true`; `ae_state.c` line 10 returned
+  `has_state: true` AE matches. Generated Test-Suite `.pre*.bc` artifacts from
+  the smoke cases were removed; final generated artifact count is 0.
+- **Files:** `docs/PROGRESS.md`
+- **Blockers:** none. Existing unrelated worktree entries remain:
+  modified `Dockerfile`, untracked `Dockerfile.bk`, and untracked `testcase/`.
