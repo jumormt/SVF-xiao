@@ -3,6 +3,9 @@
 Fork of SVF-tools/SVF being transformed into an LLM-friendly program analysis harness
 (see `docs/PROGRESS.md` for the roadmap and `docs/designs/` for approved designs).
 
+Codex project instructions live in `AGENTS.md`. This file remains for Claude
+Code compatibility and should stay behaviorally aligned with `AGENTS.md`.
+
 ## Build & Test (this machine: Ubuntu 20.04 focal)
 
 - Build: `env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash ./build.sh`

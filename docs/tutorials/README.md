@@ -11,15 +11,15 @@ vocabulary (evidence records, anchors, witness paths).
 | 03 | [Pointer and dataflow queries](03-pointer-and-dataflow.md) | The three variable-anchor forms, `pts` (what may X point to), `aliases`, `defuse` — and how error hints guide you to a working anchor. |
 | 04 | [Value-flow witnesses](04-value-flow-witnesses.md) | `vfpath` step-by-step witness paths (the use-after-free money shot), batch `reachable`, and long-path elision with `max_steps`. |
 | 05 | [A real-world program](05-real-world-program.md) | GNU bc and bash from Test-Suite: working without debug info, performance expectations, and recovering from a wrong first question (the `xmalloc` lesson). |
-| 06 | [Claude Code via MCP](06-claude-code-mcp.md) | Registering the [MCP wrapper](../../mcp/svf_harness_mcp/README.md) in Claude Code, the `params`-nesting trap, three question patterns, and a sample evidence-grounded session. |
+| 06 | [Codex and Claude Code via MCP](06-claude-code-mcp.md) | Registering the [MCP wrapper](../../mcp/svf_harness_mcp/README.md) in Codex or Claude Code, the `params`-nesting trap, three question patterns, and a sample evidence-grounded session. |
 
 ## Prerequisites
 
 A built `svf-harness` binary and `clang` on PATH — the
 [Harness README quick start](../../svf-llvm/tools/Harness/README.md#quick-start)
 covers both. Tutorial 05 additionally needs the SVF Test-Suite cloned
-(instructions in its prerequisites); tutorial 06 needs a python ≥ 3.10
-with the `mcp` SDK and Claude Code.
+(instructions in its prerequisites); tutorial 06 needs a python >= 3.10
+with the `mcp` SDK and either Codex or Claude Code.
 
 ## Executable companions
 

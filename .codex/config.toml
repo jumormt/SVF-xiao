@@ -1,0 +1,12 @@
+# Project-scoped Codex configuration for the SVF-xiao checkout.
+# Codex loads this only after the project is trusted.
+
+[mcp_servers.svf]
+command = "/home/xiao/program/py311-mcp/bin/python"
+args = ["/home/xiao/project/SVF-xiao/mcp/svf_harness_mcp/server.py"]
+cwd = "/home/xiao/project/SVF-xiao"
+startup_timeout_sec = 20
+tool_timeout_sec = 650
+
+[mcp_servers.svf.env]
+SVF_HARNESS_BIN = "/home/xiao/project/SVF-xiao/Release-build/bin/svf-harness"

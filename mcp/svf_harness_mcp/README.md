@@ -9,8 +9,43 @@ and the 28 daemon methods (`schema summary functions callers callees cfg
 defuse pts aliases cfl_pts cfl_aliases dda_pts dda_aliases saber_leaks saber_double_frees saber_file_leaks mta_summary mta_mhp ae_summary ae_state vfpath reachable graphs graph_nodes
 graph_edges node neighbors analysis_config`).
 
-Guided walkthroughs (including a full Claude Code MCP tutorial with question
+Guided walkthroughs (including a Codex/Claude Code MCP tutorial with question
 patterns and a sample session): [`docs/tutorials/`](../../docs/tutorials/README.md).
+
+## Setup for Codex
+
+Requires python >= 3.10 with the `mcp` SDK (`pip install mcp`) and a built
+`svf-harness` binary (see `svf-llvm/tools/Harness/`).
+
+This checkout includes a project-scoped Codex config at `.codex/config.toml`
+for this machine:
+
+```toml
+[mcp_servers.svf]
+command = "/home/xiao/program/py311-mcp/bin/python"
+args = ["/home/xiao/project/SVF-xiao/mcp/svf_harness_mcp/server.py"]
+cwd = "/home/xiao/project/SVF-xiao"
+startup_timeout_sec = 20
+tool_timeout_sec = 650
+
+[mcp_servers.svf.env]
+SVF_HARNESS_BIN = "/home/xiao/project/SVF-xiao/Release-build/bin/svf-harness"
+```
+
+Codex loads project `.codex/config.toml` only after the project is trusted. In
+Codex, run `/mcp` in the TUI or `codex mcp list` from the repo root to inspect
+the active `svf` server.
+
+To add the same server to your user-level Codex config instead:
+
+```bash
+codex mcp add svf \
+    --env SVF_HARNESS_BIN=/path/to/SVF-xiao/Release-build/bin/svf-harness \
+    -- /path/to/python-with-mcp /path/to/SVF-xiao/mcp/svf_harness_mcp/server.py
+```
+
+On this machine: python is `/home/xiao/program/py311-mcp/bin/python`, repo is
+`/home/xiao/project/SVF-xiao`.
 
 ## Setup for Claude Code
 
@@ -22,9 +57,6 @@ claude mcp add svf \
     --env SVF_HARNESS_BIN=/path/to/SVF-xiao/Release-build/bin/svf-harness \
     -- /path/to/python-with-mcp /path/to/SVF-xiao/mcp/svf_harness_mcp/server.py
 ```
-
-On this machine: python is `/home/xiao/program/py311-mcp/bin/python`, repo is
-`/home/xiao/project/SVF-xiao`.
 
 ## Design: static tools, `schema` as the source of truth
 
@@ -56,7 +88,7 @@ load_program {"bitcode_paths": ["/tmp/demo.ll"],
       "socket_path": "/tmp/svf-mcp-xxxx/svf-1234.sock", "modules": [...]}
 
 schema {}            # the authoritative contract for everything below
-  -> {"methods": [...26 methods with params/returns...], "node_kinds": [...],
+  -> {"methods": [...28 methods with params/returns...], "node_kinds": [...],
       "edge_kinds": [...], "evidence_record": {...}, "program": {...}}
 
 vfpath {"params": {"source": {"func": "malloc", "ret": true},

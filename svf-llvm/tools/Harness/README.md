@@ -1,7 +1,7 @@
 # svf-harness — LLM-friendly SVF query daemon/CLI
 
 > **New here?** Start with the [tutorials](../../../docs/tutorials/README.md)
-> — six guided walkthroughs from first query to Claude Code integration.
+> — six guided walkthroughs from first query to Codex/Claude Code integration.
 
 `svf-harness` exposes SVF's program analyses (call graph, ICFG, points-to,
 sparse value-flow) as a query service an LLM agent can drive: a daemon builds
@@ -15,7 +15,7 @@ query method so the client never has to guess the contract. Design rationale:
 ## Quick start
 
 Build (from the repo root; this machine needs the env wrapper, see the
-top-level `CLAUDE.md`):
+top-level `AGENTS.md` for Codex and `CLAUDE.md` for Claude Code):
 
 ```bash
 env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
@@ -233,5 +233,5 @@ env -u LLVM_DIR -u Z3_DIR -u SVF_DIR bash -c \
 The MCP smoke test runs as part of the suite when a Python ≥3.10 with the
 `mcp` SDK is available (`MCP_PYTHON` env var); otherwise it skips cleanly.
 
-**MCP wrapper** (use the harness as MCP tools from Claude Code etc.):
+**MCP wrapper** (use the harness as MCP tools from Codex, Claude Code, etc.):
 see [`mcp/svf_harness_mcp/README.md`](../../../mcp/svf_harness_mcp/README.md).

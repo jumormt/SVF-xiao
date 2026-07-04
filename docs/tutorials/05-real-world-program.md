@@ -338,6 +338,6 @@ Two caveats worth knowing:
 
 ## Next
 
-[Tutorial 06 — Claude Code via MCP](06-claude-code-mcp.md): wire the
-harness into Claude Code so an LLM runs these exact loops —
+[Tutorial 06 — Codex and Claude Code via MCP](06-claude-code-mcp.md): wire the
+harness into Codex or Claude Code so an LLM runs these exact loops —
 load → schema → question → evidence-grounded answer — by itself.

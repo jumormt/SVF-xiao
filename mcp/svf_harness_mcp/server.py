@@ -1,7 +1,15 @@
 """svf-harness MCP server: thin stdio adapter over the svf-harness daemon socket.
 
-Setup for Claude Code (adjust the python path to an interpreter with `mcp`
+Setup for Codex (adjust the python path to an interpreter with `mcp`
 installed, e.g. /home/xiao/program/py311-mcp/bin/python):
+
+    codex mcp add svf \
+        --env SVF_HARNESS_BIN=/path/to/Release-build/bin/svf-harness \
+        -- /path/to/python /path/to/SVF-xiao/mcp/svf_harness_mcp/server.py
+
+This checkout also has a project-scoped `.codex/config.toml` for Codex.
+
+Setup for Claude Code:
 
     claude mcp add svf \
         --env SVF_HARNESS_BIN=/path/to/Release-build/bin/svf-harness \

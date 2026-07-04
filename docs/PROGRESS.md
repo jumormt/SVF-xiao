@@ -24,6 +24,7 @@ representative Test-Suite bitcodes directly.
 | Date | Plan | Epic | Status | Notes |
 |------|------|------|--------|-------|
 | 2026-07-04 | harness-ae-surface | E3+E4 | done | **Done 2026-07-04.** Added lazy AE-backed `ae_summary`/`ae_state`, schema/help/MCP docs, config surface status, focused fixture + Test-Suite AE smoke tests; focused AE+MCP 6/6, full harness 64/64, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-06-harness-ae-surface.md` |
+| 2026-07-04 | codex-project-migration | Infra | done | **Done 2026-07-04.** Added Codex-first `AGENTS.md`, tracked project `.codex/config.toml` for the local `svf` MCP server, and Codex-first SVF Harness docs while preserving `CLAUDE.md` / Claude Code compatibility. Plan: `docs/plans/2026-07-04-07-codex-project-migration.md` |
 | 2026-07-04 | harness-mta-surface | E3 | done | **Done 2026-07-04.** Added lazy MTA-backed `mta_summary`/`mta_mhp`, schema/help/MCP docs, config surface status, focused fixture + Test-Suite MTA smoke tests; focused MTA 6/6, full harness 60/60, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-05-harness-mta-surface.md` |
 | 2026-07-04 | harness-saber-surface | E3 | done | **Done 2026-07-04.** Added SABER-backed `saber_leaks`/`saber_double_frees`/`saber_file_leaks`, schema/help/MCP docs, config surface status, focused Test-Suite leak + double-free smoke tests; focused SABER 4/4, full harness 56/56, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-04-harness-saber-surface.md` |
 | 2026-07-04 | harness-dda-surface | E3 | done | **Done 2026-07-04.** Added lazy FlowDDA-backed `dda_pts`/`dda_aliases`, schema/help/MCP docs, config surface status, focused fixture + Test-Suite smoke tests; focused DDA 5/5, full harness 53/53, MCP smoke 4/4, examples 5/5, ctest harness 2/2. Plan: `docs/plans/2026-07-04-03-harness-dda-surface.md` |
@@ -569,5 +570,29 @@ representative Test-Suite bitcodes directly.
   `has_state: true` AE matches. Generated Test-Suite `.pre*.bc` artifacts from
   the smoke cases were removed; final generated artifact count is 0.
 - **Files:** `docs/PROGRESS.md`
+- **Blockers:** none. Existing unrelated worktree entries remain:
+  modified `Dockerfile`, untracked `Dockerfile.bk`, and untracked `testcase/`.
+
+### 2026-07-04 (Codex project migration)
+- **Focus:** make the checkout Codex-first while preserving Claude Code
+  compatibility.
+- **Completed:** added root `AGENTS.md` with build/test, LDD, Codex MCP, and
+  svf-harness maintenance guidance; added tracked `.codex/config.toml` for the
+  local `svf` MCP server; relaxed `.gitignore` only for that config; kept
+  `CLAUDE.md` with a compatibility pointer; updated MCP README, server
+  docstring, Harness README, tutorial index, tutorial 05 next link, tutorial 06,
+  and the Claude `.mcp.json` sample to lead with Codex and retain Claude Code
+  setup.
+- **Tests:** `.codex/config.toml` parsed with py311 `tomllib`; Claude sample
+  `mcp-sample.mcp.json` parsed with `python3 -m json.tool`; `codex mcp list`
+  showed `svf` enabled with `/home/xiao/program/py311-mcp/bin/python` and
+  `/home/xiao/project/SVF-xiao/mcp/svf_harness_mcp/server.py`; whitespace check
+  on touched files passed. Full `git diff --check` still reports the existing
+  unrelated `Dockerfile:40: new blank line at EOF`.
+- **Files:** `AGENTS.md`, `.codex/config.toml`, `.gitignore`, `CLAUDE.md`,
+  `mcp/svf_harness_mcp/{README.md,server.py}`,
+  `svf-llvm/tools/Harness/{README.md,examples/mcp-sample.mcp.json}`,
+  `docs/tutorials/{README.md,05-real-world-program.md,06-claude-code-mcp.md}`,
+  `docs/plans/2026-07-04-07-codex-project-migration.md`, `docs/PROGRESS.md`
 - **Blockers:** none. Existing unrelated worktree entries remain:
   modified `Dockerfile`, untracked `Dockerfile.bk`, and untracked `testcase/`.

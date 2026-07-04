@@ -7,6 +7,7 @@
     "  ${PYTHON_WITH_MCP} a python >= 3.10 with `pip install mcp`",
     "                     (on this machine: /home/xiao/program/py311-mcp/bin/python)",
     "Remove this _comment key if your tooling objects to unknown keys.",
+    "Codex uses .codex/config.toml instead; this checkout has one at repo root.",
     "See docs/tutorials/06-claude-code-mcp.md for the full walkthrough."
   ],
   "mcpServers": {

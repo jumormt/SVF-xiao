@@ -1,13 +1,16 @@
-# Tutorial 06 — Claude Code via MCP
+# Tutorial 06 — Codex and Claude Code via MCP
 
 ## Goal
 
-Wire the harness into [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-through the [MCP](https://modelcontextprotocol.io) wrapper, so the loops you
-ran by hand in tutorials 01–05 — load, schema, question, evidence-grounded
-answer — happen inside an LLM conversation. You will register the server
-(two ways), learn the one trap in the tool-call format, see three question
-patterns that work well, and read a sample session.
+Wire the harness into Codex or
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) through the
+[MCP](https://modelcontextprotocol.io) wrapper, so the loops you ran by hand in
+tutorials 01–05 — load, schema, question, evidence-grounded answer — happen
+inside an LLM conversation. Codex is the primary path in this checkout; Claude
+Code remains supported.
+
+You will register the server, learn the one trap in the tool-call format, see
+three question patterns that work well, and read a sample session.
 
 There is no companion script for this tutorial: an MCP session is an
 interactive LLM conversation and cannot be replayed deterministically.
@@ -22,16 +25,50 @@ are pasted unedited. Only the English prose around them is illustrative.
 - A python ≥ 3.10 with the MCP SDK: `pip install mcp`. On this machine
   that interpreter is `/home/xiao/program/py311-mcp/bin/python` — substitute
   your own everywhere it appears.
-- Claude Code installed (`claude` on PATH).
+- Codex installed (`codex` on PATH), or Claude Code installed (`claude` on
+  PATH) if you are using the compatibility path.
 
 ## Steps
 
-### 1. Register the server — local scope (this project only)
+### 1. Codex project config
+
+This checkout includes a Codex project config at `.codex/config.toml`:
+
+```toml
+[mcp_servers.svf]
+command = "/home/xiao/program/py311-mcp/bin/python"
+args = ["/home/xiao/project/SVF-xiao/mcp/svf_harness_mcp/server.py"]
+cwd = "/home/xiao/project/SVF-xiao"
+startup_timeout_sec = 20
+tool_timeout_sec = 650
+
+[mcp_servers.svf.env]
+SVF_HARNESS_BIN = "/home/xiao/project/SVF-xiao/Release-build/bin/svf-harness"
+```
+
+Codex loads project-scoped `.codex/config.toml` only after the project is
+trusted. Run Codex from the repo root and use `/mcp` in the TUI to confirm that
+the `svf` server is active. The same configuration is shared by Codex CLI and
+the Codex IDE extension.
+
+To install the server in your user-level Codex config instead of using the
+project file:
+
+```bash
+codex mcp add svf \
+    --env SVF_HARNESS_BIN=$PWD/Release-build/bin/svf-harness \
+    -- /home/xiao/program/py311-mcp/bin/python $PWD/mcp/svf_harness_mcp/server.py
+```
+
+Nothing heavy happens at registration or connect — the wrapper is a thin
+adapter and starts no daemon until you call `load_program`.
+
+### 2. Claude Code compatibility
 
 `claude mcp add` defaults to **local** scope: the registration applies only
-when you run `claude` inside this project; add `-s user` to make it
-available across all your projects. From the repo root (so `$PWD` expands
-to absolute paths):
+when you run `claude` inside this project; add `-s user` to make it available
+across all your projects. From the repo root (so `$PWD` expands to absolute
+paths):
 
 ```bash
 claude mcp add svf \
@@ -39,16 +76,14 @@ claude mcp add svf \
     -- /home/xiao/program/py311-mcp/bin/python $PWD/mcp/svf_harness_mcp/server.py
 ```
 
-Anatomy: everything after `--` is the server command (the python
-interpreter running `server.py` over stdio); `--env` hands the wrapper the
-path to the C++ binary it will spawn on `load_program`. Nothing heavy
-happens at registration or connect — the wrapper is a thin adapter and
-starts no daemon until you load a program.
+Anatomy: everything after `--` is the server command (the python interpreter
+running `server.py` over stdio); `--env` hands the wrapper the path to the C++
+binary it will spawn on `load_program`.
 
 Verify with `claude mcp list`, or `/mcp` inside a session — you should see
 `svf` connected with 30 tools.
 
-### 2. Alternative: project-scope `.mcp.json`
+### 3. Claude Code alternative: project-scope `.mcp.json`
 
 To share the config with a project (checked in, applies to anyone running
 `claude` in that directory), copy
@@ -76,7 +111,7 @@ expands. (The sample file carries the same instructions in a `"_comment"`
 key — JSON has no comment syntax; delete that key if your tooling objects.)
 Claude Code will prompt once to approve the project server.
 
-### 3. The tool surface — and the one trap
+### 4. The tool surface — and the one trap
 
 The server exposes **30 tools**: `load_program` / `unload_program`
 (lifecycle), plus the 28 daemon methods you already know — `schema`,
@@ -118,14 +153,14 @@ If a result looks suspiciously unfiltered, check the nesting first.
 **Fact 2 — `schema` is the contract; docstrings are only signposts.** The
 28 query tools are registered statically (MCP clients list tools before
 any program is loaded), so their docstrings are deliberately short. The
-schema-first workflow an LLM should follow — and that you should put in
-your `CLAUDE.md` or prompt for serious sessions: after `load_program`,
+schema-first workflow an LLM should follow — and that this checkout puts in
+`AGENTS.md` for Codex and `CLAUDE.md` for Claude Code: after `load_program`,
 call `schema` once, and treat its `methods` / `node_kinds` / `edge_kinds`
 / `evidence_record` blocks as the authoritative reference for every later
 call. This is exactly the self-describing contract from Tutorial 02, one
 tool call away.
 
-### 4. Three question patterns that work
+### 5. Three question patterns that work
 
 What follows are the tool-call sequences a well-prompted session converges
 on. All JSON shown was captured from real calls against
@@ -136,7 +171,7 @@ on. All JSON shown was captured from real calls against
 Expected sequence: `load_program` → `functions` (map the alloc/free
 surface) → `vfpath` malloc-ret → free-arg0 (what gets freed, where) →
 `defuse` on the freed variable (any uses *after* the free?) → conclusion
-quoting the witness. The full transcript is in step 5.
+quoting the witness. The full transcript is in step 6.
 
 #### Pattern 2: "What can pointer X point to?"
 
@@ -184,7 +219,7 @@ one). Two follow-ups the LLM should know: a surprising `total: 0` with
 wrapper" (the `xmalloc` lesson, Tutorial 05); a misspelled name gets a
 did-you-mean error with candidate names (Tutorial 02).
 
-### 5. A sample session
+### 6. A sample session
 
 *Illustrative transcript; tool outputs are real* (captured via the
 in-memory MCP client on this machine, demo.c compiled with `-g`; long `ir`
@@ -267,7 +302,7 @@ glossed over. (A session could go one step further and confirm with
 `vfpath` malloc-ret → `{"file": "demo.c", "line": 11}` — Tutorial 04's
 money shot — which returns the 6-step witness ending at the line-11 load.)
 
-### 6. Troubleshooting
+### 7. Troubleshooting
 
 - **"no program loaded; call load_program first"** — every query tool
   returns this (as a structured `{"error": ...}`, never an exception)
@@ -287,17 +322,20 @@ money shot — which returns the 6-step witness ending at the line-11 load.)
 - **Socket cleanup** — `unload_program`, a replacing `load_program`, or
   wrapper exit all shut the daemon down and remove the temp dir. Orphans,
   if any, are `svf-mcp-*` dirs under `$TMPDIR`; safe to delete.
-- **Run on the real machine** — the registered command embeds absolute
-  paths (the `py311-mcp` interpreter, the `Release-build` binary): the
-  config is per-machine, not portable. Re-run `claude mcp add` (or edit
-  `.mcp.json` placeholders) on each box.
+- **Run on the real machine** — the registered command embeds absolute paths
+  (the `py311-mcp` interpreter, the `Release-build` binary): the config is
+  per-machine, not portable. For Codex, edit `.codex/config.toml` or rerun
+  `codex mcp add`; for Claude Code, rerun `claude mcp add` or edit
+  `.mcp.json` placeholders.
 
 ## What you learned
 
-- Two ways to register: `claude mcp add svf --env SVF_HARNESS_BIN=... --
-  <python> server.py` (local scope by default; `-s user` for all projects)
-  or a checked-in `.mcp.json` with hand-substituted placeholders
-  (project scope).
+- Codex path: use the checked-in `.codex/config.toml` for this machine, or run
+  `codex mcp add svf --env SVF_HARNESS_BIN=... -- <python> server.py` for
+  user-level config.
+- Claude Code path: run `claude mcp add svf --env SVF_HARNESS_BIN=... --
+  <python> server.py` (local scope by default; `-s user` for all projects), or
+  use a checked-in `.mcp.json` with hand-substituted placeholders.
 - 30 tools; arguments go **nested under `"params"`** — the flat form
   silently drops them (a too-broad result is the symptom).
 - Schema-first: `load_program`, then `schema` once — it is the

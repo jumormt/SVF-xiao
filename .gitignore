@@ -10,6 +10,8 @@ autoconf/
 tests/result/
 doxygen/
 .*
+!.codex/
+!.codex/config.toml
 !.config.in
 !.config.cmake.in
 !.gitignore
